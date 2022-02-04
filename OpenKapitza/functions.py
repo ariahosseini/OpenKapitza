@@ -155,10 +155,73 @@ def matrix_decomposition(hsn_matrix: np.darray, indices: list,
          natm_per_unitcell * 3 * elements_idx[0]: natm_per_unitcell * 3 * (elements_idx[0] + block_size)]
         Hsn[Hsn_keys[i]] = Hsn_block
 
-
-
     return Hsn
 
+def define_wavevectors(periodicity_lenght: float, num_kpoints: int) -> np.ndarray:
+    """
+    A function to read unwrapped atoms position from lammps output and compute lattice points
+
+    Parameters
+    ----------
+    file_name: str
+        Lammps output file — data.wrapper
+    natm_per_unitcell : int
+        Number of atoms per unit cell
+    skip_rows: int
+        Number of lines to skip in data.unwrapped
+
+    Returns
+    -------
+    output : dict
+        First key includes the crystal points and the second key includes the lattice points
+    """
+
+    kpoints_y = np.linspace(-np.sqrt(2)*np.pi/periodicity_lenght, np.sqrt(2)*np.pi/periodicity_lenght,num_kpoints,
+                            endpoint=True)
+    kpoints_x = np.linspace(-np.sqrt(2)*np.pi/periodicity_lenght, np.sqrt(2)*np.pi/periodicity_lenght,num_kpoints,
+                            endpoint=True)
+
+    kx_grid, ky_grid = np.meshgrid(kpoints_x, kpoints_y)
+
+    kpoints = np.array([kx_grid.flatten(), ky_grid.flatten()])
+
+    return kpoints
+
+
+def hessian_fourier_form(Hsn: dict, periodicity_lenght: float, wavevector: np.ndarray) -> np.ndarray:
+    """
+    A function to read unwrapped atoms position from lammps output and compute lattice points
+
+    Parameters
+    ----------
+    file_name: str
+        Lammps output file — data.wrapper
+    natm_per_unitcell : int
+        Number of atoms per unit cell
+    skip_rows: int
+        Number of lines to skip in data.unwrapped
+
+    Returns
+    -------
+    output : dict
+        First key includes the crystal points and the second key includes the lattice points
+    """
+
+    distance_vector = periodicity_lenght*[[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]].T
+    unit_planewave = np.exp(-1j*(wavevector*distance_vector))
+
+    Hsn_keys = np.arange(np.shape(wavevector, 1))
+    Hsn_fourier = {}
+    Hopping_fourier = {}
+    for i in range(len(Hsn_keys)):
+        Hsn_fourier[Hsn_keys[i]] = Hsn['H0']*unit_planewave(i, 0) + Hsn['H1']*unit_planewave(i, 1)
+        + Hsn['H2']*unit_planewave(i, 2) + Hsn['H3']*unit_planewave(i, 3) + Hsn['H4']*unit_planewave(i, 4)
+
+        Hopping_fourier[Hsn_keys[i]] = Hsn['T1']*unit_planewave(i, 1) + Hsn['T2']*unit_planewave(i, 2) + \
+                                       Hsn['T3']*unit_planewave(i, 3) + Hsn['T4']*unit_planewave(i, 4)
+    Hsn_matrix_fourier = {Hsn_fourier, Hopping_fourier}
+
+    return Hsn_matrix_fourier
 
 if __name__ == "__main__":
     # Do something if this file is invoked on its own
