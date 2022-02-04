@@ -2,6 +2,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from numpy import ndarray
+
 sns.set()
 sns.set_style("white", {"xtick.major.size": 2, "ytick.major.size": 2})
 sns.set_context("paper", font_scale=2, rc={"lines.linewidth": 4})
@@ -9,20 +11,16 @@ sns.set_context("paper", font_scale=2, rc={"lines.linewidth": 4})
 
 def read_hessian(file_name: str) -> np.ndarray:
     """
-
     A function to read Hessian matrix
-
     Parameters
     ----------
     file_name : str
         Lammps output file -- hessian-mass-weighted-hessian.d
-
     Returns
     -------
     hessian : np.ndarray
         Phonon hessian matrix -- symmetric
     """
-
     hessian_data_file = np.loadtxt(file_name, delimiter=None, skiprows=0)
     hessian_symmetric = (np.triu(hessian_data_file, k=0) + np.tril(hessian_data_file, k=0).T) / 2
     hessian = np.triu(hessian_symmetric) + np.triu(hessian_symmetric, k=1).T
@@ -30,7 +28,7 @@ def read_hessian(file_name: str) -> np.ndarray:
     return hessian
 
 
-def plot_2Darray(array_to_plot: np.ndarray, set_title: str, x_label: str = None, y_label: str = None) -> None:
+def plot_2darray(array_to_plot: np.ndarray, pic_name: str, set_title: str, x_label: str = None, y_label: str = None) -> None:
     """
     A function to plot two-dimensional arrays
 
@@ -51,7 +49,7 @@ def plot_2Darray(array_to_plot: np.ndarray, set_title: str, x_label: str = None,
     """
 
     plt.figure(figsize=(6.5, 6.5))
-    ax = sns.heatmap(array_to_plot, linewidth=0.1, cbar=False)
+    ax = sns.heatmap(array_to_plot, cbar=False)  # linewidth=0.1
     ax.set_frame_on(False)
     ax.tick_params(axis='y', labelleft='off')
     ax.set_xlabel(x_label, fontsize=24)
@@ -62,50 +60,70 @@ def plot_2Darray(array_to_plot: np.ndarray, set_title: str, x_label: str = None,
     ax.set(xticklabels=[])
     ax.set(yticklabels=[])
     plt.tight_layout()
-    plt.show()
+    plt.savefig(pic_name)
 
-def read_crystal(file_name: str, skiprows: int = 9) -> np.ndarray:
+
+def read_crystal(file_name: str, natm_per_unitcell: int, skip_rows: int = 9) -> dict:
     """
-    Placeholder function to show example docstring (NumPy format).
-
-    Replace this function and doc string for your own project.
+    A function to read unwrapped atoms position from lammps output and compute lattice points
 
     Parameters
     ----------
-    with_attribution : bool, Optional, default: True
-        Set whether or not to display who the quote is from.
+    file_name: str
+        Lammps output file — data.wrapper
+    natm_per_unitcell : int
+        Number of atoms per unit cell
+    skip_rows: int
+        Number of lines to skip in data.unwrapped
 
     Returns
     -------
-    quote : str
-        Compiled string including quote and optional attribution.
+    output : dict
+        First key includes the crystal points and the second key includes the lattice points
     """
 
     crystal_points = np.loadtxt(file_name, delimiter=None, skiprows=skip_rows)
+    lattice_points = crystal_points[::natm_per_unitcell, 3:] - crystal_points[0, 3:]
 
-def canvas(with_attribution=True):
-    """
-    Placeholder function to show example docstring (NumPy format).
+    crystal_info = {'crystal_points': crystal_points, 'lattice_points': lattice_points}
 
-    Replace this function and doc string for your own project.
+    return crystal_info
 
-    Parameters
-    ----------
-    with_attribution : bool, Optional, default: True
-        Set whether or not to display who the quote is from.
 
-    Returns
-    -------
-    quote : str
-        Compiled string including quote and optional attribution.
-    """
+def mitigate_periodic_effect(
+        file_hessian: str, file_crystal: str, natm_per_unitcell: int, rep: list, skip_rows: int = 9) -> dict:
 
-    quote = "The code is but a canvas to our imagination."
-    if with_attribution:
-        quote += "\n\t- Adapted from Henry David Thoreau"
-    return quote
+    hessian = read_hessian(file_hessian)
+
+    with open(file_crystal, 'r') as read_obj:
+        # Read all lines in the file one by one
+        for line_number, line in enumerate(read_obj):
+            # For each line, check if line contains the string
+            if "ITEM: BOX BOUNDS pp pp pp" in line:
+                x_min, x_max = next(read_obj).split()
+                y_min, y_max = next(read_obj).split()
+                z_min, z_max = next(read_obj).split()
+                break
+        lattice_constant: np.array = \
+            np.array([float(x_max) - float(x_min), float(y_max) - float(y_min), float(z_max) - float(z_min)]) / \
+            np.array([rep[0], rep[1], 2*rep[2]])
+    crystal_info = read_crystal(file_crystal, natm_per_unitcell, skip_rows)
+    lattice_points = crystal_info['lattice_points']
+    lattice_points[::2*rep[2]] = np.inf
+    lattice_points[2*rep[2]-1::2*rep[2]] = np.inf
+    lp = lattice_points[np.isfinite(lattice_points).all(1)]
+
+    for io in range(natm_per_unitcell*3):
+        hessian[io::natm_per_unitcell*3*rep[2]*2] = np.inf
+        hessian[:, io::natm_per_unitcell * 3 * rep[2] * 2] = np.inf
+        hessian[io + natm_per_unitcell*3 * (rep[2] * 2 - 1)::natm_per_unitcell*3*rep[2]*2] = np.inf
+        hessian[:, io + natm_per_unitcell * 3 * (rep[2] * 2 - 1)::natm_per_unitcell * 3 * rep[2] * 2] = np.inf
+    hsn = hessian[~(np.isinf(hessian).all(axis=1))]
+    hsn_matrix = np.transpose(hsn.T[~(np.isinf(hsn.T).all(axis=1))])
+
+    return {'hsn_matrix': hsn_matrix, 'lattice_points':lp}
 
 
 if __name__ == "__main__":
     # Do something if this file is invoked on its own
-    print(canvas())
+    print('Done')
