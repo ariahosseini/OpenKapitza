@@ -1,10 +1,12 @@
 """Provide the primary functions."""
-from typing import Dict, Any
-
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import jax.numpy as jnp
 import functools
+from copy import deepcopy
+from typing import Any
+
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 
 sns.set()
 sns.set_style("white", {"xtick.major.size": 2, "ytick.major.size": 2})
@@ -23,6 +25,7 @@ def read_hessian(file_name: str) -> np.ndarray:
     hessian : np.ndarray
         Phonon hessian matrix -- symmetric
     """
+
     hessian_data_file = np.loadtxt(file_name, delimiter=None, skiprows=0)
     hessian_symmetric = (np.triu(hessian_data_file, k=0) + np.tril(hessian_data_file, k=0).T) / 2
     hessian = np.triu(hessian_symmetric) + np.triu(hessian_symmetric, k=1).T
@@ -212,6 +215,75 @@ def hessian_fourier_form(Hsn: dict, periodicity_lenght: float, wavevector: np.nd
     Hsn_keys = np.arange(np.shape(wavevector)[1])
 
     return dict(zip(Hsn_keys, [*Hsn_matrix_fourier]))
+
+
+# def surface_green_func(left_Hsn_bulk, left_Hsn_surface, Hsn_device, right_Hsn_surface, right_Hsn_bulk, omega_min,
+#                        omega_max, omega_num, num_atom_unitcell, delta_o= 1e-6):
+
+def surface_green_func(right_Hsn_surface, right_Hsn_bulk, omega_min, omega_max, omega_num, num_atom_unitcell, block_size, delta_o= 1e-6):
+
+    omega = np.linspace(omega_min, omega_min, omega_num, endpoint=True)
+
+    def decimation_iteration(right_Hsn_surface, right_Hsn_bulk, omega_val, num_atom_unitcell, delta_o):
+
+        Z = omega_val**2*(1+1j*delta_o)*np.eye(3*num_atom_unitcell*block_size, k=0)
+        right_e_surface = Z - right_Hsn_bulk['Hsn_fourier']
+        deepcopy_right_e_surface = deepcopy(right_e_surface)
+        right_e = deepcopy(right_e_surface)
+        right_alpha = right_Hsn_surface['Hopping_fourier'].T
+        right_beta = right_Hsn_surface['Hopping_fourier']
+        io = 1
+        print(io)
+        while True:
+            right_a_term = jnp.linalg.inv(right_e)*right_alpha
+            print('first')
+            print(right_e)
+            print(right_alpha)
+            print(right_a_term)
+            exit()
+            right_b_term = jnp.linalg.inv(right_e) * right_beta
+            print('next')
+            print(right_alpha * right_b_term)
+            right_e_surface = right_e_surface - right_alpha * right_b_term
+            right_e = right_e - right_beta * right_a_term - right_alpha * right_b_term
+            right_alpha = right_alpha * right_a_term
+            right_beta = right_beta * right_b_term
+            print('check if condition')
+
+            print(np.abs(right_e_surface - deepcopy_right_e_surface))
+
+            if np.sum(np.abs(right_e_surface - deepcopy_right_e_surface)) < 1e-6:
+                break
+            # assert isinstance(right_e_surface, object)
+            deepcopy_right_e_surface = deepcopy(right_e_surface)
+            io += 1
+            print('hello')
+            print(f'io = {io}')
+
+        return right_e_surface
+
+    test = decimation_iteration(right_Hsn_surface[0], right_Hsn_bulk[0], omega[0], num_atom_unitcell, delta_o)
+    return test
+
+
+
+
+
+        # Hsn_fourier = Hsn_mat['H0'] * planewave[0] + Hsn_mat['H1'] * planewave[1]\
+        #                            + Hsn_mat['H2'] * planewave[2] + Hsn_mat['H3'] * planewave[3]\
+        #                            + Hsn_mat['H4'] * planewave[4]
+        #
+        # Hopping_fourier = Hsn_mat['T1'] * planewave[1] + Hsn_mat['T2'] * planewave[2] + \
+        #                                Hsn_mat['T3'] * planewave[3] + Hsn_mat['T4'] * planewave[4]
+        # Hsn_matrix = {'Hsn_fourier': Hsn_fourier, 'Hopping_fourier': Hopping_fourier}
+
+        # return Hsn_matrix
+
+
+    # Hsn_matrix_fourier = map(f_transform, unit_planewave)
+    # Hsn_keys = np.arange(np.shape(wavevector)[1])
+
+    # return dict(zip(Hsn_keys, [*Hsn_matrix_fourier]))
 
 
 if __name__ == "__main__":
