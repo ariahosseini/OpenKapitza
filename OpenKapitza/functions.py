@@ -3,6 +3,8 @@ import jax.numpy as jnp
 import functools
 from copy import deepcopy
 from typing import Any
+import toolz
+
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -98,6 +100,7 @@ def read_crystal(file_name: str, natm_per_unitcell: int, skip_rows: int = 9) -> 
 
 def mitigate_periodic_effect(
         hessian: np.ndarray, crystal_info: dict, file_crystal: str, natm_per_unitcell: int, rep: list, skip_rows: int = 9) -> dict:
+    ang2m = 1e-10
     with open(file_crystal, 'r') as read_obj:
         # Read all lines in the file one by one
         for line_number, line in enumerate(read_obj):
@@ -109,7 +112,7 @@ def mitigate_periodic_effect(
                 break
         lattice_constant: np.array = \
             np.array([float(x_max) - float(x_min), float(y_max) - float(y_min), float(z_max) - float(z_min)]) / \
-            np.array([rep[0], rep[1], 2 * rep[2]])
+            np.array([rep[0], rep[1], 2 * rep[2]])*ang2m
     lattice_points = crystal_info['lattice_points']
     lattice_points[::2 * rep[2]] = np.inf
     lattice_points[2 * rep[2] - 1::2 * rep[2]] = np.inf
@@ -179,6 +182,8 @@ def define_wavevectors(periodicity_lenght: float, num_kpoints: int) -> np.ndarra
         First key includes the crystal points and the second key includes the lattice points
     """
 
+    ang2m = 1e-10
+
     kpoints_y = np.linspace(-np.sqrt(2)*np.pi/periodicity_lenght, np.sqrt(2)*np.pi/periodicity_lenght,num_kpoints,
                             endpoint=True)
     kpoints_x = np.linspace(-np.sqrt(2)*np.pi/periodicity_lenght, np.sqrt(2)*np.pi/periodicity_lenght,num_kpoints,
@@ -186,15 +191,21 @@ def define_wavevectors(periodicity_lenght: float, num_kpoints: int) -> np.ndarra
 
     kx_grid, ky_grid = np.meshgrid(kpoints_x, kpoints_y)
 
-    kpoints = np.array([kx_grid.flatten(), ky_grid.flatten()])
+    kpoints = np.array([ky_grid.flatten(), kx_grid.flatten()])
 
-    return kpoints
+    periodicity_len = periodicity_lenght
+
+    return {'kpoints':kpoints, 'periodicity_lenght': periodicity_len}
 
 
-def hessian_fourier_form(Hsn: dict, periodicity_lenght: float, wavevector: np.ndarray) -> dict[Any, Any]:
+def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
+
+    wavevector = kpoints['kpoints']
+    periodicity_lenght = kpoints['periodicity_lenght']
 
     distance_vector = periodicity_lenght*np.array([[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]])
-    unit_planewave = np.exp(-1j*(np.matmul(distance_vector, wavevector)).T)
+    unit_planewave = np.exp(1j*(np.matmul(distance_vector, wavevector)).T)
+
     # Hsn_fourier = {}
     # Hopping_fourier = {}
 
@@ -220,49 +231,63 @@ def hessian_fourier_form(Hsn: dict, periodicity_lenght: float, wavevector: np.nd
 # def surface_green_func(left_Hsn_bulk, left_Hsn_surface, Hsn_device, right_Hsn_surface, right_Hsn_bulk, omega_min,
 #                        omega_max, omega_num, num_atom_unitcell, delta_o= 1e-6):
 
-def surface_green_func(right_Hsn_surface, right_Hsn_bulk, omega_min, omega_max, omega_num, num_atom_unitcell, block_size, delta_o= 1e-6):
+def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk, omega_min, omega_max, omega_num, num_atom_unitcell, block_size, delta_o= 1e-6):
 
     omega = np.linspace(omega_min, omega_min, omega_num, endpoint=True)
 
-    def decimation_iteration(right_Hsn_surface, right_Hsn_bulk, omega_val, num_atom_unitcell, delta_o):
+    def decimation_iteration(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk, omega_val, num_atom_unitcell, delta_o):
 
         Z = omega_val**2*(1+1j*delta_o)*np.eye(3*num_atom_unitcell*block_size, k=0)
         right_e_surface = Z - right_Hsn_bulk['Hsn_fourier']
         deepcopy_right_e_surface = deepcopy(right_e_surface)
         right_e = deepcopy(right_e_surface)
-        right_alpha = right_Hsn_surface['Hopping_fourier'].T
-        right_beta = right_Hsn_surface['Hopping_fourier']
+        right_alpha = right_Hsn_surface['Hopping_fourier']
+        right_beta = right_Hsn_surface['Hopping_fourier'].conj().T
+
+        left_e_surface = Z - left_Hsn_bulk['Hsn_fourier']
+        deepcopy_left_e_surface = deepcopy(left_e_surface)
+        left_e = deepcopy(left_e_surface)
+        left_alpha = left_Hsn_surface['Hopping_fourier']
+        left_beta = left_Hsn_surface['Hopping_fourier'].conj().T
+
         io = 1
-        print(io)
         while True:
-            right_a_term = jnp.linalg.inv(right_e)*right_alpha
-            print('first')
-            print(right_e)
-            print(right_alpha)
-            print(right_a_term)
-            exit()
-            right_b_term = jnp.linalg.inv(right_e) * right_beta
-            print('next')
-            print(right_alpha * right_b_term)
-            right_e_surface = right_e_surface - right_alpha * right_b_term
-            right_e = right_e - right_beta * right_a_term - right_alpha * right_b_term
-            right_alpha = right_alpha * right_a_term
-            right_beta = right_beta * right_b_term
-            print('check if condition')
+            right_a_term = jnp.linalg.inv(right_e) @ right_alpha
+            right_b_term = jnp.linalg.inv(right_e) @ right_beta
+            right_e_surface = right_e_surface - right_alpha @ right_b_term
+            right_e = right_e - right_beta @ right_a_term - right_alpha @ right_b_term
+            right_alpha = right_alpha @ right_a_term
+            right_beta = right_beta @ right_b_term
 
-            print(np.abs(right_e_surface - deepcopy_right_e_surface))
-
-            if np.sum(np.abs(right_e_surface - deepcopy_right_e_surface)) < 1e-6:
+            left_a_term = jnp.linalg.inv(left_e) @ left_alpha
+            left_b_term = jnp.linalg.inv(left_e) @ left_beta
+            left_e_surface = left_e_surface - left_alpha @ left_b_term
+            left_e = left_e - left_beta @ left_a_term - left_alpha @ left_b_term
+            left_alpha = left_alpha @ left_a_term
+            left_beta = left_beta @ left_b_term
+            if np.sum(np.abs(right_e_surface - deepcopy_right_e_surface)) < 1e-6 and np.sum(np.abs(left_e_surface - deepcopy_left_e_surface)) < 1e-6:
                 break
             # assert isinstance(right_e_surface, object)
             deepcopy_right_e_surface = deepcopy(right_e_surface)
+            deepcopy_left_e_surface = deepcopy(left_e_surface)
             io += 1
-            print('hello')
-            print(f'io = {io}')
-
+        print(f'Number of interation: {io}')
         return right_e_surface
+    decimation_iterate = functools.partial(decimation_iteration, omega_val = omega[0], num_atom_unitcell = num_atom_unitcell, delta_o = delta_o)
+    test = dict(map(lambda w, x, y, z: (x[0], decimation_iterate(w[1], x[1], y[1], z[1])), left_Hsn_bulk.items(), left_Hsn_surface.items(), right_Hsn_surface.items(), right_Hsn_bulk.items()))
+    # test = toolz.valmap(decimation_iterate, right_Hsn_surface, right_Hsn_bulk)
+    # for i in range(3):
+    #     test = decimation_iterate(right_Hsn_surface[i])
 
-    test = decimation_iteration(right_Hsn_surface[0], right_Hsn_bulk[0], omega[0], num_atom_unitcell, delta_o)
+
+
+
+    # test = dict(zip(item: (item, decimation_iterate(item)), right_Hsn_surface.keys()))
+
+    # test = map(lambda decimation_iterate, right_Hsn_surface.iteritems())
+    # print(list(test))
+    # print(len(right_Hsn_surface))
+    # keys = np.arange(len(right_Hsn_surface))
     return test
 
 
