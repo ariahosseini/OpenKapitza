@@ -237,58 +237,55 @@ def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right
 
     def decimation_iteration(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk, omega_val, num_atom_unitcell, delta_o):
 
-        Z = omega_val**2*(1+1j*delta_o)*np.eye(3*num_atom_unitcell*block_size, k=0)
-        right_e_surface = Z - right_Hsn_bulk['Hsn_fourier']
-        deepcopy_right_e_surface = deepcopy(right_e_surface)
-        right_e = deepcopy(right_e_surface)
-        right_alpha = right_Hsn_surface['Hopping_fourier']
-        right_beta = right_Hsn_surface['Hopping_fourier'].conj().T
+        def iter_func(Z, Hsn_bulk, Hsn_surface):
 
-        left_e_surface = Z - left_Hsn_bulk['Hsn_fourier']
-        deepcopy_left_e_surface = deepcopy(left_e_surface)
-        left_e = deepcopy(left_e_surface)
-        left_alpha = left_Hsn_surface['Hopping_fourier']
-        left_beta = left_Hsn_surface['Hopping_fourier'].conj().T
+            e_surface = Z - Hsn_bulk['Hsn_fourier']
+            deepcopy_e_surface = deepcopy(e_surface)
+            e = deepcopy(e_surface)
+            alpha = Hsn_surface['Hopping_fourier']
+            beta = Hsn_surface['Hopping_fourier'].conj().T
 
-        io = 1
-        while True:
-            right_a_term = jnp.linalg.inv(right_e) @ right_alpha
-            right_b_term = jnp.linalg.inv(right_e) @ right_beta
-            right_e_surface = right_e_surface - right_alpha @ right_b_term
-            right_e = right_e - right_beta @ right_a_term - right_alpha @ right_b_term
-            right_alpha = right_alpha @ right_a_term
-            right_beta = right_beta @ right_b_term
-
-            left_a_term = jnp.linalg.inv(left_e) @ left_alpha
-            left_b_term = jnp.linalg.inv(left_e) @ left_beta
-            left_e_surface = left_e_surface - left_alpha @ left_b_term
-            left_e = left_e - left_beta @ left_a_term - left_alpha @ left_b_term
-            left_alpha = left_alpha @ left_a_term
-            left_beta = left_beta @ left_b_term
-            if np.sum(np.abs(right_e_surface - deepcopy_right_e_surface)) < 1e-6 and np.sum(np.abs(left_e_surface - deepcopy_left_e_surface)) < 1e-6:
-                break
-            # assert isinstance(right_e_surface, object)
-            deepcopy_right_e_surface = deepcopy(right_e_surface)
-            deepcopy_left_e_surface = deepcopy(left_e_surface)
+            io = 1
+            while True:
+                a_term = jnp.linalg.inv(e) @ alpha
+                # print(a_term)
+                b_term = jnp.linalg.inv(e) @ beta
+                # print(b_term)
+                e_surface += alpha @ b_term
+                # print(e_surface)
+                e += beta @ a_term + alpha @ b_term
+                # print(e)
+                alpha = alpha @ a_term
+                # print(alpha)
+                beta = beta @ b_term
+                # print(beta)
+                if np.linalg.norm(e_surface.real - deepcopy_e_surface.real) < 1e-6 or io > 5000:
+                    break
+                deepcopy_e_surface = deepcopy(e_surface)
             io += 1
-        print(f'Number of interation: {io}')
-        return right_e_surface
+            print(f'Number of interation: {io}')
+            print(f'Error: {np.linalg.norm(e_surface.real - deepcopy_e_surface.real)}')
+            return e_surface
+
+        Z = omega_val**2*(1+1j*delta_o)*np.eye(3*num_atom_unitcell*block_size, k=0)
+        right_e_surface = iter_func(Z, right_Hsn_bulk, right_Hsn_surface)
+        left_e_surface = iter_func(Z, left_Hsn_bulk, left_Hsn_surface)
+
+        omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0)
+
+        left_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - left_Hsn_bulk['Hsn_fourier'] - (
+                    left_Hsn_bulk['Hopping_fourier'] @ jnp.linalg.inv(left_e_surface) @ left_Hsn_bulk[
+                'Hopping_fourier'].conj().T)
+
+        right_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - right_Hsn_bulk['Hsn_fourier'] - (
+                    right_Hsn_surface['Hopping_fourier'] @ jnp.linalg.inv(right_e_surface) @ right_Hsn_surface[
+                'Hopping_fourier'].conj().T)
+
+        return {'left_g_surface': left_g_surface, 'right_g_surface': right_g_surface}
+
     decimation_iterate = functools.partial(decimation_iteration, omega_val = omega[0], num_atom_unitcell = num_atom_unitcell, delta_o = delta_o)
-    test = dict(map(lambda w, x, y, z: (x[0], decimation_iterate(w[1], x[1], y[1], z[1])), left_Hsn_bulk.items(), left_Hsn_surface.items(), right_Hsn_surface.items(), right_Hsn_bulk.items()))
-    # test = toolz.valmap(decimation_iterate, right_Hsn_surface, right_Hsn_bulk)
-    # for i in range(3):
-    #     test = decimation_iterate(right_Hsn_surface[i])
-
-
-
-
-    # test = dict(zip(item: (item, decimation_iterate(item)), right_Hsn_surface.keys()))
-
-    # test = map(lambda decimation_iterate, right_Hsn_surface.iteritems())
-    # print(list(test))
-    # print(len(right_Hsn_surface))
-    # keys = np.arange(len(right_Hsn_surface))
-    return test
+    g_surface = dict(map(lambda w, x, y, z: (x[0], decimation_iterate(w[1], x[1], y[1], z[1])), left_Hsn_bulk.items(), left_Hsn_surface.items(), right_Hsn_surface.items(), right_Hsn_bulk.items()))
+    return g_surface
 
 
 
