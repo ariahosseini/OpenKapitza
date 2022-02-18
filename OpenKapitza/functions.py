@@ -3,7 +3,9 @@ import jax.numpy as jnp
 import functools
 from copy import deepcopy
 from typing import Any
-import toolz
+
+
+from multiprocessing import Pool
 
 
 import matplotlib.pyplot as plt
@@ -228,9 +230,6 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
     return dict(zip(Hsn_keys, [*Hsn_matrix_fourier]))
 
 
-# def surface_green_func(left_Hsn_bulk, left_Hsn_surface, Hsn_device, right_Hsn_surface, right_Hsn_bulk, omega_min,
-#                        omega_max, omega_num, num_atom_unitcell, delta_o= 1e-6):
-
 def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk, omega_min, omega_max, omega_num, num_atom_unitcell, block_size, delta_o= 1e-6):
 
     omega = np.linspace(omega_min, omega_min, omega_num, endpoint=True)
@@ -248,17 +247,11 @@ def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right
             io = 1
             while True:
                 a_term = jnp.linalg.inv(e) @ alpha
-                # print(a_term)
                 b_term = jnp.linalg.inv(e) @ beta
-                # print(b_term)
                 e_surface += alpha @ b_term
-                # print(e_surface)
                 e += beta @ a_term + alpha @ b_term
-                # print(e)
                 alpha = alpha @ a_term
-                # print(alpha)
                 beta = beta @ b_term
-                # print(beta)
                 if np.linalg.norm(e_surface.real - deepcopy_e_surface.real) < 1e-6 or io > 5000:
                     break
                 deepcopy_e_surface = deepcopy(e_surface)
@@ -271,8 +264,6 @@ def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right
         right_e_surface = iter_func(Z, right_Hsn_bulk, right_Hsn_surface)
         left_e_surface = iter_func(Z, left_Hsn_bulk, left_Hsn_surface)
 
-        omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0)
-
         left_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - left_Hsn_bulk['Hsn_fourier'] - (
                     left_Hsn_bulk['Hopping_fourier'] @ jnp.linalg.inv(left_e_surface) @ left_Hsn_bulk[
                 'Hopping_fourier'].conj().T)
@@ -283,7 +274,16 @@ def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right
 
         return {'left_g_surface': left_g_surface, 'right_g_surface': right_g_surface}
 
+
     decimation_iterate = functools.partial(decimation_iteration, omega_val = omega[0], num_atom_unitcell = num_atom_unitcell, delta_o = delta_o)
+
+    f_transform = functools.partial(decimation_iterate = decimation_iteration, left_Hsn_bulk = left_Hsn_bulk,
+                                    left_Hsn_surface = left_Hsn_surface, right_Hsn_surface = right_Hsn_surface,
+                                    right_Hsn_bulk = right_Hsn_bulk, num_atom_unitcell = num_atom_unitcell,
+                                    delta_o = delta_o)
+
+    multi_processor = Pool()
+    multi_processor.map(decimation_iterate, omega)
     g_surface = dict(map(lambda w, x, y, z: (x[0], decimation_iterate(w[1], x[1], y[1], z[1])), left_Hsn_bulk.items(), left_Hsn_surface.items(), right_Hsn_surface.items(), right_Hsn_bulk.items()))
     return g_surface
 
