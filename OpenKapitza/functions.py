@@ -283,6 +283,7 @@ def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right
                                     delta_o = delta_o)
 
     multi_processor = Pool()
+    # Tomorrow
     multi_processor.map(decimation_iterate, omega)
     g_surface = dict(map(lambda w, x, y, z: (x[0], decimation_iterate(w[1], x[1], y[1], z[1])), left_Hsn_bulk.items(), left_Hsn_surface.items(), right_Hsn_surface.items(), right_Hsn_bulk.items()))
     return g_surface
