@@ -4,9 +4,7 @@ import functools
 from copy import deepcopy
 from typing import Any
 
-
-from multiprocessing import Pool
-
+# from multiprocessing import Pool, cpu_count
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,7 +16,6 @@ sns.set_context("paper", font_scale=2, rc={"lines.linewidth": 4})
 
 
 def read_hessian(file_name: str) -> np.ndarray:
-
     """
     A function to read Hessian matrix
 
@@ -42,7 +39,6 @@ def read_hessian(file_name: str) -> np.ndarray:
 
 def plot_2darray(array_to_plot: np.ndarray, pic_name: str, set_title: str,
                  x_label: str = None, y_label: str = None) -> None:
-
     """
     A function to plot two-dimensional numpy arrays
 
@@ -79,7 +75,6 @@ def plot_2darray(array_to_plot: np.ndarray, pic_name: str, set_title: str,
 
 
 def read_crystal(file_name: str, natm_per_unitcell: int, skip_rows: int = 9) -> dict:
-
     """
     A function to read unwrapped atoms position from lammps output and compute lattice points
 
@@ -99,8 +94,8 @@ def read_crystal(file_name: str, natm_per_unitcell: int, skip_rows: int = 9) -> 
     """
 
     crystal_points = np.loadtxt(file_name, delimiter=None, skiprows=skip_rows)  # Read data file
-    lattice_points = crystal_points[::natm_per_unitcell, 3:] - crystal_points[0, 3:] # Find lattice point
-    crystal_info = {'crystal_points': crystal_points, 'lattice_points': lattice_points} # return dict
+    lattice_points = crystal_points[::natm_per_unitcell, 3:] - crystal_points[0, 3:]  # Find lattice point
+    crystal_info = {'crystal_points': crystal_points, 'lattice_points': lattice_points}  # return dict
 
     return crystal_info
 
@@ -108,7 +103,6 @@ def read_crystal(file_name: str, natm_per_unitcell: int, skip_rows: int = 9) -> 
 def mitigate_periodic_effect(
         hessian: np.ndarray, crystal_info: dict, natm_per_unitcell: int,
         rep: list, file_crystal: str = 'data.unwrapped') -> dict:
-
     """
         A function to remove the atoms on the edge and theirs force constant elements
 
@@ -163,9 +157,8 @@ def mitigate_periodic_effect(
     return return_dic
 
 
-def matrix_decomposition(hsn_matrix: np.ndarray, block_indices: list,
-                         block_size: int, rep: list, natm_per_unitcell: int) -> dict[Any, Any]:
-
+def matrix_decomposition(hsn_matrix: np.ndarray, block_size: int,
+                         block_indices: list[int], rep: list[int], natm_per_unitcell: int) -> dict[Any, Any]:
     """
     A function to read unwrapped atoms position from lammps output and compute lattice points
 
@@ -189,9 +182,9 @@ def matrix_decomposition(hsn_matrix: np.ndarray, block_indices: list,
     """
 
     f_idx = np.array([[0, 0, 0], [0, -1, 0], [0, 1, 0], [-1, 0, 0], [1, 0, 0],
-                    [0, -1, 1], [0, 1, 1], [-1, 0, 1], [1, 0, 1]])
-    elements_idx = (block_indices[2] + f_idx[:, 2] - 1) + ((block_indices[1]+f_idx[:, 1] - 1)
-                                                     * rep[0] + block_indices[0] + f_idx[:, 0] - 1) * 2 * rep[2]
+                      [0, -1, 1], [0, 1, 1], [-1, 0, 1], [1, 0, 1]])
+    elements_idx = (block_indices[2] + f_idx[:, 2] - 1) + ((block_indices[1] + f_idx[:, 1] - 1)
+                                                           * rep[0] + block_indices[0] + f_idx[:, 0] - 1) * 2 * rep[2]
     Hsn_keys = ['H0', 'H1', 'H2', 'H3', 'H4', 'T1', 'T2', 'T3', 'T4']
     Hsn = {}  # Return value
     for i in range(9):
@@ -203,14 +196,14 @@ def matrix_decomposition(hsn_matrix: np.ndarray, block_indices: list,
 
     return Hsn
 
-def define_wavevectors(periodicity_lenght: float, num_kpoints: int) -> dict:
 
+def define_wavevectors(periodicity_length: float, num_kpoints: int) -> dict:
     """
     A function to read unwrapped atoms position from lammps output and compute lattice points
 
     Parameters
     ----------
-    periodicity_lenght: float
+    periodicity_length: float
         The periodicity length along the transverse direction
     num_kpoints : int
         Number of kpoints
@@ -221,53 +214,74 @@ def define_wavevectors(periodicity_lenght: float, num_kpoints: int) -> dict:
         First key includes the kpoints, and the second one includes the periodicity length
     """
 
-
-    kpoints_y = np.linspace(-np.sqrt(2)*np.pi/periodicity_lenght, np.sqrt(2)*np.pi/periodicity_lenght,num_kpoints,
+    kpoints_y = np.linspace(-np.sqrt(2) * np.pi / periodicity_length, np.sqrt(2) * np.pi / periodicity_length,
+                            num_kpoints,
                             endpoint=True)
-    kpoints_x = np.linspace(-np.sqrt(2)*np.pi/periodicity_lenght, np.sqrt(2)*np.pi/periodicity_lenght,num_kpoints,
+    kpoints_x = np.linspace(-np.sqrt(2) * np.pi / periodicity_length, np.sqrt(2) * np.pi / periodicity_length,
+                            num_kpoints,
                             endpoint=True)
 
     kx_grid, ky_grid = np.meshgrid(kpoints_x, kpoints_y)
 
     kpoints = np.array([ky_grid.flatten(), kx_grid.flatten()])
 
-    periodicity_len = periodicity_lenght
+    periodicity_len = periodicity_length
 
-    dict_output = {'kpoints':kpoints, 'periodicity_lenght': periodicity_len}
+    dict_output = dict(kpoints=kpoints, periodicity_length=periodicity_len)
 
     return dict_output
 
 
 def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
+    """
+        A function to display Hessian matrix in the Fourier's space
+
+        Parameters
+        ----------
+        Hsn: dict
+            Return object of the mitigate_periodic_effect function
+        kpoints : dict
+            Return object of the define_wavevectors function
+
+        Returns
+        ----------
+        output-dict : dict
+            First keys are index of the kpoints, the values are 'Hsn_fourier', 'Hopping_fourier', and 'wavevector'
+        """
 
     wavevector = kpoints['kpoints']
-    periodicity_lenght = kpoints['periodicity_lenght']
-    distance_vector = periodicity_lenght*np.array([[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]])
-    unit_planewave = np.exp(1j*(np.matmul(distance_vector, wavevector)).T)  # Construct a plane wave
-    def fourier_transform(Hsn_mat, planewave):
-        Hsn_fourier = Hsn_mat['H0'] * planewave[0] + Hsn_mat['H1'] * planewave[1]\
-                                   + Hsn_mat['H2'] * planewave[2] + Hsn_mat['H3'] * planewave[3]\
-                                   + Hsn_mat['H4'] * planewave[4]
+    periodicity_length = kpoints['periodicity_length']
+    distance_vector = periodicity_length * np.array([[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]])
+    unit_planewave = np.exp(1j * (np.matmul(distance_vector, wavevector)).T)  # Construct a plane wave
 
+    def fourier_transform(planewave, Hsn_mat):
+        Hsn_fourier = Hsn_mat['H0'] * planewave[0] + Hsn_mat['H1'] * planewave[1] \
+                      + Hsn_mat['H2'] * planewave[2] + Hsn_mat['H3'] * planewave[3] \
+                      + Hsn_mat['H4'] * planewave[4]
         Hopping_fourier = Hsn_mat['T1'] * planewave[1] + Hsn_mat['T2'] * planewave[2] + \
-                                       Hsn_mat['T3'] * planewave[3] + Hsn_mat['T4'] * planewave[4]
+                          Hsn_mat['T3'] * planewave[3] + Hsn_mat['T4'] * planewave[4]
         Hsn_matrix = {'Hsn_fourier': Hsn_fourier, 'Hopping_fourier': Hopping_fourier}
-
         return Hsn_matrix
 
-    f_transform = functools.partial(fourier_transform, Hsn)
-
+    f_transform = functools.partial(fourier_transform, Hsn_mat=Hsn)
     Hsn_matrix_fourier = map(f_transform, unit_planewave)
     Hsn_keys = np.arange(np.shape(wavevector)[1])
+    output_dict = dict(zip(Hsn_keys, [*Hsn_matrix_fourier]))
 
-    return dict(zip(Hsn_keys, [*Hsn_matrix_fourier]))
+    for _, __ in enumerate(Hsn_keys):
+        output_dict[__]['wavevector'] = wavevector[:, _]
+
+    return output_dict
 
 
-def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk, omega_min, omega_max, omega_num, num_atom_unitcell, block_size, delta_o= 1e-6):
+def surface_green_func(left_hsn_bulk, left_hsn_surface, right_hsn_surface, right_hsn_bulk,
+                       omega_min, omega_max, omega_num, number_atom_unitcell, block_size, delta=1e-6):
 
-    omega = np.linspace(omega_min, omega_min, omega_num, endpoint=True)
+    omega = np.linspace(omega_min, omega_max, omega_num, endpoint=True)  # An array of frequencies
 
-    def decimation_iteration(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk, omega_val, num_atom_unitcell, delta_o):
+    # A function to implement the decimation method
+    def decimation_iteration(omega_val, left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk,
+                             num_atom_unitcell = number_atom_unitcell, delta_o= delta):
 
         def iter_func(Z, Hsn_bulk, Hsn_surface):
 
@@ -276,7 +290,6 @@ def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right
             e = deepcopy(e_surface)
             alpha = Hsn_surface['Hopping_fourier']
             beta = Hsn_surface['Hopping_fourier'].conj().T
-
             io = 1
             while True:
                 a_term = jnp.linalg.inv(e) @ alpha
@@ -293,48 +306,52 @@ def surface_green_func(left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right
             print(f'Error: {np.linalg.norm(e_surface.real - deepcopy_e_surface.real)}')
             return e_surface
 
-        Z = omega_val**2*(1+1j*delta_o)*np.eye(3*num_atom_unitcell*block_size, k=0)
+        Z = omega_val ** 2 * (1 + 1j * delta_o) * np.eye(3 * num_atom_unitcell * block_size, k=0)
         right_e_surface = iter_func(Z, right_Hsn_bulk, right_Hsn_surface)
         left_e_surface = iter_func(Z, left_Hsn_bulk, left_Hsn_surface)
 
-        left_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - left_Hsn_bulk['Hsn_fourier'] - (
-                    left_Hsn_bulk['Hopping_fourier'] @ jnp.linalg.inv(left_e_surface) @ left_Hsn_bulk[
-                'Hopping_fourier'].conj().T)
+        left_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) -\
+                         left_Hsn_bulk['Hsn_fourier'] - (left_Hsn_bulk['Hopping_fourier']
+                                                         @ jnp.linalg.inv(left_e_surface)
+                                                         @ left_Hsn_bulk['Hopping_fourier'].conj().T)
 
-        right_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - right_Hsn_bulk['Hsn_fourier'] - (
-                    right_Hsn_surface['Hopping_fourier'] @ jnp.linalg.inv(right_e_surface) @ right_Hsn_surface[
-                'Hopping_fourier'].conj().T)
+        right_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) -\
+                          right_Hsn_bulk['Hsn_fourier'] - (right_Hsn_surface['Hopping_fourier']
+                                                           @ jnp.linalg.inv(right_e_surface)
+                                                           @ right_Hsn_surface['Hopping_fourier'].conj().T)
 
-        return {'left_g_surface': left_g_surface, 'right_g_surface': right_g_surface}
+        g_surf = {'left_g_surface': left_g_surface, 'right_g_surface': right_g_surface}
 
+        return g_surf
 
-    decimation_iterate = functools.partial(decimation_iteration, omega_val = omega[0], num_atom_unitcell = num_atom_unitcell, delta_o = delta_o)
+    decimate_iter = functools.partial(decimation_iteration, left_Hsn_bulk=left_hsn_bulk,
+                                      left_Hsn_surface=left_hsn_surface,
+                                      right_Hsn_surface=right_hsn_surface,
+                                      right_Hsn_bulk=right_hsn_bulk,
+                                      num_atom_unitcell = number_atom_unitcell, delta_o= delta)
 
-    f_transform = functools.partial(decimation_iterate = decimation_iteration, left_Hsn_bulk = left_Hsn_bulk,
-                                    left_Hsn_surface = left_Hsn_surface, right_Hsn_surface = right_Hsn_surface,
-                                    right_Hsn_bulk = right_Hsn_bulk, num_atom_unitcell = num_atom_unitcell,
-                                    delta_o = delta_o)
+    surface_green_func = map(decimate_iter, omega)
+    print(list(surface_green_func))
+    # output_dict = dict(zip(omega, surface_green_func))
 
-    multi_processor = Pool()
-    # Tomorrow
-    multi_processor.map(decimation_iterate, omega)
-    g_surface = dict(map(lambda w, x, y, z: (x[0], decimation_iterate(w[1], x[1], y[1], z[1])), left_Hsn_bulk.items(), left_Hsn_surface.items(), right_Hsn_surface.items(), right_Hsn_bulk.items()))
-    return g_surface
+    # return output_dict
 
+    # multi_processor = Pool(processes=cpu_count()*10)
+    # surface_green_func = multi_processor.map(decimate_iter, omega)  # Surface_green_func
 
+    # g_surface = dict(map(lambda w, x, y, z: (x[0], decimate_iter(w[1], x[1], y[1], z[1])), left_Hsn_bulk.items(),
+    #                      left_Hsn_surface.items(), right_Hsn_surface.items(), right_Hsn_bulk.items()))
+    # return g_surface
 
+    # Hsn_fourier = Hsn_mat['H0'] * planewave[0] + Hsn_mat['H1'] * planewave[1]\
+    #                            + Hsn_mat['H2'] * planewave[2] + Hsn_mat['H3'] * planewave[3]\
+    #                            + Hsn_mat['H4'] * planewave[4]
+    #
+    # Hopping_fourier = Hsn_mat['T1'] * planewave[1] + Hsn_mat['T2'] * planewave[2] + \
+    #                                Hsn_mat['T3'] * planewave[3] + Hsn_mat['T4'] * planewave[4]
+    # Hsn_matrix = {'Hsn_fourier': Hsn_fourier, 'Hopping_fourier': Hopping_fourier}
 
-
-        # Hsn_fourier = Hsn_mat['H0'] * planewave[0] + Hsn_mat['H1'] * planewave[1]\
-        #                            + Hsn_mat['H2'] * planewave[2] + Hsn_mat['H3'] * planewave[3]\
-        #                            + Hsn_mat['H4'] * planewave[4]
-        #
-        # Hopping_fourier = Hsn_mat['T1'] * planewave[1] + Hsn_mat['T2'] * planewave[2] + \
-        #                                Hsn_mat['T3'] * planewave[3] + Hsn_mat['T4'] * planewave[4]
-        # Hsn_matrix = {'Hsn_fourier': Hsn_fourier, 'Hopping_fourier': Hopping_fourier}
-
-        # return Hsn_matrix
-
+    # return Hsn_matrix
 
     # Hsn_matrix_fourier = map(f_transform, unit_planewave)
     # Hsn_keys = np.arange(np.shape(wavevector)[1])
