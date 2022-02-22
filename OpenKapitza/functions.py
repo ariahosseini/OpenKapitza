@@ -278,7 +278,6 @@ def surface_green_func(left_hsn_bulk, left_hsn_surface, right_hsn_surface, right
                        omega_min, omega_max, omega_num, number_atom_unitcell, block_size, delta=1e-6):
 
     omega = np.linspace(omega_min, omega_max, omega_num, endpoint=True)  # An array of frequencies
-
     # A function to implement the decimation method
     def decimation_iteration(omega_val, left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk,
                              num_atom_unitcell = number_atom_unitcell, delta_o= delta):
@@ -307,18 +306,23 @@ def surface_green_func(left_hsn_bulk, left_hsn_surface, right_hsn_surface, right
             return e_surface
 
         Z = omega_val ** 2 * (1 + 1j * delta_o) * np.eye(3 * num_atom_unitcell * block_size, k=0)
-        right_e_surface = iter_func(Z, right_Hsn_bulk, right_Hsn_surface)
-        left_e_surface = iter_func(Z, left_Hsn_bulk, left_Hsn_surface)
 
-        left_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) -\
-                         left_Hsn_bulk['Hsn_fourier'] - (left_Hsn_bulk['Hopping_fourier']
-                                                         @ jnp.linalg.inv(left_e_surface)
-                                                         @ left_Hsn_bulk['Hopping_fourier'].conj().T)
+        right_e_surface  = dict(
+            map(lambda x, y: (x[0], iter_func(Z, x[1], y[1])), right_Hsn_bulk.items(), right_Hsn_surface.items()))
+        left_e_surface = dict(
+            map(lambda x, y: (x[0], iter_func(Z, x[1], y[1])), left_Hsn_bulk.items(), left_Hsn_surface.items()))
 
-        right_g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) -\
-                          right_Hsn_bulk['Hsn_fourier'] - (right_Hsn_surface['Hopping_fourier']
-                                                           @ jnp.linalg.inv(right_e_surface)
-                                                           @ right_Hsn_surface['Hopping_fourier'].conj().T)
+        def g_surf(omega_val, e_surface, Hsn_bulk, block_sze = block_size, num_atom_unitcell = number_atom_unitcell):
+            g_surface = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_sze, k=0) - \
+                        Hsn_bulk['Hsn_fourier'] - (Hsn_bulk['Hopping_fourier']
+                                                        @ jnp.linalg.inv(e_surface)
+                                                        @ Hsn_bulk['Hopping_fourier'].conj().T)
+            return g_surface
+
+        left_g_surface = dict(
+            map(lambda x, y: (x[0], g_surf(omega_val, x[1], y[1])), left_e_surface.items(), left_Hsn_bulk.items()))
+        right_g_surface = dict(
+            map(lambda x, y: (x[0], g_surf(omega_val, x[1], y[1])), right_e_surface.items(), right_Hsn_bulk.items()))
 
         g_surf = {'left_g_surface': left_g_surface, 'right_g_surface': right_g_surface}
 
@@ -330,33 +334,12 @@ def surface_green_func(left_hsn_bulk, left_hsn_surface, right_hsn_surface, right
                                       right_Hsn_bulk=right_hsn_bulk,
                                       num_atom_unitcell = number_atom_unitcell, delta_o= delta)
 
-    surface_green_func = map(decimate_iter, omega)
-    print(list(surface_green_func))
-    # output_dict = dict(zip(omega, surface_green_func))
-
-    # return output_dict
-
-    # multi_processor = Pool(processes=cpu_count()*10)
+    # multi_processor = Pool(processes=cpu_count() * 10)
     # surface_green_func = multi_processor.map(decimate_iter, omega)  # Surface_green_func
+    surface_green_func = map(decimate_iter, omega)
+    output_dict = dict(zip(omega, surface_green_func))
 
-    # g_surface = dict(map(lambda w, x, y, z: (x[0], decimate_iter(w[1], x[1], y[1], z[1])), left_Hsn_bulk.items(),
-    #                      left_Hsn_surface.items(), right_Hsn_surface.items(), right_Hsn_bulk.items()))
-    # return g_surface
-
-    # Hsn_fourier = Hsn_mat['H0'] * planewave[0] + Hsn_mat['H1'] * planewave[1]\
-    #                            + Hsn_mat['H2'] * planewave[2] + Hsn_mat['H3'] * planewave[3]\
-    #                            + Hsn_mat['H4'] * planewave[4]
-    #
-    # Hopping_fourier = Hsn_mat['T1'] * planewave[1] + Hsn_mat['T2'] * planewave[2] + \
-    #                                Hsn_mat['T3'] * planewave[3] + Hsn_mat['T4'] * planewave[4]
-    # Hsn_matrix = {'Hsn_fourier': Hsn_fourier, 'Hopping_fourier': Hopping_fourier}
-
-    # return Hsn_matrix
-
-    # Hsn_matrix_fourier = map(f_transform, unit_planewave)
-    # Hsn_keys = np.arange(np.shape(wavevector)[1])
-
-    # return dict(zip(Hsn_keys, [*Hsn_matrix_fourier]))
+    return output_dict
 
 
 if __name__ == "__main__":
