@@ -271,8 +271,9 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
     return output_dict
 
 
-def surface_green_func(left_hsn_bulk, left_hsn_surface, right_hsn_surface, right_hsn_bulk,
-                       omega_min, omega_max, omega_num, number_atom_unitcell, block_size, delta=1e-6):
+def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_surface: dict, right_hsn_bulk: dict,
+                       omega_min: float, omega_max: float, omega_num: int,
+                       number_atom_unitcell: int, block_size: int, delta=1e-6):
     omega = np.linspace(omega_min, omega_max, omega_num, endpoint=True)  # An array of frequencies
 
     # A function to implement the decimation method
@@ -333,18 +334,20 @@ def surface_green_func(left_hsn_bulk, left_hsn_surface, right_hsn_surface, right
 
         def g_surf_right(omega_value, e_surface, Hsn_bulk, block_sze=block_size,
                          num_atom_unit_cell=number_atom_unitcell):
-            g_surface = omega_value ** 2 * np.eye(3 * num_atom_unit_cell * block_sze, k=0) - \
-                        Hsn_bulk['Hsn_fourier'] - (Hsn_bulk['Hopping_fourier']
-                                                   @ jnp.linalg.inv(e_surface)
-                                                   @ Hsn_bulk['Hopping_fourier'].conj().T)
+            e_surf = omega_value ** 2 * np.eye(3 * num_atom_unit_cell * block_sze, k=0) - \
+                     Hsn_bulk['Hsn_fourier'] - (Hsn_bulk['Hopping_fourier']
+                                                @ jnp.linalg.inv(e_surface)
+                                                @ Hsn_bulk['Hopping_fourier'].conj().T)
+            g_surface = jnp.linalg.inv(e_surf)
             return g_surface
 
         def g_surf_left(omega_value, e_surface, Hsn_bulk, block_sze=block_size,
                         num_atom_unit_cell=number_atom_unitcell):
-            g_surface = omega_value ** 2 * np.eye(3 * num_atom_unit_cell * block_sze, k=0) - \
-                        Hsn_bulk['Hsn_fourier'] - (Hsn_bulk['Hopping_fourier'].conj().T
-                                                   @ jnp.linalg.inv(e_surface)
-                                                   @ Hsn_bulk['Hopping_fourier'])
+            e_surf = omega_value ** 2 * np.eye(3 * num_atom_unit_cell * block_sze, k=0) - \
+                     Hsn_bulk['Hsn_fourier'] - (Hsn_bulk['Hopping_fourier'].conj().T
+                                                @ jnp.linalg.inv(e_surface)
+                                                @ Hsn_bulk['Hopping_fourier'])
+            g_surface = jnp.linalg.inv(e_surf)
             return g_surface
 
         right_g_surface = dict(
@@ -370,6 +373,32 @@ def surface_green_func(left_hsn_bulk, left_hsn_surface, right_hsn_surface, right
     output_dict = dict(zip(omega, surface_green_func))
 
     return output_dict
+
+
+def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: dict):
+
+    def dev_green_unit(omega_val, surf_green, num_atom_unitcell, block_size):
+        self_energy_left = left_hsn_surface['Hopping_fourier'].conj().T \
+                           @ surf_green['left_g_surface'] \
+                           @ left_hsn_surface['Hopping_fourier']
+
+        self_energy_right = hsn_device['Hopping_fourier'] \
+                            @ surf_green['left_g_surface'] \
+                            @ left_hsn_surface['Hopping_fourier'].conj().T
+
+        gamma_left = 1j*(self_energy_left - self_energy_left.conj().T)
+        gamma_right = 1j * (self_energy_right - self_energy_right.conj().T)
+
+        green_ret = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - \
+                    hsn_device['Hsn_fourier'] - self_energy_left - self_energy_right
+        green_adv = green_ret.conj().T
+        Xi = gamma_right @ green_ret @ gamma_left @ green_adv
+
+        output = {'Omega': omega_val, 'Transmittance': Xi}
+        return output
+
+    return 0
+
 
 
 if __name__ == "__main__":
