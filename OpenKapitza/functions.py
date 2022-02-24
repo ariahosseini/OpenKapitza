@@ -273,7 +273,39 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
 
 def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_surface: dict, right_hsn_bulk: dict,
                        omega_min: float, omega_max: float, omega_num: int,
-                       number_atom_unitcell: int, block_size: int, delta=1e-6):
+                       number_atom_unitcell: int, block_size: int, delta: float = 1e-6):
+    """
+            A function to compute surface Green's function
+
+            Parameters
+            ----------
+            left_hsn_bulk: dict
+                Return object of the hessian_fourier_form for left lead bulk
+            left_hsn_surface: dict
+                Return object of the hessian_fourier_form for left lead surface
+            right_hsn_surface: dict
+                Return object of the hessian_fourier_form for right lead surface
+            right_hsn_bulk: dict
+                Return object of the hessian_fourier_form for right lead bulk
+            omega_min: float
+                Minimum frequency
+            omega_max: float
+                Maximum frequency
+            omega_num: int
+                Sampling the frequency
+            number_atom_unitcell: int
+                Number of atoms per unit cell
+            block_size: int
+                Block size
+            delta: float
+                Infinitesimal positive number
+
+            Returns
+            ----------
+            output-dict : dict
+                First keys are frequencies, the values are left and right surface Green's function
+            """
+
     omega = np.linspace(omega_min, omega_max, omega_num, endpoint=True)  # An array of frequencies
 
     # A function to implement the decimation method
@@ -367,40 +399,49 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
                                       right_Hsn_bulk=right_hsn_bulk,
                                       num_atom_unitcell=number_atom_unitcell, delta_o=delta)
 
-    # multi_processor = Pool(processes=cpu_count() * 10)
-    # surface_green_func = multi_processor.map(decimate_iter, omega)  # Surface_green_func
-    surface_green_func = map(decimate_iter, omega)
-    output_dict = dict(zip(omega, surface_green_func))
+    surf_green_func = map(decimate_iter, omega)
+    output_dict = dict(zip(omega, surf_green_func))
 
     return output_dict
 
 
 def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: dict):
 
+    omega = surface_green.keys()
+
     def dev_green_unit(omega_val, surf_green, num_atom_unitcell, block_size):
-        self_energy_left = left_hsn_surface['Hopping_fourier'].conj().T \
-                           @ surf_green['left_g_surface'] \
-                           @ left_hsn_surface['Hopping_fourier']
 
-        self_energy_right = hsn_device['Hopping_fourier'] \
-                            @ surf_green['left_g_surface'] \
-                            @ left_hsn_surface['Hopping_fourier'].conj().T
+        left_g_surface = surf_green['left_g_surface']
+        right_g_surface = surf_green['right_g_surface']
 
-        gamma_left = 1j*(self_energy_left - self_energy_left.conj().T)
-        gamma_right = 1j * (self_energy_right - self_energy_right.conj().T)
+        def gsurt_kpoint(left_sf_green, right_sf_green, left_hsn_surf=left_hsn_surface, hsn_dev=hsn_device):
 
-        green_ret = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - \
-                    hsn_device['Hsn_fourier'] - self_energy_left - self_energy_right
-        green_adv = green_ret.conj().T
-        Xi = gamma_right @ green_ret @ gamma_left @ green_adv
+            self_energy_left = left_hsn_surf['Hopping_fourier'].conj().T \
+                               @ left_sf_green \
+                               @ left_hsn_surf['Hopping_fourier']
+
+            self_energy_right = hsn_dev['Hopping_fourier'] \
+                                @ right_sf_green \
+                                @ left_hsn_surface['Hopping_fourier'].conj().T
+            gamma_left = 1j*(self_energy_left - self_energy_left.conj().T)
+            gamma_right = 1j * (self_energy_right - self_energy_right.conj().T)
+            green_ret = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - \
+                        hsn_device['Hsn_fourier'] - self_energy_left - self_energy_right
+            green_adv = green_ret.conj().T
+            Xi = gamma_right @ green_ret @ gamma_left @ green_adv
+            return Xi
+
+
+        # right_e_bulk_surface = dict(map(lambda x, y: (x[0], iter_func_right(Z, x[1], y[1])), right_Hsn_bulk.items(), right_Hsn_surface.items()))
 
         output = {'Omega': omega_val, 'Transmittance': Xi}
         return output
 
-    return 0
+    transmittance = map(dev_green_unit, omega)
 
+    return transmittance
 
 
 if __name__ == "__main__":
-    # Do something if this file is invoked on its own
-    print('Done')
+
+    print('OpenKapitza')
