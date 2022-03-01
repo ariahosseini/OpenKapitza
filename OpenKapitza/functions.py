@@ -4,6 +4,7 @@ import functools
 from copy import deepcopy
 from typing import Any
 
+
 # from multiprocessing import Pool, cpu_count
 
 import matplotlib.pyplot as plt
@@ -405,16 +406,16 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
     return output_dict
 
 
-def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: dict):
+def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: dict, number_atom_unitcell, block_sze):
 
-    omega = surface_green.keys()
-
-    def dev_green_unit(omega_val, surf_green, num_atom_unitcell, block_size):
+    def dev_green_unit(omega_val, surf_green, num_atom_unitcell=number_atom_unitcell, block_size=block_sze):
 
         left_g_surface = surf_green['left_g_surface']
         right_g_surface = surf_green['right_g_surface']
 
-        def gsurt_kpoint(left_sf_green, right_sf_green, left_hsn_surf=left_hsn_surface, hsn_dev=hsn_device):
+        def gsurt_kpoint(left_sf_green, right_sf_green, left_hsn_surf, hsn_dev):
+
+            print(left_hsn_surf['Hopping_fourier'])
 
             self_energy_left = left_hsn_surf['Hopping_fourier'].conj().T \
                                @ left_sf_green \
@@ -422,22 +423,30 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
 
             self_energy_right = hsn_dev['Hopping_fourier'] \
                                 @ right_sf_green \
-                                @ left_hsn_surface['Hopping_fourier'].conj().T
+                                @ hsn_dev['Hopping_fourier'].conj().T
+
             gamma_left = 1j*(self_energy_left - self_energy_left.conj().T)
             gamma_right = 1j * (self_energy_right - self_energy_right.conj().T)
             green_ret = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - \
-                        hsn_device['Hsn_fourier'] - self_energy_left - self_energy_right
+                        hsn_dev['Hsn_fourier'] - self_energy_left - self_energy_right
             green_adv = green_ret.conj().T
-            Xi = gamma_right @ green_ret @ gamma_left @ green_adv
+            Xi = np.trace(gamma_right @ green_ret @ gamma_left @ green_adv)
             return Xi
 
+        def sum_transmittance_kpoint(xi_k1, xi_k2):
+            return xi_k1+xi_k2
 
-        # right_e_bulk_surface = dict(map(lambda x, y: (x[0], iter_func_right(Z, x[1], y[1])), right_Hsn_bulk.items(), right_Hsn_surface.items()))
+        # print('test')
+        # print(hsn_device.values())
 
-        output = {'Omega': omega_val, 'Transmittance': Xi}
+        trans = list(map(lambda x, y, z, w: (gsurt_kpoint(x[1], y[1], z[1], w[1])), left_g_surface.items(),
+                         right_g_surface.items(), left_hsn_surface.items(), hsn_device.items()))
+        trans_omega = functools.reduce(sum_transmittance_kpoint, trans)
+        output = {'Omega': omega_val, 'Transmittance': trans_omega}
+
         return output
 
-    transmittance = map(dev_green_unit, omega)
+    transmittance = map(lambda x: dev_green_unit(x[0], x[1]), surface_green.items())
 
     return transmittance
 
