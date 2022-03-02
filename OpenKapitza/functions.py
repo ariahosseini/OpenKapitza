@@ -4,7 +4,6 @@ import functools
 from copy import deepcopy
 from typing import Any
 
-
 # from multiprocessing import Pool, cpu_count
 
 import matplotlib.pyplot as plt
@@ -75,58 +74,29 @@ def plot_2darray(array_to_plot: np.ndarray, pic_name: str, set_title: str,
     plt.savefig(pic_name)
 
 
-def read_crystal(file_name: str, natm_per_unitcell: int, skip_rows: int = 9) -> dict:
+def read_crystal(natm_per_unitcell: int, rep: list, skip_rows: int = 9, file_crystal: str = 'data.unwrapped') -> dict:
     """
     A function to read unwrapped atoms position from lammps output and compute lattice points
 
     Parameters
     ----------
-    file_name: str
-        Lammps output file — data.wrapper
     natm_per_unitcell : int
         Number of atoms per unit cell
+    rep: list
+        This term shows how many times the unit cell is replicated in each lead
     skip_rows: int
         Number of lines to skip in data.unwrapped
+    file_crystal: str
+        Lammps output file — data.unwrapped
 
     Returns
     ----------
-    output : dict
-        First key includes the crystal points and the second key includes the lattice points
+    crystal_info : dict
+        First key includes the crystal points, the second key includes the lattice points
+        and the third key is the lattice_constant in [m]
     """
 
-    crystal_points = np.loadtxt(file_name, delimiter=None, skiprows=skip_rows)  # Read data file
-    lattice_points = crystal_points[::natm_per_unitcell, 3:] - crystal_points[0, 3:]  # Find lattice point
-    crystal_info = {'crystal_points': crystal_points, 'lattice_points': lattice_points}  # return dict
-
-    return crystal_info
-
-
-def mitigate_periodic_effect(
-        hessian: np.ndarray, crystal_info: dict, natm_per_unitcell: int,
-        rep: list, file_crystal: str = 'data.unwrapped') -> dict:
-    """
-        A function to remove the atoms on the edge and theirs force constant elements
-
-        Parameters
-        ----------
-        hessian : np.ndarray
-            Return object of the read_hessian function
-        crystal_info: dict
-            Return object of the crystal_info function
-        natm_per_unitcell: int
-            Number of atoms per unit cell
-        rep: list
-            This term shows how many times the unit cell is replicated in each lead
-        file_crystal: str
-            Name of the data file -- data.unwrapped
-
-        Returns
-        ----------
-        return_dic : dict
-            A dictionary that includes Hessian matrix, lattice points and lattice constant, respectively
-        """
-
-    ang2m = 1e-10  # convert angstrom to meter
+    ang2m = 1e-10  # Convert angstrom to meter
     with open(file_crystal, 'r') as read_obj:
         for line_number, line in enumerate(read_obj):
             if "ITEM: BOX BOUNDS pp pp pp" in line:
@@ -138,24 +108,69 @@ def mitigate_periodic_effect(
             np.array([float(x_max) - float(x_min), float(y_max) - float(y_min), float(z_max) - float(z_min)]) / \
             np.array([rep[0], rep[1], 2 * rep[2]]) * ang2m  # Lattice constant
 
-    # Remove lattice points on the edge
-    lattice_points = crystal_info['lattice_points']
-    lattice_points[::2 * rep[2]] = np.inf
-    lattice_points[2 * rep[2] - 1::2 * rep[2]] = np.inf
-    lp = lattice_points[np.isfinite(lattice_points).all(1)]  # New lattice points
+    crystal_points = np.loadtxt(file_crystal, delimiter=None, skiprows=skip_rows)  # Read data file
+    lattice_points = crystal_points[::natm_per_unitcell, 3:] - crystal_points[0, 3:]  # Find lattice point
+    crystal_info = {'crystal_points': crystal_points, 'lattice_points': lattice_points,
+                    'lattice_constant': lattice_constant}  # return dict
 
-    # Remove corresponding elements in Hessian
-    for io in range(natm_per_unitcell * 3):
-        hessian[io::natm_per_unitcell * 3 * rep[-1] * 2] = np.inf
-        hessian[:, io::natm_per_unitcell * 3 * rep[-1] * 2] = np.inf
-        hessian[io + natm_per_unitcell * 3 * (rep[-1] * 2 - 1)::natm_per_unitcell * 3 * rep[-1] * 2] = np.inf
-        hessian[:, io + natm_per_unitcell * 3 * (rep[-1] * 2 - 1)::natm_per_unitcell * 3 * rep[-1] * 2] = np.inf
-    hsn = hessian[~(np.isinf(hessian).all(axis=1))]
-    hsn_matrix = np.transpose(hsn.T[~(np.isinf(hsn.T).all(axis=1))])  # New Hessian matrix
+    return crystal_info
 
-    return_dic = {'hsn_matrix': hsn_matrix, 'lattice_points': lp, 'lattice_constant': lattice_constant}
 
-    return return_dic
+# def mitigate_periodic_effect(
+#         hessian: np.ndarray, crystal_info: dict, natm_per_unitcell: int,
+#         rep: list, file_crystal: str = 'data.unwrapped') -> dict:
+#     """
+#         A function to remove the atoms on the edge and theirs force constant elements
+#
+#         Parameters
+#         ----------
+#         hessian : np.ndarray
+#             Return object of the read_hessian function
+#         crystal_info: dict
+#             Return object of the crystal_info function
+#         natm_per_unitcell: int
+#             Number of atoms per unit cell
+#         rep: list
+#             This term shows how many times the unit cell is replicated in each lead
+#         file_crystal: str
+#             Name of the data file -- data.unwrapped
+#
+#         Returns
+#         ----------
+#         return_dic : dict
+#             A dictionary that includes Hessian matrix, lattice points and lattice constant, respectively
+#         """
+#
+#     ang2m = 1e-10  # convert angstrom to meter
+#     with open(file_crystal, 'r') as read_obj:
+#         for line_number, line in enumerate(read_obj):
+#             if "ITEM: BOX BOUNDS pp pp pp" in line:
+#                 x_min, x_max = next(read_obj).split()
+#                 y_min, y_max = next(read_obj).split()
+#                 z_min, z_max = next(read_obj).split()
+#                 break
+#         lattice_constant: np.array = \
+#             np.array([float(x_max) - float(x_min), float(y_max) - float(y_min), float(z_max) - float(z_min)]) / \
+#             np.array([rep[0], rep[1], 2 * rep[2]]) * ang2m  # Lattice constant
+#
+#     # Remove lattice points on the edge
+#     lattice_points = crystal_info['lattice_points']
+#     lattice_points[::2 * rep[2]] = np.inf
+#     lattice_points[2 * rep[2] - 1::2 * rep[2]] = np.inf
+#     lp = lattice_points[np.isfinite(lattice_points).all(1)]  # New lattice points
+#
+#     # Remove corresponding elements in Hessian
+#     for io in range(natm_per_unitcell * 3):
+#         hessian[io::natm_per_unitcell * 3 * rep[-1] * 2] = np.inf
+#         hessian[:, io::natm_per_unitcell * 3 * rep[-1] * 2] = np.inf
+#         hessian[io + natm_per_unitcell * 3 * (rep[-1] * 2 - 1)::natm_per_unitcell * 3 * rep[-1] * 2] = np.inf
+#         hessian[:, io + natm_per_unitcell * 3 * (rep[-1] * 2 - 1)::natm_per_unitcell * 3 * rep[-1] * 2] = np.inf
+#     hsn = hessian[~(np.isinf(hessian).all(axis=1))]
+#     hsn_matrix = np.transpose(hsn.T[~(np.isinf(hsn.T).all(axis=1))])  # New Hessian matrix
+#
+#     return_dic = {'hsn_matrix': hsn_matrix, 'lattice_points': lp, 'lattice_constant': lattice_constant}
+#
+#     return return_dic
 
 
 def matrix_decomposition(hsn_matrix: np.ndarray, block_size: int,
@@ -187,7 +202,7 @@ def matrix_decomposition(hsn_matrix: np.ndarray, block_size: int,
     elements_idx = (block_indices[2] + f_idx[:, 2] - 1) + ((block_indices[1] + f_idx[:, 1] - 1)
                                                            * rep[0] + block_indices[0] + f_idx[:, 0] - 1) * 2 * rep[2]
     Hsn_keys = ['H0', 'H1', 'H2', 'H3', 'H4', 'T1', 'T2', 'T3', 'T4']
-    Hsn = {}  # Return value
+    Hsn = {}  # Return dict — decomposed Hessian matrix
     for i in range(9):
         Hsn_block = hsn_matrix[natm_per_unitcell * 3 * elements_idx[0]:
                                natm_per_unitcell * 3 * (elements_idx[0] + block_size),
@@ -266,6 +281,7 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
     Hsn_keys = np.arange(np.shape(wavevector)[1])
     output_dict = dict(zip(Hsn_keys, [*Hsn_matrix_fourier]))
 
+    # Add 'wavevector' to the returned output
     for _, __ in enumerate(Hsn_keys):
         output_dict[__]['wavevector'] = wavevector[:, _]
 
@@ -313,14 +329,8 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
     def decimation_iteration(omega_val, left_Hsn_bulk, left_Hsn_surface, right_Hsn_surface, right_Hsn_bulk,
                              num_atom_unitcell=number_atom_unitcell, delta_o=delta):
 
-        def iter_func_right(Z, Hsn_bulk, Hsn_surface):
-
-            e_surface = Z - Hsn_bulk['Hsn_fourier']
-            deepcopy_e_surface = deepcopy(e_surface)
-            e = deepcopy(e_surface)
-            alpha = Hsn_surface['Hopping_fourier']
-            beta = Hsn_surface['Hopping_fourier'].conj().T
-            io = 1
+        def iteration_loop(e_surface, deepcopy_e_surface, e, alpha, beta):
+            io = 0
             while True:
                 a_term = jnp.linalg.inv(e) @ alpha
                 b_term = jnp.linalg.inv(e) @ beta
@@ -328,12 +338,23 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
                 e += beta @ a_term + alpha @ b_term
                 alpha = alpha @ a_term
                 beta = beta @ b_term
-                if np.linalg.norm(e_surface.real - deepcopy_e_surface.real) < 1e-6 or io > 5000:
+                if np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)) < 1e-6 or io > 5000:
+                    print('Error: ', np.max(np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface))))
+                    print('Iteration: ', io)
                     break
                 deepcopy_e_surface = deepcopy(e_surface)
-            io += 1
-            # print(f'Number of interation: {io}')
-            # print(f'Error: {np.linalg.norm(e_surface.real - deepcopy_e_surface.real)}')
+                io += 1
+            return e_surface
+
+        def iter_func_right(Z, Hsn_bulk, Hsn_surface):
+
+            e_surface = Z - Hsn_bulk['Hsn_fourier']
+            deepcopy_e_surface = deepcopy(e_surface)
+            e = deepcopy(e_surface)
+            alpha = Hsn_surface['Hopping_fourier']
+            beta = Hsn_surface['Hopping_fourier'].conj().T
+            print('Right Lead')
+            e_surface = iteration_loop(e_surface, deepcopy_e_surface, e, alpha, beta)
             return e_surface
 
         def iter_func_left(Z, Hsn_bulk, Hsn_surface):
@@ -343,20 +364,8 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
             e = deepcopy(e_surface)
             alpha = Hsn_surface['Hopping_fourier'].conj().T
             beta = Hsn_surface['Hopping_fourier']
-            io = 1
-            while True:
-                a_term = jnp.linalg.inv(e) @ alpha
-                b_term = jnp.linalg.inv(e) @ beta
-                e_surface += alpha @ b_term
-                e += beta @ a_term + alpha @ b_term
-                alpha = alpha @ a_term
-                beta = beta @ b_term
-                if np.linalg.norm(e_surface.real - deepcopy_e_surface.real) < 1e-6 or io > 5000:
-                    break
-                deepcopy_e_surface = deepcopy(e_surface)
-            io += 1
-            # print(f'Number of interation: {io}')
-            # print(f'Error: {np.linalg.norm(e_surface.real - deepcopy_e_surface.real)}')
+            print('Left Lead')
+            e_surface = iteration_loop(e_surface, deepcopy_e_surface, e, alpha, beta)
             return e_surface
 
         Z = omega_val ** 2 * (1 + 1j * delta_o) * np.eye(3 * num_atom_unitcell * block_size, k=0)
@@ -408,14 +417,12 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
 
 def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: dict, number_atom_unitcell, block_sze):
 
+    number_kpoints = len(hsn_device)
     def dev_green_unit(omega_val, surf_green, num_atom_unitcell=number_atom_unitcell, block_size=block_sze):
-
         left_g_surface = surf_green['left_g_surface']
         right_g_surface = surf_green['right_g_surface']
 
         def gsurt_kpoint(left_sf_green, right_sf_green, left_hsn_surf, hsn_dev):
-
-            print(left_hsn_surf['Hopping_fourier'])
 
             self_energy_left = left_hsn_surf['Hopping_fourier'].conj().T \
                                @ left_sf_green \
@@ -425,7 +432,7 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
                                 @ right_sf_green \
                                 @ hsn_dev['Hopping_fourier'].conj().T
 
-            gamma_left = 1j*(self_energy_left - self_energy_left.conj().T)
+            gamma_left = 1j * (self_energy_left - self_energy_left.conj().T)
             gamma_right = 1j * (self_energy_right - self_energy_right.conj().T)
             green_ret = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - \
                         hsn_dev['Hsn_fourier'] - self_energy_left - self_energy_right
@@ -434,14 +441,11 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
             return Xi
 
         def sum_transmittance_kpoint(xi_k1, xi_k2):
-            return xi_k1+xi_k2
-
-        # print('test')
-        # print(hsn_device.values())
+            return xi_k1 + xi_k2
 
         trans = list(map(lambda x, y, z, w: (gsurt_kpoint(x[1], y[1], z[1], w[1])), left_g_surface.items(),
                          right_g_surface.items(), left_hsn_surface.items(), hsn_device.items()))
-        trans_omega = functools.reduce(sum_transmittance_kpoint, trans)
+        trans_omega = functools.reduce(sum_transmittance_kpoint, trans)/number_kpoints
         output = {'Omega': omega_val, 'Transmittance': trans_omega}
 
         return output
@@ -452,5 +456,4 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
 
 
 if __name__ == "__main__":
-
     print('OpenKapitza')
