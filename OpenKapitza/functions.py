@@ -9,7 +9,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-
+from collections import ChainMap
 sns.set()
 sns.set_style("white", {"xtick.major.size": 2, "ytick.major.size": 2})
 sns.set_context("paper", font_scale=2, rc={"lines.linewidth": 4})
@@ -33,8 +33,9 @@ def read_hessian(file_name: str) -> np.ndarray:
     hessian_data_file = np.loadtxt(file_name, delimiter=None, skiprows=0)  # Load data
     hessian_symmetric = (np.triu(hessian_data_file, k=0) + np.tril(hessian_data_file, k=0).T) / 2  # Remove noises
     hessian = np.triu(hessian_symmetric) + np.triu(hessian_symmetric, k=1).T  # Hessian is symmetric
+    ang2m = 1e-10  # Convert angstrom to meter
 
-    return hessian
+    return hessian*ang2m*ang2m/1e3  # The Hessian has a funnny unit [J/Ang^2/gram]
 
 
 def plot_2darray(array_to_plot: np.ndarray, pic_name: str, set_title: str,
@@ -338,9 +339,12 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
                 e += beta @ a_term + alpha @ b_term
                 alpha = alpha @ a_term
                 beta = beta @ b_term
-                if np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)) < 1e-6 or io > 5000:
-                    print('Error: ', np.max(np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface))))
-                    print('Iteration: ', io)
+                if np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)) < 1e-1 or io > 500:
+                    # print('Finally:')
+                    # print('Max real part of e_surface: ', np.amax(e_surface.real))
+                    # print('Max imag part of e_surface: ',np.amax(e_surface.imag))
+                    # print('Error: ', np.max(np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface))))
+                    # print('Iteration: ', io)
                     break
                 deepcopy_e_surface = deepcopy(e_surface)
                 io += 1
@@ -353,7 +357,6 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
             e = deepcopy(e_surface)
             alpha = Hsn_surface['Hopping_fourier']
             beta = Hsn_surface['Hopping_fourier'].conj().T
-            print('Right Lead')
             e_surface = iteration_loop(e_surface, deepcopy_e_surface, e, alpha, beta)
             return e_surface
 
@@ -364,7 +367,6 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
             e = deepcopy(e_surface)
             alpha = Hsn_surface['Hopping_fourier'].conj().T
             beta = Hsn_surface['Hopping_fourier']
-            print('Left Lead')
             e_surface = iteration_loop(e_surface, deepcopy_e_surface, e, alpha, beta)
             return e_surface
 
@@ -418,6 +420,7 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
 def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: dict, number_atom_unitcell, block_sze):
 
     number_kpoints = len(hsn_device)
+
     def dev_green_unit(omega_val, surf_green, num_atom_unitcell=number_atom_unitcell, block_size=block_sze):
         left_g_surface = surf_green['left_g_surface']
         right_g_surface = surf_green['right_g_surface']
@@ -436,6 +439,8 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
             gamma_right = 1j * (self_energy_right - self_energy_right.conj().T)
             green_ret = omega_val ** 2 * np.eye(3 * num_atom_unitcell * block_size, k=0) - \
                         hsn_dev['Hsn_fourier'] - self_energy_left - self_energy_right
+            # print('gamma')
+            # print((gamma_right == gamma_right.conj().T).all())
             green_adv = green_ret.conj().T
             Xi = np.trace(gamma_right @ green_ret @ gamma_left @ green_adv)
             return Xi
@@ -446,13 +451,13 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
         trans = list(map(lambda x, y, z, w: (gsurt_kpoint(x[1], y[1], z[1], w[1])), left_g_surface.items(),
                          right_g_surface.items(), left_hsn_surface.items(), hsn_device.items()))
         trans_omega = functools.reduce(sum_transmittance_kpoint, trans)/number_kpoints
-        output = {'Omega': omega_val, 'Transmittance': trans_omega}
+        output = {omega_val: trans_omega}
 
         return output
 
-    transmittance = map(lambda x: dev_green_unit(x[0], x[1]), surface_green.items())
+    transmittance = list(map(lambda x: dev_green_unit(x[0], x[1]), surface_green.items()))
 
-    return transmittance
+    return dict(ChainMap(*transmittance))
 
 
 if __name__ == "__main__":
