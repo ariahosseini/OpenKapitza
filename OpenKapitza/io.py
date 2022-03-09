@@ -37,9 +37,9 @@ def read_crystal(natm_per_unitcell: int, rep: list, skip_rows: int = 9, file_cry
     rep: list
         This term shows how many times the unit cell is replicated in each lead
     skip_rows: int
-        Number of lines to skip in data.unwrapped
+        Number of lines to skip in "data.unwrapped"
     file_crystal: str
-        Lammps output file — data.unwrapped
+        Lammps output file — "data.unwrapped"
 
     Returns
     ----------
@@ -61,8 +61,8 @@ def read_crystal(natm_per_unitcell: int, rep: list, skip_rows: int = 9, file_cry
             np.array([rep[0], rep[1], 2 * rep[2]]) * ang2m  # Lattice constant
 
     crystal_points = np.loadtxt(file_crystal, delimiter=None, skiprows=skip_rows)  # Read data file
-    lattice_points = crystal_points[::natm_per_unitcell, 3:] - crystal_points[0, 3:]  # Find lattice point
-    crystal_info = {'crystal_points': crystal_points, 'lattice_points': lattice_points,
+    lattice_points = crystal_points[::natm_per_unitcell, 2:] - crystal_points[0, 2:]  # Find lattice point
+    crystal_info = {'atoms_position': crystal_points, 'lattice_points': lattice_points,
                     'lattice_constant': lattice_constant}  # return dict
 
     return crystal_info
