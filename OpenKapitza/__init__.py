@@ -2,6 +2,8 @@
 
 # Add imports here
 from .functions import *
+from .visualize import *
+from .io import *
 
 # Handle versioneer
 from ._version import get_versions
