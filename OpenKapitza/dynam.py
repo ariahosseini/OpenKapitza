@@ -305,7 +305,7 @@ def single_wave(path_to_mass_weighted_hessian: str, path_to_atoms_positions: lis
                 origin_unit_cell: int = 0, skip_lines: list = None, num_qpoints: int = 1000) -> dict:
 
     """
-    A methodd to generate a single phonon wave
+    A method to generate a single phonon wave
 
     :arg
         path_to_mass_weighted_hessian: str
@@ -346,12 +346,13 @@ def single_wave(path_to_mass_weighted_hessian: str, path_to_atoms_positions: lis
             Skip headers in the data file for Hessian and wave packet, respectively
 
     :returns
-        positions[0]                        : Position of atoms
-        frq[0]                              : Frequency
-        gaussian                            : Gaussian distribution
-        points                              : qpoints
-        solid_lattice_points                : Lattice points
-        wave.real                           : Wave
+        output: dict
+            output['atom_position'] — Position of atoms
+            output['frequency'] — Frequency
+            output['gaussian_dist'] — Gaussian distribution
+            output['qpoints'] — qpoints
+            output['lattice_points'] — Lattice points
+            output['wave'] — The wave
     """
 
     if BZ_path is None:
@@ -360,7 +361,7 @@ def single_wave(path_to_mass_weighted_hessian: str, path_to_atoms_positions: lis
     if skip_lines is None:
         skip_lines = [9, 9]
 
-    num_cell = replication[0] * replication[1] * replication[2]
+    num_cell = np.prod(replication)
 
     positions = atoms_position(path_to_atoms_positions=path_to_atoms_positions[1], num_atoms=num_atoms[1],
                                num_atoms_unit_cell=num_atoms_unit_cell, reference_unit_cell=origin_unit_cell,
@@ -408,32 +409,65 @@ def single_wave(path_to_mass_weighted_hessian: str, path_to_atoms_positions: lis
 
     return output
 
-def wavepacket(path_to_mass_weighted_hessian, path_to_atoms_positions, num_atoms,
-               num_atoms_unit_cell, central_unit_cell, amplitude, lattice_parameter, frq_mode,
-               idx_ko, sigma, replication, time=10, BZ_path=None, origin_unit_cell=0, skip_lines=[9, 9],
-               num_qpoints=500):
+
+def wavepacket(path_to_mass_weighted_hessian: str, path_to_atoms_positions: list, num_atoms: list,
+                num_atoms_unit_cell: int, central_unit_cell: int, amplitude: float, lattice_parameter: float,
+               frq_mode: int, idx_ko: int, sigma: float, replication: list, time: float = 0, BZ_path = None,
+               origin_unit_cell: int = 0, skip_lines: list = None, num_qpoints: int = 1000) -> dict:
     """
-    This function generates a wavepacket
+    A method to build a wavepacket
+
     :arg
-        path_to_mass_weighted_hessian       : Point to the mass weighted hessian file, string
-        path_to_atoms_positions             : Point to the data file in LAMMPS format for Hessian and wave packet,
-                                              list of strings
-        num_atoms                           : Number of atoms for Hessian and wave packet, list of integers
-        num_atoms_unit_cell                 : Number of atoms per unitcell
-        central_unit_cell                   : The index of the unitcell that is considered as the origin (0, 0, 0),
-                                              It is better to be at the center and number of
-                                              cells should be an odd number, integer
-        lattice_parameter                   : Lattice parameter, floating
-        frq_mode                            : Frequency mode can be 0, 1 , 2, for longitudinal , transverses modes
-        idx_ko                              : Gaussian center, integer
-        amplitude                           : Amplitude of the Gaussian, floating number
-        sigma                               : Broadening factor, floating
-        replication                         : Size of the box in unit of unitcell, [x, y, z]
-        time                                : Time, it can be zero without loss of generality
-        BZ_path                             : 1 by 3 list of [1s or 0s], where 1 is yes and 0 is no
-        origin_unit_cell                    : Reference unitcell, 0 is reasonable
-        skip_lines                          : Skip headers
-        num_qpoints                         : Sampling size, integer
+        path_to_mass_weighted_hessian: str
+               Point to the mass weighted hessian file
+        path_to_atoms_positions: list
+               Point to the data file for Hessian and wave packet, respectively
+        num_atoms: list
+               Number of atoms in Hessian and wave packet structures, respectively
+        num_atoms_unit_cell: int
+                Number of atoms per unitcell
+        central_unit_cell: int
+                The index of the unitcell that is considered as the origin (0, 0, 0),
+                It is better to be at the center and number of cells should be an odd number
+        lattice_parameter: float
+                Lattice parameter
+        frq_mode: int
+                Frequency mode can be 1: 'longitudinal' , 2: 'transverses_mode_one', 3: 'transverses_mode_two'
+        idx_ko: int
+                Central of Gaussian — wave vector index
+
+        amplitude: float
+            Amplitude of the Gaussian distribution
+        sigma: float
+            Broadening factor
+        wave_number_idx: int
+            Gaussian mean value — the index
+        time: float
+            Time
+        num_qpoints: int
+            Sampling size
+        lattice_parameter: float
+            Lattice parameter
+        BZ_path: list
+            A 1 by 3 list of [1s or 0s], where 1 is true and 0 is false
+        origin_unit_cell: int
+            Reference unitcell index, 0 is reasonable
+        replication: list
+            Size of the box
+        skip_lines: list
+            Skip headers in the data file for Hessian and wave packet, respectively
+
+    :returns
+        output: dict
+            output['atom_position'] — Position of atoms
+            output['frequency'] — Frequency
+            output['gaussian_dist'] — Gaussian distribution
+            output['qpoints'] — qpoints
+            output['lattice_points'] — Lattice points
+            output['wavepacket'] — The wave
+
+
+
     :returns
         positions[0]                        : Position of atoms
         phonon_wavepacket                   : Phonon Wavepacket
@@ -442,7 +476,11 @@ def wavepacket(path_to_mass_weighted_hessian, path_to_atoms_positions, num_atoms
     if BZ_path is None:
         BZ_path = [0, 0, 1]
 
-    num_cell = replication[0] * replication[1] * replication[2]
+    if skip_lines is None:
+        skip_lines = [9, 9]
+
+    num_cell = np.prod(replication)
+
     positions = atoms_position(path_to_atoms_positions=path_to_atoms_positions[1], num_atoms=num_atoms[1],
                                num_atoms_unit_cell=num_atoms_unit_cell, reference_unit_cell=origin_unit_cell,
                                skip_lines=skip_lines[1])
@@ -455,7 +493,7 @@ def wavepacket(path_to_mass_weighted_hessian, path_to_atoms_positions, num_atoms
                           lattice_parameter=lattice_parameter, BZ_path=BZ_path, skip_lines=skip_lines[0],
                           num_qpoints=num_qpoints)
 
-    gaussian = gaussian_distribution(amplitude=amplitude, sigma=sigma, wavenumber_idx=idx_ko, num_qpoints=num_qpoints,
+    gaussian = gaussian_distribution(amplitude=amplitude, sigma=sigma, wave_number_idx=idx_ko, num_qpoints=num_qpoints,
                                      lattice_parameter=lattice_parameter, BZ_path=BZ_path)[0]
 
     points = qpoints(num_qpoints=num_qpoints, lattice_parameter=lattice_parameter, BZ_path=BZ_path)
@@ -463,24 +501,24 @@ def wavepacket(path_to_mass_weighted_hessian, path_to_atoms_positions, num_atoms
     sign_correction = np.exp(-1j * (np.arctan(np.divide(frq[1][frq_mode][frq_mode, :].imag[np.newaxis],
                                                         frq[1][frq_mode][frq_mode, :].real[np.newaxis]))))
 
-    omega_time = np.exp(1j * (2 * np.pi) * time * frq[0][frq_mode, :])[np.newaxis]
+    plane_wave = np.exp(1j * (2 * np.pi) * time * frq[0][frq_mode, :])[np.newaxis]
 
     wv_x = np.sum(np.multiply(np.multiply(np.tile(np.multiply(np.multiply(gaussian, sign_correction),
-                                                              omega_time), (num_cell * num_atoms_unit_cell, 1)),
+                                                              plane_wave), (num_cell * num_atoms_unit_cell, 1)),
                                           np.tile(frq[1][frq_mode][::3, :], (num_cell, 1))),
                               np.exp(-1j * np.matmul(np.reshape(np.tile(solid_lattice_points, num_atoms_unit_cell),
                                                                 (num_cell * num_atoms_unit_cell, 3)), points))),
                   axis=1)[np.newaxis]
 
     wv_y = np.sum(np.multiply(np.multiply(np.tile(np.multiply(np.multiply(gaussian, sign_correction),
-                                                              omega_time), (num_cell * num_atoms_unit_cell, 1)),
+                                                              plane_wave), (num_cell * num_atoms_unit_cell, 1)),
                                           np.tile(frq[1][frq_mode][1::3, :], (num_cell, 1))),
                               np.exp(-1j * np.matmul(np.reshape(np.tile(solid_lattice_points, num_atoms_unit_cell),
                                                                 (num_cell * num_atoms_unit_cell, 3)), points))),
                   axis=1)[np.newaxis]
 
     wv_z = np.sum(np.multiply(np.multiply(np.tile(np.multiply(np.multiply(gaussian, sign_correction),
-                                                              omega_time), (num_cell * num_atoms_unit_cell, 1)),
+                                                              plane_wave), (num_cell * num_atoms_unit_cell, 1)),
                                           np.tile(frq[1][frq_mode][2::3, :], (num_cell, 1))),
                               np.exp(-1j * np.matmul(np.reshape(np.tile(solid_lattice_points, num_atoms_unit_cell),
                                                                 (num_cell * num_atoms_unit_cell, 3)), points))),
@@ -488,4 +526,7 @@ def wavepacket(path_to_mass_weighted_hessian, path_to_atoms_positions, num_atoms
 
     phonon_wavepacket = np.concatenate((wv_x, wv_y, wv_z), axis=0)
 
-    return phonon_wavepacket, positions[0]
+    output = {'atom_position': positions[0], 'frequency': frq[0], 'gaussian_dist': gaussian,
+              'qpoints': points, 'lattice_points': solid_lattice_points, 'wavepacket': phonon_wavepacket}
+
+    return output
