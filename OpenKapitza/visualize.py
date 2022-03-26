@@ -40,7 +40,7 @@ def plot_2darray(array_to_plot: np.ndarray, pic_name: str, set_title: str,
         pass
 
     plt.figure(figsize=(6.5, 6.5))
-    ax = sns.heatmap(array_to_plot, cbar=False)
+    ax = sns.heatmap(array_to_plot, cbar=True)
     ax.set_frame_on(False)
     ax.tick_params(axis='y', labelleft='off')
     ax.set_xlabel(x_label, fontsize=24)
