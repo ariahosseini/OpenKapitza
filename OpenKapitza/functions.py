@@ -132,7 +132,7 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
 
 def surface_green_func(left_hsn_bulk: dict, right_hsn_surface: dict,
                        omega_min: float, omega_max: float, omega_num: int, number_atom_unitcell: int,
-                       block_size: int, delta_o: float = 1e-6):
+                       block_size: int, delta_o: float = 1e-6) -> dict:
 
     """
     A function to compute surface Green's function
@@ -247,8 +247,14 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
 
         Returns
         ----------
-        output-dict : dict
-            First keys are frequencies, the values are left and right surface Green's function
+        omega: np.ndarray
+            Frequency
+        green_dev: np.ndarray
+            Device Green's function
+        transmission: np.ndarray
+            Frequency-dependent transmission coefficient
+        modal_transmission: np.ndarray
+            Frequency and wave-vector dependent transmission coefficient
         """
 
     def dev_green_unit(omega_val, surf_green):
@@ -273,87 +279,105 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
             green_adv = green_ret.conj().T
             Xi = np.trace(gamma_right @ green_ret @ gamma_left @ green_adv)
 
-            return Xi
+            return green_ret, Xi
 
         def sum_transmittance_kpoint(xi_k1, xi_k2):
 
             return xi_k1 + xi_k2
 
-        trans_modal = list(map(lambda w, x, y, z: (gsurt_kpoint(w[1], x[1], y[1], z[1])), left_g_surface.items(),
-                         right_g_surface.items(), left_hsn_surface.items(), hsn_device.items()))
+        output = list(map(lambda w, x, y, z: (gsurt_kpoint(w[1], x[1], y[1], z[1])), left_g_surface.items(),
+                               right_g_surface.items(), left_hsn_surface.items(), hsn_device.items()))
+
+        green_dev_ret = np.array(list(zip(*output))[0])
+        trans_modal = np.array(list(zip(*output))[1]).real
 
         trans_omega = functools.reduce(sum_transmittance_kpoint, trans_modal) / len(hsn_device)
 
-        return trans_omega, trans_modal
+        return green_dev_ret, trans_omega, trans_modal
 
     transmission_func = list(map(lambda x: dev_green_unit(x[0], x[1]), surface_green.items()))
 
     omega = np.array(list(surface_green.keys()))
-    transmission = np.array(list(zip(*transmission_func))[0]).real
-    modal_transmission = np.array(list(zip(*transmission_func))[1]).real
+    green_dev = np.array(list(zip(*transmission_func))[0])
+    transmission = np.array(list(zip(*transmission_func))[1])
+    modal_transmission = np.array(list(zip(*transmission_func))[2])
 
-    return omega, transmission, modal_transmission
+    print('sizes:', np.shape(omega), np.shape(green_dev), np.shape(transmission), np.shape(modal_transmission))
+
+    return omega, green_dev, transmission, modal_transmission
 
 
-def single_mode_properties(surf_green_func: dict, left_hsn_bulk: dict, right_hsn_surface: dict,
-                           lattice_parameter: list[float]):
+def modal_properties(left_hsn_bulk: dict, left_hsn_surf: dict, device_hsn: dict, right_hsn_surf: dict,
+                     surf_gfunc: dict, device_gfunc: np.ndarray, frq: np.ndarray, lattice_parameter: list[float]):
 
-    def iter_func(l_hsn_bulk: dict, r_hsn_bulk: np.array, left_surf_gfunc: np.array, right_surf_gfunc: np.array, frq):
+    def iter_func(left_lead_hopping_hsn: np.ndarray, left_s_gfunc: np.ndarray,
+                  left_surf_hopping_hsn: np.ndarray,
+                  dev_hopping_hsn: np.ndarray, dev_gfunc: np.ndarray,
+                  right_lead_hopping_hsn: np.ndarray, right_s_gfunc: np.ndarray,
+                  omega: float):
 
-        def iter_func_kpoint(left_hopping_hsn: np.array, right_hopping_hsn: np.array,
-                            left_s_gfunc: np.array, right_s_gfunc: np.array):
+        """
+            An inner method to compute mode-resolved transmission coefficients
 
-            left_self_energy = left_hopping_hsn.conj().T @ left_s_gfunc @ left_hopping_hsn
-            right_self_energy = right_hopping_hsn @ right_s_gfunc @ right_hopping_hsn.conj().T
-            left_gamma = 1j * (left_self_energy - left_self_energy.conj().T)
-            right_gamma = 1j * (right_self_energy - right_self_energy.conj().T)
+            Parameters
+            ----------
+            left_lead_hopping_hsn: np.ndarray
+                The hopping matrix — left bulk lead
+            left_s_gfunc: np.ndarray
+                The surface Green's function — left surface
+            left_surf_hopping_hsn: np.ndarray
+                The hopping matrix — left surface
+            dev_hopping_hsn: np.ndarray
+                The hopping matrix — right lead
+            dev_gfunc: np.ndarray
+                The Green's function — device
+            right_lead_hopping_hsn: np.ndarray
+                The hopping matrix — right bulk lead
+            right_s_gfunc: np.ndarray
+                The surface Green's function — right lead
+            omega: float
+                The frequency
 
-            right_fwd_ret_bloch = right_s_gfunc @ r_hopping_hsn_surf.conj().T
-            left_bkwd_adv_bloch_inv = (l_hsn_bulk['Hopping_fourier'].conj().T @ surf_gfunc['left_g_surface']).conj().T
+            Returns
+            ----------
+            transmission_matrix: np.ndarray
+                The mode-resolved transmission coefficients
+            """
 
-            _, Ur_ret = np.linalg.eigh(right_fwd_ret_bloch)
-            _, Ul_adv = np.linalg.eigh(left_bkwd_adv_bloch_inv)
+        left_self_energy = left_lead_hopping_hsn.conj().T @ left_s_gfunc @ left_lead_hopping_hsn
+        right_self_energy = right_lead_hopping_hsn @ right_s_gfunc @ right_lead_hopping_hsn.conj().T
+        left_gamma = 1j * (left_self_energy - left_self_energy.conj().T)
+        right_gamma = 1j * (right_self_energy - right_self_energy.conj().T)
 
-            vel_left = lattice_parameter[0] / 2 / frq * Ul_adv.conj().T @ left_gamma @ Ul_adv
-            vel_right = lattice_parameter[1] / 2 / frq * Ur_ret.conj().T @ right_gamma @ Ur_ret
+        right_fwd_ret_bloch = right_s_gfunc @ right_lead_hopping_hsn.conj().T
+        left_bkwd_adv_bloch = (left_lead_hopping_hsn.conj().T @ left_s_gfunc).conj().T
 
-            transmission_matrix = 2j * frq / np.sqrt(lattice_parameter[0] * lattice_parameter[1]) \
-                                  * np.sqrt(vel_right) @ jnp.linalg.inv(Ur_ret) @ dev_gfunc \
-                                  @ jnp.linalg.inv(Ul_adv.conj().T) @ np.sqrt(vel_left)
+        _, Ur_ret = np.linalg.eigh(right_fwd_ret_bloch)
+        _, Ul_adv = np.linalg.eigh(left_bkwd_adv_bloch)
 
-            return transmission_matrix
+        vel_left = lattice_parameter[0] / 2 / omega * Ul_adv.conj().T @ left_gamma @ Ul_adv
+        vel_right = lattice_parameter[1] / 2 / omega * Ur_ret.conj().T @ right_gamma @ Ur_ret
 
-        trans = list(map(lambda x, y, z, w: (iter_func_kpoint(x[1], y[1], z[1], w[1])), l_hsn_bulk.items(),
-                         r_hsn_bulk.items(), left_hsn_surface.items(), dev_gfunc.items()))
+        ret_dev_gfunc = right_s_gfunc @ dev_hopping_hsn @ dev_gfunc @ left_surf_hopping_hsn @ left_s_gfunc
 
-        # left_bulk_self_energy = l_hsn_bulk['Hopping_fourier'].conj().T \
-        #                         @ surf_gfunc['left_g_surface'] \
-        #                         @ l_hsn_bulk['Hopping_fourier']
-        #
-        # right_bulk_self_energy = r_hsn_bulk['Hopping_fourier'] \
-        #                          @ surf_gfunc['right_g_surface'] \
-        #                          @ r_hsn_bulk['Hopping_fourier'].conj().T
-        #
-        # left_bulk_gamma = 1j * (left_bulk_self_energy - left_bulk_self_energy.conj().T)
-        # right_bulk_gamma = 1j * (right_bulk_self_energy - right_bulk_self_energy.conj().T)
-        #
-        # right_fwd_ret_bloch = surf_gfunc['right_g_surface'] @ r_hsn_bulk['Hopping_fourier'].conj().T
-        # left_bkwd_adv_bloch_inv = (l_hsn_bulk['Hopping_fourier'].conj().T @ surf_gfunc['left_g_surface']).conj().T
-        #
-        # _, Ur_ret = np.linalg.eigh(right_fwd_ret_bloch)
-        # _, Ul_adv = np.linalg.eigh(left_bkwd_adv_bloch_inv)
-        #
-        # vel_left = lp[0] /2 / omega * Ul_adv.conj().T @ left_bulk_gamma @ Ul_adv
-        # vel_right = lp[1] / 2 / omega * Ur_ret.conj().T @ left_bulk_gamma @ Ur_ret
-        #
-        # t = 2j * omega/np.sqrt(lp[0]*lp[1]) \
-        #     * np.sqrt(vel_right) \
-        #     * jnp.linalg.inv(Ur_ret) * dev_gfunc * jnp.linalg.inv(Ul_adv.conj().T) \
-        #     * np.sqrt(vel_left)
-        return 0
+        transmission_matrix = 2j * omega / np.sqrt(np.prod(lattice_parameter)) \
+                              * np.sqrt(vel_right) @ jnp.linalg.inv(Ur_ret) @ ret_dev_gfunc \
+                              @ jnp.linalg.inv(Ul_adv.conj().T) @ np.sqrt(vel_left)
 
-    transmission_coeff = list(map(lambda x: iter_func(x[0], x[1]), surface_green.items()))
-    return transmission_coeff
+        return transmission_matrix
+
+    for iter_omg, omg in enumerate(frq):
+
+        dev_gfunc = device_gfunc[omg]
+
+        modal_transmission = map(lambda v, w, x, y, z:
+                                 (iter_func(v[1], w[1]['left_g_surface'], x[1], y[1], z[1],
+                                            dev_gfunc, w[1]['right_g_surface'], omg)),
+                                 left_hsn_bulk.items(), surf_gfunc.items(), left_hsn_surf.items(),
+                                 device_hsn.items(), right_hsn_surf.items())
+
+        return list(modal_transmission)
+
 
 
 if __name__ == "__main__":
