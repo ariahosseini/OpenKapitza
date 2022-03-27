@@ -130,7 +130,7 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
     return output_dict
 
 
-def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_surface: dict,
+def surface_green_func(left_hsn_bulk: dict, right_hsn_surface: dict,
                        omega_min: float, omega_max: float, omega_num: int, number_atom_unitcell: int,
                        block_size: int, delta_o: float = 1e-6):
 
@@ -140,11 +140,9 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
         Parameters
         ----------
         left_hsn_bulk: dict
-            Return object of the hessian_fourier_form for left lead bulk
-        left_hsn_surface: dict
-            Return object of the hessian_fourier_form for left lead surface
+            Return object of the hessian_fourier_form for the left lead bulk
         right_hsn_surface: dict
-            Return object of the hessian_fourier_form for right lead surface
+            Return object of the hessian_fourier_form for the right lead surface
         omega_min: float
             Minimum frequency
         omega_max: float
@@ -218,33 +216,6 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
         left_g_surf = dict(
             map(lambda _: (_[0], iter_func_left(_[1])), left_hsn_bulk.items()))
 
-        # def g_surf_right(omega_value, e_surface, Hsn_bulk):
-        #
-        #     e_surf = omega_value ** 2 * np.eye(3 * number_atom_unitcell * block_size, k=0) - \
-        #              Hsn_bulk['Onsite_fourier'] - (Hsn_bulk['Hopping_fourier']
-        #                                         @ jnp.linalg.inv(e_surface)
-        #                                         @ Hsn_bulk['Hopping_fourier'].conj().T)
-        #     g_surface = jnp.linalg.inv(e_surf)
-        #
-        #     return g_surface
-
-        # def g_surf_left(omega_value, e_surface, Hsn_bulk, Hsn_sf):
-        #
-        #     e_surf = omega_value ** 2 * np.eye(3 * number_atom_unitcell * block_size, k=0) - \
-        #              Hsn_sf['Onsite_fourier'] - (Hsn_bulk['Hopping_fourier'].conj().T
-        #                                       @ jnp.linalg.inv(e_surface)
-        #                                       @ Hsn_bulk['Hopping_fourier'])
-        #     g_surface = jnp.linalg.inv(e_surf)
-        #
-        #     return g_surface
-        #
-        # right_g_surface = dict(
-        #     map(lambda x, y: (x[0], g_surf_right(omega_val, x[1], y[1])),
-        #         right_e_bulk_surface.items(), right_hsn_surface.items()))
-        # left_g_surface = dict(
-        #     map(lambda x, y, z: (x[0], g_surf_left(omega_val, x[1], y[1], z[1])),
-        #         left_e_bulk_surface.items(), left_hsn_bulk.items(), left_hsn_surface.items()))
-
         g_surf = {'left_g_surface': left_g_surf, 'right_g_surface': right_g_surf}
 
         return g_surf
@@ -256,6 +227,29 @@ def surface_green_func(left_hsn_bulk: dict, left_hsn_surface: dict, right_hsn_su
 
 
 def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: dict, number_atom_unitcell, block_size):
+
+    """
+    A function to compute surface Green's function
+
+        Parameters
+        ----------
+
+        left_hsn_surface: dict
+            Return object of the hessian_fourier_form for the left lead surface
+        hsn_device: dict
+            Return object of the hessian_fourier_form for the device
+        surface_green: dict
+            Return object of the surface_green_func
+        number_atom_unitcell: int
+            Number of atoms per unit cell
+        block_size: int
+            Block size
+
+        Returns
+        ----------
+        output-dict : dict
+            First keys are frequencies, the values are left and right surface Green's function
+        """
 
     def dev_green_unit(omega_val, surf_green):
 
@@ -285,49 +279,51 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
 
             return xi_k1 + xi_k2
 
-        trans = list(map(lambda w, x, y, z: (gsurt_kpoint(w[1], x[1], y[1], z[1])), left_g_surface.items(),
+        trans_modal = list(map(lambda w, x, y, z: (gsurt_kpoint(w[1], x[1], y[1], z[1])), left_g_surface.items(),
                          right_g_surface.items(), left_hsn_surface.items(), hsn_device.items()))
-        trans_omega = functools.reduce(sum_transmittance_kpoint, trans) / len(hsn_device)
 
-        return trans_omega
+        trans_omega = functools.reduce(sum_transmittance_kpoint, trans_modal) / len(hsn_device)
+
+        return trans_omega, trans_modal
 
     transmission_func = list(map(lambda x: dev_green_unit(x[0], x[1]), surface_green.items()))
-    omega = list(surface_green.keys())
-    output = np.array([np.array(omega), np.array(transmission_func).real])
 
-    return output
+    omega = np.array(list(surface_green.keys()))
+    transmission = np.array(list(zip(*transmission_func))[0]).real
+    modal_transmission = np.array(list(zip(*transmission_func))[1]).real
+
+    return omega, transmission, modal_transmission
 
 
-def single_mode_properties(surf_green_func: dict, left_hsn_bulk: dict, right_hsn_bulk: dict,
-                           dev_green_func: dict, lattice_par: list[float]):
+def single_mode_properties(surf_green_func: dict, left_hsn_bulk: dict, right_hsn_surface: dict,
+                           lattice_parameter: list[float]):
 
-    def iter_func(surf_gfunc: dict, l_hsn_bulk: dict, r_hsn_bulk: np.array,
-                  dev_gfunc: np.array, frq, lattice_parameter: list[float] = lattice_par):
+    def iter_func(l_hsn_bulk: dict, r_hsn_bulk: np.array, left_surf_gfunc: np.array, right_surf_gfunc: np.array, frq):
 
-        def inner_iter_func(l_hsn_b: np.array, r_hsn_b: np.array,
-                            left_s_gfunc: dict, right_s_gfunc: dict, omega=frq, lp=lattice_parameter):
-            left_bulk_self_energy = l_hsn_b.conj().T @ left_s_gfunc @ l_hsn_b
-            right_bulk_self_energy = r_hsn_b @ right_s_gfunc @ r_hsn_b.conj().T
-            left_bulk_gamma = 1j * (left_bulk_self_energy - left_bulk_self_energy.conj().T)
-            right_bulk_gamma = 1j * (right_bulk_self_energy - right_bulk_self_energy.conj().T)
+        def iter_func_kpoint(left_hopping_hsn: np.array, right_hopping_hsn: np.array,
+                            left_s_gfunc: np.array, right_s_gfunc: np.array):
 
-            right_fwd_ret_bloch = right_s_gfunc @ r_hsn_b['Hopping_fourier'].conj().T
+            left_self_energy = left_hopping_hsn.conj().T @ left_s_gfunc @ left_hopping_hsn
+            right_self_energy = right_hopping_hsn @ right_s_gfunc @ right_hopping_hsn.conj().T
+            left_gamma = 1j * (left_self_energy - left_self_energy.conj().T)
+            right_gamma = 1j * (right_self_energy - right_self_energy.conj().T)
+
+            right_fwd_ret_bloch = right_s_gfunc @ r_hopping_hsn_surf.conj().T
             left_bkwd_adv_bloch_inv = (l_hsn_bulk['Hopping_fourier'].conj().T @ surf_gfunc['left_g_surface']).conj().T
 
             _, Ur_ret = np.linalg.eigh(right_fwd_ret_bloch)
             _, Ul_adv = np.linalg.eigh(left_bkwd_adv_bloch_inv)
 
-            vel_left = lp[0] / 2 / omega * Ul_adv.conj().T @ left_bulk_gamma @ Ul_adv
-            vel_right = lp[1] / 2 / omega * Ur_ret.conj().T @ right_bulk_gamma @ Ur_ret
+            vel_left = lattice_parameter[0] / 2 / frq * Ul_adv.conj().T @ left_gamma @ Ul_adv
+            vel_right = lattice_parameter[1] / 2 / frq * Ur_ret.conj().T @ right_gamma @ Ur_ret
 
-            tr = 2j * omega / np.sqrt(lp[0] * lp[1]) \
-                 * np.sqrt(vel_right) \
-                 * jnp.linalg.inv(Ur_ret) * dev_gfunc * jnp.linalg.inv(Ul_adv.conj().T) \
-                 * np.sqrt(vel_left)
+            transmission_matrix = 2j * frq / np.sqrt(lattice_parameter[0] * lattice_parameter[1]) \
+                                  * np.sqrt(vel_right) @ jnp.linalg.inv(Ur_ret) @ dev_gfunc \
+                                  @ jnp.linalg.inv(Ul_adv.conj().T) @ np.sqrt(vel_left)
 
-            return tr
+            return transmission_matrix
 
-        trans = list(map(lambda x, y, z, w: (inner_iter_func(x[1], y[1], z[1], w[1])), l_hsn_bulk.items(),
+        trans = list(map(lambda x, y, z, w: (iter_func_kpoint(x[1], y[1], z[1], w[1])), l_hsn_bulk.items(),
                          r_hsn_bulk.items(), left_hsn_surface.items(), dev_gfunc.items()))
 
         # left_bulk_self_energy = l_hsn_bulk['Hopping_fourier'].conj().T \
