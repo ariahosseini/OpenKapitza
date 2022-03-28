@@ -233,9 +233,8 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
 
         Parameters
         ----------
-
         left_hsn_surface: dict
-            Return object of the hessian_fourier_form for the left lead surface
+            Return object of the hessian_fourier_form for the left surface
         hsn_device: dict
             Return object of the hessian_fourier_form for the device
         surface_green: dict
@@ -307,8 +306,38 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
     return omega, green_dev, transmission, modal_transmission
 
 
-def modal_properties(left_hsn_bulk: dict, left_hsn_surf: dict, device_hsn: dict, right_hsn_surf: dict,
-                     surf_gfunc: dict, device_gfunc: np.ndarray, frq: np.ndarray, lattice_parameter: list[float]):
+def modal_properties(left_hsn_bulk: dict, left_hsn_surf: dict,
+                     device_hsn: dict, right_hsn_surf: dict,
+                     surf_gfunc: dict, device_gfunc: np.ndarray,
+                     frq: np.ndarray, lattice_parameter: list[float]) -> dict:
+
+    """
+        A method to compute mode-resolved transmission coefficients
+
+        Parameters
+        ----------
+        left_hsn_bulk: dict
+            Return object of the hessian_fourier_form for the left lead
+        left_hsn_surf: dict
+            Return object of the hessian_fourier_form for the left surface
+        device_hsn: dict
+            Return object of the hessian_fourier_form for the device
+        right_hsn_surf: dict
+            Return object of the hessian_fourier_form for the right surface
+        surf_gfunc: dict
+            Return object of the surface_green_func
+        device_gfunc: np.ndarray
+            Device Green's function
+        frq: np.ndarray
+            The frequency
+        lattice_parameter: list[float]
+            lattice_parameter for left and right leads, respectively
+
+        Returns
+        ----------
+        transmission_matrix: np.ndarray
+            The mode-resolved transmission coefficients
+        """
 
     def iter_func(left_lead_hopping_hsn: np.ndarray, left_s_gfunc: np.ndarray,
                   left_surf_hopping_hsn: np.ndarray,
@@ -340,8 +369,8 @@ def modal_properties(left_hsn_bulk: dict, left_hsn_surf: dict, device_hsn: dict,
 
             Returns
             ----------
-            transmission_matrix: np.ndarray
-                The mode-resolved transmission coefficients
+            output: dict
+                The frequency (keys) and the mode-resolved transmission coefficients (values)
             """
 
         left_self_energy = left_lead_hopping_hsn.conj().T @ left_s_gfunc @ left_lead_hopping_hsn
@@ -366,18 +395,22 @@ def modal_properties(left_hsn_bulk: dict, left_hsn_surf: dict, device_hsn: dict,
 
         return transmission_matrix
 
+    output = {}
     for iter_omg, omg in enumerate(frq):
 
-        dev_gfunc = device_gfunc[omg]
+        dev_gr_func = device_gfunc[iter_omg]
+        surf_gr_func = surf_gfunc[omg]
 
-        modal_transmission = map(lambda v, w, x, y, z:
-                                 (iter_func(v[1], w[1]['left_g_surface'], x[1], y[1], z[1],
-                                            dev_gfunc, w[1]['right_g_surface'], omg)),
-                                 left_hsn_bulk.items(), surf_gfunc.items(), left_hsn_surf.items(),
-                                 device_hsn.items(), right_hsn_surf.items())
+        modal_transmission = map(lambda t, u, v, w, x, y, z:
+                                 (iter_func(t[1]['Hopping_fourier'], u[1], v[1]['Hopping_fourier'],
+                                            w[1]['Hopping_fourier'], x[1]['Hopping_fourier'], y, z[1], omg)),
+                                 left_hsn_bulk.items(), surf_gr_func['left_g_surface'].items(), left_hsn_surf.items(),
+                                 device_hsn.items(), right_hsn_surf.items(), dev_gr_func,
+                                 surf_gr_func['right_g_surface'].items())
 
-        return list(modal_transmission)
+        output.update({omg: list(modal_transmission)})
 
+    return output
 
 
 if __name__ == "__main__":
