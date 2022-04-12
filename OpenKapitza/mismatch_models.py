@@ -4,7 +4,7 @@ A set of methods to characterize the interfacial thermal conductivity using mism
 
 import numpy as np
 from scipy.interpolate import PchipInterpolator as interpolator
-from .util import vibrational_density_state as vib_dos
+from .dynam import vibrational_density_state as vib_dos
 
 
 def acoustic_mismatch(speed_of_sound: np.ndarray, mass_density: np.ndarray, n_mu: int = 2e4) -> dict:

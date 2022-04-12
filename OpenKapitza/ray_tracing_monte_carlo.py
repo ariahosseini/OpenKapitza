@@ -25,7 +25,7 @@ def get_random_phonon_spec_wall(tau_max: float, time_intervals: int,
                                 v_g: float, tau_mean: float, L: float, P_reflection: float):
 
     """
-    Compute auto-correlation for phonons between walls with spectral scatting
+    Compute auto-correlation for phonons between walls with spectral scattering
 
     :arg
         tau_max: float
@@ -98,7 +98,7 @@ def get_random_phonon_spec_wall_fft(tau_max: float, time_intervals: int,
                                     v_g: float, tau_mean: float, L: float, P_reflection: float):
 
     """
-    Compute auto-correlation for phonons between walls with spectral scatting using discrete fourier method
+    Compute auto-correlation for phonons between walls with spectral scattering using discrete fourier method
 
     :arg
         tau_max: float
@@ -250,7 +250,7 @@ def get_random_phonon_spec_cyli(tau_max: float, time_intervals: int,
                                     v_g: float, tau_mean: float, L: float, alpha: float):
 
     """
-    A method to compute auto-correlation for phonons between cylindrical pores with spectral scatting
+    A method to compute auto-correlation for phonons between cylindrical pores with spectral scattering
 
     :arg
         tau_max: float
@@ -307,7 +307,7 @@ def get_random_phonon_spec_cyli(tau_max: float, time_intervals: int,
             beta_min = -np.pi/2
             beta_max = np.pi/2
             if T < 0:           # We have shadowing and so need to adjust the limits on the
-                                # possible incidence angles Beta
+                # possible incidence angles Beta
                 if np.sin(theta_prime) * np.cos(theta_prime) >= 0:
                     beta_min = np.arcsin(1 - (2 * np.abs(np.cos(theta_prime)))/alpha)
                 else:
@@ -337,7 +337,7 @@ def get_random_phonon_diff_cyli(tau_max: float, time_intervals: int,
                                     v_g: float, tau_mean: float, L: float, alpha: float):
 
     """
-    compute auto-correlation for phonons between cylindrical pores with diffusive scatting
+    compute auto-correlation for phonons between cylindrical pores with diffusive scattering
 
     :arg
         tau_max: float

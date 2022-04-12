@@ -194,7 +194,7 @@ def kappa_eff_single_dof(kappa_bulk: np.ndarray, So: np.ndarray, len_c: np.ndarr
          output['Kn']: np.ndarray
             Knudsen number [unit-less]
          output['correction_term']: np.ndarray
-            Ballistic correction term equal to (1+Kn*(Ln(Kn)-1))/(kn-1)^2
+            Ballistic correction term equal to (1+Kn*(Ln(Kn)-1))/(Kn-1)^2
          output['kappa_effective']: np.ndarray
             Thermal conductivity
     """
@@ -203,7 +203,7 @@ def kappa_eff_single_dof(kappa_bulk: np.ndarray, So: np.ndarray, len_c: np.ndarr
     zeta = (1 + Kn * (np.log(Kn) - 1)) / (Kn - 1) ** 2
     kappa_effective = kappa_bulk * So.T * zeta
 
-    output = {'Kn': Kn, 'correction_term': zeta, 'thermal_conductivity': kappa_effective}
+    output = {'Kn': Kn, 'Ballistic Correction Term': zeta, 'Thermal conductivity': kappa_effective}
 
     return output
 
@@ -227,7 +227,9 @@ def kappa_eff_multi_dof(kappa_bulk: np.ndarray, So: np.ndarray, len_c: np.ndarra
          output['Kn']: np.ndarray
             Knudsen numbers [unit-less]
          output['correction_term']: np.ndarray
-            Ballistic correction term equal to (1+Kn*(Ln(Kn)-1))/(kn-1)^2
+            Ballistic correction term equal to Kn1^2*Ln(Kn1)/(Kn1-1)^2/(Kn1-Kn2) +
+                                               Kn2^2*Ln(Kn2)/(Kn2-1)^2/(Kn2-Kn1) +
+                                               1/(Kn1-1)/(Kn2-1)
          output['kappa_effective']: np.ndarray
             Thermal conductivity
     """
@@ -241,6 +243,27 @@ def kappa_eff_multi_dof(kappa_bulk: np.ndarray, So: np.ndarray, len_c: np.ndarra
 
     kappa_effective = kappa_bulk * So.T * zeta
 
-    output = {'Kn': np.array([Kn_1, Kn_2]), 'correction_term': zeta, 'thermal_conductivity': kappa_effective}
+    output = {'Kn': np.array([Kn_1, Kn_2]), 'Ballistic Correction Term': zeta, 'Thermal conductivity': kappa_effective}
 
     return output
+
+
+def kappa_bulk(path_phononinfo: str) -> float:
+
+    """
+    This function compute the bulk lattice thermal conductivity from AlmaBTE phononinfo output
+    :arg
+        path_phononinfo: str
+    :returns
+        kappa: float
+            Thermal conductivity
+    """
+
+    data = np.loadtxt(path_phononinfo, skiprows=1, delimiter=',')
+    tau_p = data[:, 7]  # Phonon lifetime [s]
+    vel = data[:, 8:]  # Phonon group velocity [m/s]
+    Cv = data[:, 6]  # Phonon specific heat [J/m^3-K]
+
+    kappa = np.einsum('ki,kj,k,k->ij', vel, vel, tau_p, Cv)  # Lattice thermal conductivity [W/mK]
+
+    return kappa[0, 0]

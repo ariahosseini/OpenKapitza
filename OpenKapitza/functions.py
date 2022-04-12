@@ -37,7 +37,7 @@ def matrix_decomposition(hsn_matrix: np.ndarray, block_size: int,
                       [0, -1, 1], [0, 1, 1], [-1, 0, 1], [1, 0, 1]])
 
     elements_idx = (block_indices[2] + nearest_neighbor_idx[:, 2] - 1) + \
-                   ((block_indices[1] + nearest_neighbor_idx[:, 1] - 1)* rep[0] +
+                   ((block_indices[1] + nearest_neighbor_idx[:, 1] - 1) * rep[0] +
                     block_indices[0] + nearest_neighbor_idx[:, 0] - 1) * 2 * rep[2]
     Hsn_keys = ['H0', 'H1', 'H2', 'H3', 'H4', 'T1', 'T2', 'T3', 'T4']
     Hsn = {}  # Return dict — decomposed Hessian matrix
@@ -61,7 +61,6 @@ def define_wavevectors(periodicity_length: float, num_kpoints: int) -> dict:
     periodicity_length: float
         The periodicity length along the transverse direction
     num_kpoints : int
-        Number of kpoints
 
     Returns
     ----------
@@ -168,22 +167,30 @@ def surface_green_func(left_hsn_bulk: dict, right_hsn_surface: dict,
 
         def iteration_loop(e_surface, deepcopy_e_surface, e, alpha, beta):
 
-            itr = 0
-            while np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)) > 1e-5:
+            a_term = jnp.linalg.inv(e) @ alpha
+            b_term = jnp.linalg.inv(e) @ beta
+            e_surface += alpha @ b_term
+            e += beta @ a_term + alpha @ b_term
+            alpha = alpha @ a_term
+            beta = beta @ b_term
 
+            itr = 0
+            while np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)) > np.max(abs(deepcopy_e_surface))*1e-2:
+
+                deepcopy_e_surface = deepcopy(e_surface)
                 a_term = jnp.linalg.inv(e) @ alpha
                 b_term = jnp.linalg.inv(e) @ beta
                 e_surface += alpha @ b_term
                 e += beta @ a_term + alpha @ b_term
                 alpha = alpha @ a_term
                 beta = beta @ b_term
-                deepcopy_e_surface = deepcopy(e_surface)
                 itr += 1
-                if itr > 10000:
+                if itr > 1000:
                     print("Error: Make sure code does not diverge:",
-                          np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)))
+                          np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)), np.linalg.norm(abs(e_surface)))
                     sys.exit()
-
+            # print('Decimation Iteration:', itr, 'Numerical Error:',
+            #       np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)))
             return e_surface
 
         def iter_func_right(Hsn_bulk):
@@ -193,6 +200,7 @@ def surface_green_func(left_hsn_bulk: dict, right_hsn_surface: dict,
             e = deepcopy(e_surface)
             alpha = Hsn_bulk['Hopping_fourier']
             beta = Hsn_bulk['Hopping_fourier'].conj().T
+
             e_surf = iteration_loop(e_surface=e_surface, deepcopy_e_surface=deepcopy_e_surface,
                                     e=e, alpha=alpha, beta=beta)
             g_surf = jnp.linalg.inv(e_surf)
@@ -300,8 +308,6 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
     green_dev = np.array(list(zip(*transmission_func))[0])
     transmission = np.array(list(zip(*transmission_func))[1])
     modal_transmission = np.array(list(zip(*transmission_func))[2])
-
-    print('sizes:', np.shape(omega), np.shape(green_dev), np.shape(transmission), np.shape(modal_transmission))
 
     return omega, green_dev, transmission, modal_transmission
 

@@ -3,7 +3,6 @@ The is collection of methods to generate phonon wave-packets
 """
 
 import numpy as np
-import os
 
 
 def vibrational_density_state(path_to_mass_weighted_hessian: str, eps_o: float = 3e12, nq: int = 2e4):
@@ -30,8 +29,8 @@ def vibrational_density_state(path_to_mass_weighted_hessian: str, eps_o: float =
     """
 
     _hessian = np.loadtxt(path_to_mass_weighted_hessian, delimiter=None)
-    hessian_symmetry = (np.triu(_hessian) + np.tril(_hessian).transpose()) / 2
-    hessian_matrix = hessian_symmetry + np.triu(hessian_symmetry, 1).transpose()
+    hessian_symmetry = (np.triu(_hessian) + np.tril(_hessian).T) / 2
+    hessian_matrix = hessian_symmetry + np.triu(hessian_symmetry, 1).T
     egn_value, egn_vector = np.linalg.eigh(hessian_matrix)  # Note that egn_value is negative
     egn_value = np.where(egn_value < 0, egn_value, 0.0)  # Get rid of unstable modes
     _frq = np.sqrt(-1 * egn_value)  # Frequency of Hessian matrix
@@ -465,8 +464,6 @@ def wavepacket(path_to_mass_weighted_hessian: str, path_to_atoms_positions: list
             output['qpoints'] — qpoints
             output['lattice_points'] — Lattice points
             output['wavepacket'] — The wave
-
-
 
     :returns
         positions[0]                        : Position of atoms

@@ -67,6 +67,6 @@ def acf_numpy(flux: np.ndarray) -> np.ndarray:
             : Auto-correlation
     """
 
-    auto_correlation = [np.correlate(flux[i]) for i in range(3)]
+    auto_correlation = np.array([np.correlate(flux[i]) for i in range(3)])
 
-    return np.array(auto_correlation)
+    return auto_correlation
