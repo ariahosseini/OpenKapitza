@@ -105,7 +105,6 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
     periodicity_length = kpoints['periodicity_length']
     distance_vector = periodicity_length * np.array([[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]])
     unit_planewave = np.exp(-1j * (distance_vector @ wavevector).T)  # Construct a plane wave
-    print(np.shape(distance_vector), np.shape(wavevector), np.shape(unit_planewave))
 
     def fourier_transform(planewave):
 
