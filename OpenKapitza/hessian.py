@@ -1,6 +1,6 @@
 import pathlib
 import numpy as np
-import gzip,os,pickle
+import gzip, os, pickle
 import spglib
 
 
@@ -59,44 +59,57 @@ def load(name='state'):
     return -1
 
 
-def load_poscar(data):
+def load_poscar(data, path='.'):
 
     """Load POSCAR"""
 
-    f = open('POSCAR','r')
+    f = open(path + '/POSCAR', 'r')
     f.readline()
     a = float(f.readline())
-    cell = np.zeros((3,3))
+    cell = np.zeros((3, 3))
     for i in range(3):
         tmp = f.readline().split()
         for j in range(3):
-            cell[i,j] = a*float(tmp[j])
-    cell /= data['L']  # m
+            cell[i, j] = a * float(tmp[j])
 
     numbers = []
     el2 = f.readline().split()
     na = f.readline().split()
     el = []
-    for (i,j) in zip(el2,na):
+    for (i, j) in zip(el2, na):
         for n in range(int(j)):
             numbers.append(data['pt'][i]['number'])
             el.append(i)
     numbers = np.array(numbers)
     na = len(numbers)
 
-    base = np.zeros((na,3))
+    base = np.zeros((na, 3))
     f.readline()
     for i in range(na):
         tmp = f.readline().split()
         for j in range(3):
-            base[i,j] = float(tmp[j])
+            base[i, j] = float(tmp[j])
     f.close()
-    base = np.dot(base,cell)
-    spacegroup = spglib.get_spacegroup((cell,base,numbers))
-    a = np.linalg.norm(cell[0])  # lattice constant in SI
 
-    return {'cell': cell, 'numbers': numbers, 'base': base, 'spacegroup': spacegroup,'a': a, 'elements': el,
-            'na': len(numbers), 'n_pol': len(numbers)*3}
+    spglib_input = (cell.copy(), base.copy(), numbers)
+    spacegroup = spglib.get_spacegroup(spglib_input)
+
+    cell /= data['L']  # Lattice constant in SI
+    base = np.dot(base, cell)  # This is in regular coordinates
+    a = np.linalg.norm(cell[0])
+
+    return {'cell': cell, 'numbers': numbers, 'base': base / data['L'], 'spacegroup': spacegroup, 'a': a,
+            'elements': el, 'na': len(numbers), 'n_pol': len(numbers) * 3, 'spglib_input': spglib_input}
+
+
+def get_q_grid(poscar, mesh):
+
+    reciprocal_grid = 2 * np.pi * np.linalg.inv(poscar['cell'].T)
+    # Follow this tutorial: https://spglib.github.io/spglib/python-spglib.html#id27
+    mapping, grid = spglib.get_ir_reciprocal_mesh(mesh, poscar['spglib_input'], is_shift=[0, 0, 0])
+    grid = grid.astype(float) / mesh
+
+    return np.dot(grid, reciprocal_grid)
 
 
 def distance_between_two_atoms(poscar, forces, a1, a2, l1, l2):
@@ -137,75 +150,62 @@ def compute_distances(poscar,forces):
     for a1 in range(na):
         for a2 in range(na):
             for l in range(nsc):
-                distances[a1,a2,l] = distance_between_two_atoms(poscar, forces, a1, a2, 0, l)
+                distances[a1, a2, l] = distance_between_two_atoms(poscar, forces, a1, a2, 0, l)
 
     return distances
 
 
-def load_2nd_FC(base,poscar, displ):
+def load_2nd_FC(base, poscar, displ, path='.'):
 
     # Load FCs
 
     [n1, n2, n3] = displ
-    nsc = n1*n2*n3
-    periodicity = np.zeros((3,3))
+    nsc = n1 * n2 * n3
+    periodicity = np.zeros((3, 3))
     periodicity[0] = poscar['cell'][0] * n1
     periodicity[1] = poscar['cell'][1] * n2
     periodicity[2] = poscar['cell'][2] * n3
-    na = poscar['na']
 
-    f = open('FORCE_CONSTANTS','r')
+    na = poscar['na']
+    f = open(path + '/FORCE_CONSTANTS', 'r')
     nas = int(f.readline())
-    force_2nd = np.zeros((nas*3,nas*3))
+    force_2nd = np.zeros((nas * 3, nas * 3))
     for i in range(nas):
         for j in range(nas):
             tmp = f.readline().split()
-            n1 = int(tmp[0])-1
-            n2 = int(tmp[1])-1
+            n1 = int(tmp[0]) - 1
+            n2 = int(tmp[1]) - 1
             for l in range(3):
                 tmp = f.readline().split()
                 for k in range(3):
-                    force_2nd[3*i+l,3*j+k] = float(tmp[k])
+                    force_2nd[3 * i + l, 3 * j + k] = float(tmp[k])
     f.close()
 
-    force_2nd_n = np.zeros((nsc,nsc,na*3,na*3))
+    force_2nd_n = np.zeros((nsc, nsc, na * 3, na * 3))
     for n1 in range(nas):
         for n2 in range(nas):
-            (sa1, sb1, sc1, l1, a1) = get_indices(displ,n1)
-            (sa2, sb2, sc2, l2, a2) = get_indices(displ,n2)
-            force_2nd_n[l1, l2, a1*3:(a1+1)*3, a2*3:(a2+1)*3] = \
-                force_2nd[n1*3:(n1+1)*3, n2*3:(n2+1)*3] / \
-                np.sqrt(base['pt'][poscar['elements'][a1]]['mass']*base['pt'][poscar['elements'][a2]]['mass'])
+            (sa1, sb1, sc1, l1, a1) = get_indices(displ, n1)
+            (sa2, sb2, sc2, l2, a2) = get_indices(displ, n2)
+            force_2nd_n[l1, l2, a1 * 3:(a1 + 1) * 3, a2 * 3:(a2 + 1) * 3] = force_2nd[n1 * 3:(n1 + 1) * 3,
+                                                                            n2 * 3:(n2 + 1) * 3] / np.sqrt(
+                base['pt'][poscar['elements'][a1]]['mass'] * base['pt'][poscar['elements'][a2]]['mass'])
 
-    return {'supercell': [n1, n2, n3], 'nsc': nsc, 'periodicity': periodicity,
-            'forces': force_2nd_n * np.power(base['L'], 2) / base['J'] * base['Kg']}
+    forces = {'supercell': [n1, n2, n3], 'nsc': nsc, 'periodicity': periodicity,
+              'forces': force_2nd_n * np.power(base['L'], 2) / base['J'] * base['Kg']}
+
+    distances = compute_distances(poscar, forces)
+
+    forces.update({'distances': distances})
+
+    return forces
 
 
-def compute_hessian(poscar, forces):
 
-    na = len(poscar['numbers'])
-    n_pol = na*3
 
-    # Compute dynamical matrix
 
-    D = np.zeros((na*3, na*3), dtype=np.complex128)
 
-    for l in range(forces['nsc']):
-        for a1 in range(na):
-            for a2 in range(na):
-                i1 = a1*3
-                i2 = (a1+1)*3
-                i3 = a2*3
-                i4 = (a2+1)*3
-                D[i1:i2, i3:i4] += forces['forces'][0, l, i1:i2, i3:i4]
 
-    # Make the Matrix Hermitian
 
-    D = np.tril(D) + np.tril(np.conj(D)).T -  np.diag(np.conj(np.diag(D)))
-
-    return D
-
-    
 
 
 
