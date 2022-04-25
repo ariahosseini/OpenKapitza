@@ -52,8 +52,6 @@ def sposcar(vasp_poscar='POSCAR', phonopy_sposcar='SPOSCAR'):
     for i in range(num_atoms_sup_cell):
         spos_direct.append([float(_) for _ in _spos[8+i].strip().split()])
 
-    rep = [int(lat_vec[i][i] / unit_vec[i][i]) for i in range(3)]
-
     poscar_file.close()
     sposcar_file.close()
 
@@ -62,7 +60,7 @@ def sposcar(vasp_poscar='POSCAR', phonopy_sposcar='SPOSCAR'):
 
     spos = np.array(list(map(convert, spos_direct)))
 
-    return spos, unit_vec, recip_univec, lat_vec, num_atoms_uc, num_atoms_sup_cell, rep, atoms_identity
+    return spos, unit_vec, recip_univec, lat_vec, num_atoms_uc, num_atoms_sup_cell, atoms_identity
 
 
 def unitcell(spos, unit_vec):

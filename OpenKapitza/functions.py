@@ -280,11 +280,11 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
 
             gamma_left = 1j * (self_energy_left - self_energy_left.conj().T)
             gamma_right = 1j * (self_energy_right - self_energy_right.conj().T)
-            green_ret = omega_val ** 2 * np.eye(3 * number_atom_unitcell * block_size, k=0) - \
+            e_ret = omega_val ** 2 * np.eye(3 * number_atom_unitcell * block_size, k=0) - \
                         hsn_dev['Onsite_fourier'] - self_energy_left - self_energy_right
+            green_ret = jnp.linalg.inv(e_ret)
             green_adv = green_ret.conj().T
-            Xi = np.trace(gamma_right @ green_ret @ gamma_left @ green_adv)
-
+            Xi = np.trace(gamma_right @ (green_ret @ (gamma_left @ green_adv)))
             return green_ret, Xi
 
         def sum_transmittance_kpoint(xi_k1, xi_k2):

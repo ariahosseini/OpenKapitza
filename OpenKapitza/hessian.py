@@ -34,6 +34,18 @@ def dynamical_matrix_q(poscar, forces, q):
                 D[a1*3:(a1+1)*3, a2*3:(a2+1)*3] += d
     return D
 
+# def dynamical_matrix_q(poscar, forces, q):
+#
+#     na = len(poscar['numbers'])
+#     D = np.zeros((na*3, na*3), dtype=np.complex128)
+#     for l in range(forces['nsc']):
+#         for a1 in range(na):
+#             for a2 in range(na):
+#                 phase = np.exp(1j*np.dot(q, forces['distances'][a1,a2,l]))
+#                 d = forces['forces'][0, l, a1*3:(a1*3+1)*3,a2*3:(a2*3+1)*3]*phase
+#                 D[a1*3:(a1+1)*3, a2*3:(a2+1)*3] += d
+#     return D
+
 
 def get_indices(displ, n):
 
@@ -142,11 +154,11 @@ def distance_between_two_atoms(poscar, forces, a1, a2, l1, l2):
     return dfinal
 
 
-def compute_distances(poscar,forces):
+def compute_distances(poscar, forces):
 
     nsc = forces['nsc']
     na = poscar['na']
-    distances = np.zeros((na,na,nsc,3))
+    distances = np.zeros((na, na, nsc, 3))
     for a1 in range(na):
         for a2 in range(na):
             for l in range(nsc):
