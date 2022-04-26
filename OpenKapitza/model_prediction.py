@@ -3,11 +3,15 @@ import numpy as np
 from scipy.stats import pearsonr
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.model_selection import cross_validate, cross_val_predict, KFold
+from sklearn.model_selection import cross_validate, cross_val_predict, KFold, train_test_split, GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_regression
 from sklearn.preprocessing import StandardScaler
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.decomposition import PCA
+from sklearn.svm import SVR
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import DotProduct, WhiteKernel, Matern, RBF, ConstantKernel
+from sklearn.ensemble import GradientBoostingRegressor
 
 # Read input files
 df_atom_energy_vasp = pd.read_excel(io='atom_energy_vasp.xlsx', sheet_name='Sheet1', header=0, skiprows=1,
@@ -71,7 +75,7 @@ interp = reg.intercept_ - means_.dot(coeff)  # Convert back to un-normalized inp
 
 # Partial Least Squares Regression
 
-pls = PLSRegression(n_components=3)
+pls = PLSRegression(n_components=5)
 pls.fit(x, itr)
 itr_pls = cross_val_predict(pls, x, itr, cv=kfold)
 r2_pls= r2_score(itr, itr_pls)
@@ -82,12 +86,70 @@ mse_pls = mean_squared_error(itr, itr_pls)
 pca = PCA()
 pca.fit(norm_x)
 z_pca = pca.transform(norm_x)
-print(pca.explained_variance_)
+# print(pca.explained_variance_)
 reg_pca = linear_model.LinearRegression()
-itr_pca = cross_val_predict(reg_pca, z_pca[:, : 3], itr, cv=kfold)
+itr_pca = cross_val_predict(reg_pca, z_pca[:, : 5], itr, cv=kfold)
 r2_pca= r2_score(itr, itr_pca)
 mse_pca = mean_squared_error(itr, itr_pca)
 
-exec(open("fig.py").read())
 
+# Support Vector Machines
+
+
+
+param_grid = {'C': [0.1, 1, 10, 100, 1000],
+              'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
+              'kernel': ['rbf']}
+
+grid = GridSearchCV(SVC(), param_grid, refit=True, verbose=3)
+
+# fitting the model for grid search
+grid.fit(X_train, y_train)
+
+
+svr = SVR(kernel="rbf", C=100, gamma=0.1, epsilon=0.1)
+svr.fit(norm_x, itr)
+
+itr_svr = cross_val_predict(svr, norm_x, itr, cv=kfold)
+r2_svr = r2_score(itr, itr_svr)
+mse_svr = mean_squared_error(itr, itr_svr)
+
+# Gaussian Regression Processes
+
+kernel = 1.0 * Matern(length_scale=1.0, length_scale_bounds=(1e-2, 10.0), nu=2.5) + \
+         WhiteKernel(noise_level=1, noise_level_bounds=(1e-5, 1e3)) + ConstantKernel()
+
+
+gpr = GaussianProcessRegressor(kernel=kernel, random_state=0)
+gpr.fit(norm_x, itr)
+
+itr_gpr = cross_val_predict(gpr, norm_x, itr, cv=kfold)
+r2_gpr = r2_score(itr, itr_gpr)
+mse_gpr = mean_squared_error(itr, itr_gpr)
+
+# Gradient Boosting Regression
+
+# GBR = GradientBoostingRegressor(random_state=0)
+#
+# parameters = {'learning_rate': [0.01,0.02,0.03,0.04],
+#                   'subsample'    : [0.9,0.5,0.2,0.1],
+#                   'n_estimators' : [100,500,1000,1500],
+#                   'max_depth'    : [3,4,6,8,10]
+#               }
+# grid_GBR = GridSearchCV(estimator=GBR, param_grid = parameters, cv = kfold, n_jobs=-1)
+# grid_GBR.fit(norm_x, itr)
+# print(" Results from Grid Search ")
+# print("\n The best estimator across ALL searched params:\n", grid_GBR.best_estimator_)
+# print("\n The best score across ALL searched params:\n", grid_GBR.best_score_)
+# print("\n The best parameters across ALL searched params:\n", grid_GBR.best_params_)
+# exit()
+
+gbr = GradientBoostingRegressor(random_state=0, max_depth=3, n_estimators=100, subsample=1.0)
+gbr.fit(norm_x, itr)
+
+itr_gbr = cross_val_predict(gbr, norm_x, itr, cv=kfold)
+r2_gbr = r2_score(itr, itr_gbr)
+mse_gbr = mean_squared_error(itr, itr_gbr)
+
+exec(open("fig.py").read())
 
