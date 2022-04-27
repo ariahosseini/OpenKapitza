@@ -30,6 +30,15 @@ the phonon transmission probability and the phonon dispersion) are computed on t
 developments, the code made use of the hardware-agnostic computational platform JAX to facilitate vectorized linear 
 algebra operations on GPUs.
 
+### Interatomic Force Constant
+
+The ratio of interatomic force to that of change in interatomic distance is defined as the interatomic force constant. 
+OpenKapitza uses Phonopy/PhonoLAMMPS FORCE_CONSTANTS output to compute mass-weighted IFCs.
+
+<p align="center">
+<img src="figs/IFC.png" alt="drawing" width="500px"> 
+</p>
+
 ### Coherent Phonon Transport in Bulk Materials 
 
 The transmission function shows the total number of phonon modes available at a given frequency. Although the 
