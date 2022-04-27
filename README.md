@@ -6,6 +6,26 @@ OpenKapitza
 
 
 A python package to compute anharmonic heat transfer across inhomogeneous interfaces.
+### Introduction
+Thermal management across interfaces is of increasingly technological importance in variety fields of thermoelectrics, 
+nanoelectronics, catalytic cells, optoelectronic devices, 2D electronic devices and nanotheranostics. For example, 
+massive interfacial thermal resistance limits the performance and reliability of microelectronic devices because 
+shrinking size has led to increased heating. The net thermal conductivity depends on both the scattering/ transmission 
+of phonons at interfaces and the ballistic effect between interfaces. Modeling these materials effectively requires 
+phonon transport simulation with mesoscale resolution while including atomistic resolution of phonon interactions at 
+non-ideal interfaces. OpenKapitza is a NEGFs solver that can be used to model heat transport across inhomogeneous 
+interfaces. In practice, OpenKapitza reads the second- and third-order inter-atomic force constants (IFCs) and returns 
+the mode-resolved transport coefficients; these coefficients can be used in mesoscale Boltzmann transport solvers to 
+accurately simulate the phonon evolution in multi-component structures or to guide experiments on thermal conductivity. 
+The development of the OpenKapitza framework started under the 2022 MolSSI Software Fellowship. The workflow includes 
+the following main steps: 1) reading the second-order IFCs from molecular dynamics (MD) or density functional theory 
+(DFT) solvers, 2) calculating the self-energy terms, the coupled, uncoupled and surface Green's functions, and 3) computing 
+the mode-resolved transport coefficients using Caroli formula. These coefficients are combined with the 
+Landauer formula to evaluate thermal conductance. The contribution of individual acoustic/optical modes, scattering 
+specularity, angular transmission spectrum, and modal transport coefficients (and thus the explicit relation between 
+the phonon transmission probability and the phonon dispersion) are computed on the fly. In addition to careful algorithm
+developments (such as employing map, filter, and reduce tools instead of loops), the code made use of the hardware-agnostic 
+computational platform JAX to facilitate vectorized linear algebra operations on GPUs.
 
 ### Copyright
 
