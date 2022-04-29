@@ -15,19 +15,20 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.kernel_ridge import KernelRidge
 
 # Read input files
-df_atom_energy_vasp = pd.read_excel(io='atom_energy_vasp.xlsx', sheet_name='Sheet1', header=0, skiprows=1,
-                     dtype={'Atomic number': int, 'Symbol': str, 'PAW potential name': str,
-                            'Total energy of an isolated atom (eV/atom)': float})
-df_descriptor_dataset = pd.read_excel(io='descriptor_dataset.xlsx', sheet_name='descriptor dataset', header=0,
-                                      skiprows=0, index_col=0,
+df_atom_energy_vasp = pd.read_excel(io='data_files/atom_energy_vasp.xlsx', sheet_name='Sheet1', header=0, skiprows=1,
+                                    dtype={'Atomic number': int, 'Symbol': str, 'PAW potential name': str,
+                                           'Total energy of an isolated atom (eV/atom)': float})
+
+df_descriptor_dataset = pd.read_excel(io='data_files/descriptor_dataset.xlsx', sheet_name='descriptor dataset',
+                                      header=0, skiprows=0, index_col=0,
                                       dtype={'Material': str, 'Formula': str, 'Cv (J/gK)': float,
                                              'Melting point (K)': float, 'Density (g/cm3)': float,
                                              'Volume (10-29 m3/f.u.)': float, 'R1': int, 'R2': int,
                                              'Mass (u)': float, 'AC1x': int, 'AC2x': int, 'AC2y': int,
                                              'ENc': float, 'ENa': float, 'IPc': float, 'IPa': float,
                                              'Eb(eV/f.u.)': float})
-df_training_dataset = pd.read_excel(io='training_dataset_itr_prediction.xlsx', sheet_name='training data', header=0,
-                                    skiprows=0, index_col=0,
+df_training_dataset = pd.read_excel(io='data_files/training_dataset_itr_prediction.xlsx', sheet_name='training data',
+                                    header=0, skiprows=0, index_col=0,
                                     dtype={'Interface': str, 'Film': str, 'substrate': str, 'interlayer1': str,
                                            'interlayer2': str, 'interlayer': float, 'T': float, 'fthick': float,
                                            'fheatcap': float, 'fmelt': float, 'fdensity': float, 'funit': float,

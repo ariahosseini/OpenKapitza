@@ -134,7 +134,7 @@ def maxwell_eucken(phi):
     return So
 
 
-def Rayleigh_model(phi: np.ndarray) -> np.ndarray:
+def rayleigh_model(phi: np.ndarray) -> np.ndarray:
 
     """
     :param
