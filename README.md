@@ -51,6 +51,12 @@ directional dependence.
 
 ### Gradient Boost Regression Model of Interfacial Thermal Conductance
 
+The Pearson correlation between materials' properties is shown here.
+
+<p align="center">
+<img src="figs/pearson.png" width="500px"> 
+</p>
+
 The dataset is from DOI 10.5281/zenodo.3361417. Please consider citing it if you are using OpenKapitza ML models. Here is
 the initial statistical evaluation oof the dataset. note that In statistics, the p-value is the probability of obtaining 
 results at least as extreme as the observed results of a statistical hypothesis test, assuming that the null hypothesis 
@@ -59,12 +65,12 @@ the null hypothesis would be rejected. A smaller p-value means that there is str
 hypothesis.
 
 <p align="center">
-<img src="figs/ols_reg.png" width="400px"> 
+<img src="figs/ols_reg.png" width="500px"> 
 </p>
 
 Gradient boosting is a machine learning technique that gives a prediction model in the form of an ensemble of weak 
-prediction models. OpenKapitza uses the method to predict interfacial thermal conductance. The model accuracy against 
-support vector machine and Gaussian process is shown here
+prediction models. OpenKapitza uses Intel® Extension for Scikit-learn to predict interfacial thermal conductance. 
+This is only to accelerate calculations. The model accuracy against support vector machine and Gaussian process is shown here
 
 
 <p align="center">
