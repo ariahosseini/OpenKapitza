@@ -54,7 +54,7 @@ transmission function from either side is identical, a requirement of detailed b
 directional dependence.
 
 <p align="center">
-<img src="figs/Transmittance.png" alt="drawing" width="500px"> 
+<img src="figs/Transmittance-Si.png" alt="drawing" width="500px"> 
 </p>
 
 The transmission function is used in Landauer Eq. to compute thermal conductance.
@@ -63,6 +63,12 @@ The transmission function is used in Landauer Eq. to compute thermal conductance
 <img src="figs/G.png" alt="drawing" width="500px"> 
 </p>
 
+In this example we used Phonopy to compute IFCs in 5 by 5 by 5 Si along <100> direction. Similarly we can use 
+PhonoLammps to compute IFCs. Here we plotted transmission function and thermal conductance in LiAlO2 using PhonoLammps.
+
+<p align="center">
+<img src="figs/Transmittance-LiAlO2.png" alt="drawing" width="500px"> 
+</p>
 
 ### Gradient Boost Regression Model of Interfacial Thermal Conductance
 
