@@ -16,18 +16,22 @@ massive interfacial thermal resistance limits the performance and reliability of
 shrinking size has led to increased heating. The net thermal conductivity depends on both the scattering/ transmission 
 of phonons at interfaces and the ballistic effect between interfaces. Modeling these materials effectively requires 
 phonon transport simulation with mesoscale resolution while including atomistic resolution of phonon interactions at 
-non-ideal interfaces. OpenKapitza is a NEGFs solver that can be used to model heat transport across inhomogeneous 
+non-ideal interfaces. 
+
+OpenKapitza is a NEGFs solver that can be used to model heat transport across inhomogeneous 
 interfaces. In practice, OpenKapitza reads the second- and third-order inter-atomic force constants (IFCs) and returns 
 the mode-resolved transport coefficients; these coefficients can be used in mesoscale Boltzmann transport solvers to 
 accurately simulate the phonon evolution in multi-component structures or to guide experiments on thermal conductivity. 
-The development of the OpenKapitza framework started under the 2022 MolSSI Software Fellowship. The workflow includes 
-the following main steps: 1) reading the second-order IFCs from molecular dynamics (MD) or density functional theory 
-(DFT) solvers, 2) calculating the self-energy terms, the coupled, uncoupled and surface Green's functions, and 3) computing 
-the mode-resolved transport coefficients using Caroli formula. These coefficients are combined with the 
+The development of the OpenKapitza framework started under the 2022 MolSSI Software Fellowship. 
+
+The workflow includes the following main steps: 1) reading the second-order IFCs from molecular dynamics (MD) or 
+density functional theory (DFT) solvers, 2) calculating the self-energy terms, the coupled, uncoupled and surface 
+Green's functions, and 3) computing the mode-resolved transport coefficients using Caroli formula. These coefficients are combined with the 
 Landauer formula to evaluate thermal conductance. The contribution of individual acoustic/optical modes, scattering 
 specularity, angular transmission spectrum, and modal transport coefficients (and thus the explicit relation between 
-the phonon transmission probability and the phonon dispersion) are computed on the fly. In addition to careful algorithm
-developments, the code made use of the hardware-agnostic computational platform JAX to facilitate vectorized linear 
+the phonon transmission probability and the phonon dispersion) are computed on the fly. 
+
+In addition to careful algorithm developments, the code made use of the hardware-agnostic computational platform JAX to facilitate vectorized linear 
 algebra operations on GPUs.
 
 ### Interatomic Force Constant
@@ -60,7 +64,7 @@ directional dependence.
 The transmission function is used in Landauer Eq. to compute thermal conductance.
 
 <p align="center">
-<img src="figs/G.png" alt="drawing" width="500px"> 
+<img src="figs/G-Si.png" alt="drawing" width="500px"> 
 </p>
 
 In this example we used Phonopy to compute IFCs in 5 by 5 by 5 Si along <100> direction. Similarly we can use 
@@ -70,7 +74,14 @@ PhonoLammps to compute IFCs. Here we plotted transmission function and thermal c
 <img src="figs/Transmittance-LiAlO2.png" alt="drawing" width="500px"> 
 </p>
 
+<p align="center">
+<img src="figs/G-LiAlO2.png" alt="drawing" width="500px"> 
+</p>
+
 ### Gradient Boost Regression Model of Interfacial Thermal Conductance
+
+OpenKapitza utilize different regression models to predict interfacial thermal resistance, among them, Gradient Boost model
+returns more reliable results. A deep learning model of ITR is under development.
 
 The Pearson correlation between materials' properties is shown here.
 
@@ -79,7 +90,7 @@ The Pearson correlation between materials' properties is shown here.
 </p>
 
 The dataset is from DOI 10.5281/zenodo.3361417. Please consider citing it if you are using OpenKapitza ML models. Here is
-the initial statistical evaluation oof the dataset. note that In statistics, the p-value is the probability of obtaining 
+the initial statistical evaluation of the dataset. note that In statistics, the p-value is the probability of obtaining 
 results at least as extreme as the observed results of a statistical hypothesis test, assuming that the null hypothesis 
 is correct. The p-value serves as an alternative to rejection points to provide the smallest level of significance at which 
 the null hypothesis would be rejected. A smaller p-value means that there is stronger evidence in favor of the alternative 
@@ -91,7 +102,7 @@ hypothesis.
 
 Gradient boosting is a machine learning technique that gives a prediction model in the form of an ensemble of weak 
 prediction models. OpenKapitza uses Intel® Extension for Scikit-learn to predict interfacial thermal conductance. 
-This is only to accelerate calculations. The model accuracy against support vector machine and Gaussian process is shown here
+This is only to accelerate calculations. The model accuracy against support vector machine and Gaussian process is shown here.
 
 
 <p align="center">
