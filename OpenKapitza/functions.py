@@ -8,7 +8,7 @@ import sys
 import numpy as np
 
 
-def matrix_decomposition(hsn_matrix: np.ndarray, block_size: int,
+def matrix_decomposition(hsn_matrix: np.ndarray, block_size: int, lattice_points,
                          block_indices: list[int], rep: list[int], natm_per_unitcell: int) -> dict[Any, Any]:
 
     """
@@ -30,25 +30,29 @@ def matrix_decomposition(hsn_matrix: np.ndarray, block_size: int,
     Returns
     ----------
     Hsn : dict
-        The keys are: 'H0', 'H1', 'H2', 'H3', 'H4', 'T1', 'T2', 'T3', 'T4' showing onsite and hopping matrices
+        The keys are: 'H0', 'H1', 'H2', 'H3', 'H4', 'T0', 'T1', 'T2', 'T3', 'T4' showing onsite and hopping matrices
     """
 
     nearest_neighbor_idx = np.array([[0, 0, 0], [0, -1, 0], [0, 1, 0], [-1, 0, 0], [1, 0, 0],
-                      [0, -1, 1], [0, 1, 1], [-1, 0, 1], [1, 0, 1]])
+                                     [0, 0, 1], [0, -1, 1], [0, 1, 1], [-1, 0, 1], [1, 0, 1]])
 
     elements_idx = (block_indices[2] + nearest_neighbor_idx[:, 2] - 1) + \
                    ((block_indices[1] + nearest_neighbor_idx[:, 1] - 1) * rep[0] +
                     block_indices[0] + nearest_neighbor_idx[:, 0] - 1) * 2 * rep[2]
-    Hsn_keys = ['H0', 'H1', 'H2', 'H3', 'H4', 'T1', 'T2', 'T3', 'T4']
+    Hsn_keys = ['H0', 'H1', 'H2', 'H3', 'H4', 'T0', 'T1', 'T2', 'T3', 'T4']
     Hsn = {}  # Return dict — decomposed Hessian matrix
-    for i in range(9):
+    lat = []
+    for i in range(10):
         Hsn_block = hsn_matrix[natm_per_unitcell * 3 * elements_idx[0]:
                                natm_per_unitcell * 3 * (elements_idx[0] + block_size),
                     natm_per_unitcell * 3 * elements_idx[i]:
                     natm_per_unitcell * 3 * (elements_idx[i] + block_size)]
-        Hsn[Hsn_keys[i]] = Hsn_block
+        lat_ = lattice_points[elements_idx[i]] - lattice_points[elements_idx[0]]
 
-    return Hsn
+        Hsn[Hsn_keys[i]] = Hsn_block
+        lat.append(1e-10*lat_)
+
+    return Hsn, lat
 
 
 def define_wavevectors(periodicity_length: float, num_kpoints: int) -> dict:
@@ -83,7 +87,7 @@ def define_wavevectors(periodicity_length: float, num_kpoints: int) -> dict:
     return dict_output
 
 
-def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
+def hessian_fourier_form(Hsn: dict, kpoints: dict, del_r) -> dict[Any, Any]:
 
     """
         A function to transform the Hessian matrix in the Fourier's space
@@ -103,7 +107,8 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
 
     wavevector = kpoints['kpoints']
     periodicity_length = kpoints['periodicity_length']
-    distance_vector = periodicity_length * np.array([[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]])
+    # distance_vector = periodicity_length * np.array([[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]])
+    distance_vector = np.array(del_r)[:, :-1]
     unit_planewave = np.exp(-1j * (distance_vector @ wavevector).T)  # Construct a plane wave
 
     def fourier_transform(planewave):
@@ -111,8 +116,8 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
         Hsn_fourier = Hsn['H0'] * planewave[0] + Hsn['H1'] * planewave[1] \
                       + Hsn['H2'] * planewave[2] + Hsn['H3'] * planewave[3] \
                       + Hsn['H4'] * planewave[4]
-        Hopping_fourier = Hsn['T1'] * planewave[1] + Hsn['T2'] * planewave[2] + \
-                          Hsn['T3'] * planewave[3] + Hsn['T4'] * planewave[4]
+        Hopping_fourier = Hsn['T0'] * planewave[5] + Hsn['T1'] * planewave[6] + Hsn['T2'] * planewave[7] + \
+                          Hsn['T3'] * planewave[8] + Hsn['T4'] * planewave[9]
 
         Hsn_matrix = {'Onsite_fourier': Hsn_fourier, 'Hopping_fourier': Hopping_fourier}
         return Hsn_matrix
@@ -129,8 +134,8 @@ def hessian_fourier_form(Hsn: dict, kpoints: dict) -> dict[Any, Any]:
 
 
 def surface_green_func(left_hsn_bulk: dict, right_hsn_surface: dict,
-                       omega_min: float, omega_max: float, omega_num: int, number_atom_unitcell: int,
-                       block_size: int, delta_o: float = 1e-6) -> dict:
+                       omega_min: float, omega_max: float, omega_num: int, number_atom_unitcell: int, block_size: int,
+                       delta_o: float = 1e-6) -> dict:
 
     """
     A function to compute surface Green's function
@@ -164,58 +169,54 @@ def surface_green_func(left_hsn_bulk: dict, right_hsn_surface: dict,
 
     def decimation_iteration(omega_val):
 
-        def iteration_loop(e_surface, deepcopy_e_surface, e, alpha, beta):
+        def iteration_loop(e_surface, alpha, beta):
 
+            posterior_e_surface = deepcopy(e_surface)
+            e = deepcopy(e_surface)
             a_term = jnp.linalg.inv(e) @ alpha
             b_term = jnp.linalg.inv(e) @ beta
-            e_surface += alpha @ b_term
-            e += beta @ a_term + alpha @ b_term
+            e_surface -= alpha @ b_term
+            e -= beta @ a_term + alpha @ b_term
             alpha = alpha @ a_term
             beta = beta @ b_term
 
             itr = 0
-            while np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)) > np.max(abs(deepcopy_e_surface))*1e-2:
 
-                deepcopy_e_surface = deepcopy(e_surface)
+            while np.linalg.norm(abs(e_surface) - abs(posterior_e_surface)) > np.max(abs(posterior_e_surface))*1e-6:
+
+                posterior_e_surface = deepcopy(e_surface)
                 a_term = jnp.linalg.inv(e) @ alpha
                 b_term = jnp.linalg.inv(e) @ beta
-                e_surface += alpha @ b_term
-                e += beta @ a_term + alpha @ b_term
+                e_surface -= alpha @ b_term
+                e -= beta @ a_term + alpha @ b_term
                 alpha = alpha @ a_term
                 beta = beta @ b_term
                 itr += 1
                 if itr > 1000:
                     print("Error: Make sure code does not diverge:",
-                          np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)), np.linalg.norm(abs(e_surface)))
+                          np.linalg.norm(abs(e_surface) - abs(posterior_e_surface)), np.linalg.norm(abs(e_surface)))
                     sys.exit()
-            # print('Decimation Iteration:', itr, 'Numerical Error:',
-            #       np.linalg.norm(abs(e_surface) - abs(deepcopy_e_surface)))
+            print(itr)
             return e_surface
 
-        def iter_func_right(Hsn_bulk):
+        def iter_func_right(Hsn):
 
-            e_surface = Z - Hsn_bulk['Onsite_fourier']
-            deepcopy_e_surface = deepcopy(e_surface)
-            e = deepcopy(e_surface)
-            alpha = Hsn_bulk['Hopping_fourier']
-            beta = Hsn_bulk['Hopping_fourier'].conj().T
+            e_surface = Z - Hsn['Onsite_fourier']
+            alpha = Hsn['Hopping_fourier']
+            beta = Hsn['Hopping_fourier'].conj().T
 
-            e_surf = iteration_loop(e_surface=e_surface, deepcopy_e_surface=deepcopy_e_surface,
-                                    e=e, alpha=alpha, beta=beta)
-            g_surf = jnp.linalg.inv(e_surf)
-            return g_surf
+            e_surf = iteration_loop(e_surface=e_surface, alpha=alpha, beta=beta)
+            gr_surf = jnp.linalg.inv(e_surf)
+            return gr_surf
 
-        def iter_func_left(Hsn_bulk):
+        def iter_func_left(Hsn):
 
-            e_surface = Z - Hsn_bulk['Onsite_fourier']
-            deepcopy_e_surface = deepcopy(e_surface)
-            e = deepcopy(e_surface)
-            alpha = Hsn_bulk['Hopping_fourier'].conj().T
-            beta = Hsn_bulk['Hopping_fourier']
-            e_surf = iteration_loop(e_surface=e_surface, deepcopy_e_surface=deepcopy_e_surface,
-                                    e=e, alpha=alpha, beta=beta)
-            g_surf = jnp.linalg.inv(e_surf)
-            return g_surf
+            e_surface = Z - Hsn['Onsite_fourier']
+            alpha = Hsn['Hopping_fourier'].conj().T
+            beta = Hsn['Hopping_fourier']
+            e_surf = iteration_loop(e_surface=e_surface, alpha=alpha, beta=beta)
+            gr_surf = jnp.linalg.inv(e_surf)
+            return gr_surf
 
         Z = omega_val ** 2 * (1 + 1j * delta_o) * np.eye(3 * number_atom_unitcell * block_size, k=0)
         right_g_surf = dict(
@@ -236,7 +237,7 @@ def surface_green_func(left_hsn_bulk: dict, right_hsn_surface: dict,
 def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: dict, number_atom_unitcell, block_size):
 
     """
-    A function to compute surface Green's function
+    A function to compute transmission coefficients
 
         Parameters
         ----------
@@ -296,7 +297,6 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
 
         green_dev_ret = np.array(list(zip(*output))[0])
         trans_modal = np.array(list(zip(*output))[1]).real
-
         trans_omega = functools.reduce(sum_transmittance_kpoint, trans_modal) / len(hsn_device)
 
         return green_dev_ret, trans_omega, trans_modal
@@ -304,11 +304,11 @@ def device_green_func(left_hsn_surface: dict, hsn_device: dict, surface_green: d
     transmission_func = list(map(lambda x: dev_green_unit(x[0], x[1]), surface_green.items()))
 
     omega = np.array(list(surface_green.keys()))
-    green_dev = np.array(list(zip(*transmission_func))[0])
+    gr_dev = np.array(list(zip(*transmission_func))[0])
     transmission = np.array(list(zip(*transmission_func))[1])
     modal_transmission = np.array(list(zip(*transmission_func))[2])
 
-    return omega, green_dev, transmission, modal_transmission
+    return omega, gr_dev, transmission, modal_transmission
 
 
 def modal_properties(left_hsn_bulk: dict, left_hsn_surf: dict,

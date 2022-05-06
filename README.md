@@ -33,11 +33,19 @@ algebra operations on GPUs.
 ### Interatomic Force Constant
 
 The ratio of interatomic force to that of change in interatomic distance is defined as the interatomic force constant. 
-OpenKapitza uses Phonopy/PhonoLAMMPS FORCE_CONSTANTS output to compute mass-weighted IFCs.
+OpenKapitza uses Phonopy/ PhonoLAMMPS FORCE_CONSTANTS output to compute mass-weighted IFCs. The IFCs matrix is then used
+to compute the IFCs sub-matrices for the device, left/ right leads. H0-matrix and T1-matrix show the onsite and hopping 
+IFCs for the device in bulk Si.
 
 <p align="center">
-<img src="figs/IFC.png" alt="drawing" width="500px"> 
+<img src="figs/H0.png" alt="drawing" width="500px"> 
 </p>
+
+<p align="center">
+<img src="figs/T0.png" alt="drawing" width="500px"> 
+</p>
+
+To model infinitely large IFCs perpendicular to the transport direction, OpenKapitza solves NEGF in Fourier's space. 
 
 ### Coherent Phonon Transport in Bulk Materials 
 
@@ -46,8 +54,15 @@ transmission function from either side is identical, a requirement of detailed b
 directional dependence.
 
 <p align="center">
-<img src="figs/trans_func.png" alt="drawing" width="500px"> 
+<img src="figs/Transmittance.png" alt="drawing" width="500px"> 
 </p>
+
+The transmission function is used in Landauer Eq. to compute thermal conductance.
+
+<p align="center">
+<img src="figs/G.png" alt="drawing" width="500px"> 
+</p>
+
 
 ### Gradient Boost Regression Model of Interfacial Thermal Conductance
 

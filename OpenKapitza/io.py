@@ -21,7 +21,7 @@ def read_hessian(file_name: str) -> np.ndarray:
 
     amu2kg = 1.66054e-27  # Convert atomic mass unit (AMU) to meter
     hessian_data_file = np.loadtxt(file_name, delimiter=None, skiprows=0)  # Load data
-    hess_mat = hessian_data_file*amu2kg
+    hess_mat = hessian_data_file
     hessian_symmetric = (np.triu(hess_mat, k=0) + np.tril(hess_mat, k=0).T) / 2  # Remove noises
     hessian = np.triu(hessian_symmetric) + np.triu(hessian_symmetric, k=1).T  # Hessian is symmetric
 
