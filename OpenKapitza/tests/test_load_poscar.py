@@ -1,7 +1,6 @@
 import OpenKapitza as OK
 import numpy as np
 from pytest import approx
-from unittest import TestCase
 
 
 def test_load_poscar():
