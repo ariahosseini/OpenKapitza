@@ -122,8 +122,45 @@ class NEMDSpec:
     damping_fs: float = 100.0
     spot_pressure_GPa: float | None = None
     seed: int = 12345
+    structure_mode: str = "build"       # "build" | "read_data"
     data_file: str = "interface.data"
+    common_lattice: float | None = None  # m; defaults to lattice_a in build mode
+    mass_a: float = 28.0855             # amu
+    mass_b: float = 72.630
     extra: dict = field(default_factory=dict)
+
+    @property
+    def lattice_used(self) -> float:
+        """The lattice constant the built cell actually uses.
+
+        A coherent interface needs ONE in-plane lattice constant, so one side
+        is strained. That is standard practice for a Si/Ge NEMD cell, but the
+        strain is not cosmetic: it shifts phonon frequencies and therefore
+        h_K. `lattice_strain` reports it and check_spec flags it.
+        """
+        return self.common_lattice or self.lattice_a
+
+    @property
+    def snapped_cross_section(self) -> float:
+        """Cross-section rounded to a whole number of unit cells, in metres.
+
+        x and y are periodic, so a box that is not a whole number of cells
+        leaves a seam where the images meet. The flux uses THIS area, not the
+        requested one, or h_K is wrong by the ratio.
+        """
+        a = self.lattice_used
+        n = max(1, round(self.geometry.cross_section / a))
+        return n * a
+
+    @property
+    def snapped_area(self) -> float:
+        return self.snapped_cross_section ** 2
+
+    @property
+    def lattice_strain(self) -> tuple[float, float]:
+        """Fractional in-plane strain carried by each side."""
+        a = self.lattice_used
+        return (a / self.lattice_a - 1.0, a / self.lattice_b - 1.0)
 
     @property
     def t_hot(self) -> float:
@@ -158,8 +195,7 @@ boundary        p p f
 atom_style      atomic
 timestep        {timestep_ps:.6f}
 
-read_data       {data_file}
-
+{structure_block}
 pair_style      {pair_style}
 pair_coeff      * * {pair_file} {element_a} {element_b}
 
@@ -225,6 +261,33 @@ run             {production_steps}
 print           "OPENKAPITZA_DONE area_m2 {area:.6e} interface_z_ang {interface_ang:.4f}"
 """
 
+READ_DATA_BLOCK = """\
+read_data       {data_file}
+"""
+
+# Self-contained diamond-cubic cell. Used so a crystalline run needs no
+# externally supplied structure file; Phase 2's structure module replaces this
+# for anything with a real lattice mismatch, an amorphous side, or defects.
+BUILD_BLOCK = """\
+# Built in place on a single diamond lattice -- ONE in-plane constant, so the
+# B side carries {strain_b:+.2%} strain and the A side {strain_a:+.2%}. That
+# strain shifts phonon frequencies and therefore h_K; it is a deliberate
+# simplification of a coherent interface, not a free choice.
+lattice         diamond {lattice_ang:.6f}
+# x and y are PERIODIC, so they must be whole numbers of unit cells or the
+# images do not match across the boundary. z is non-periodic (walls), so a
+# partial cell at the end is harmless and the box matches the geometry exactly.
+region          simbox block 0.0 {cross_ang:.4f} 0.0 {cross_ang:.4f} \
+                0.0 {nz_ang:.4f} units box
+create_box      2 simbox
+region          side_a block INF INF INF INF INF {interface_ang:.4f} units box
+region          side_b block INF INF INF INF {interface_ang:.4f} INF units box
+create_atoms    1 region side_a
+create_atoms    2 region side_b
+mass            1 {mass_a:.4f}
+mass            2 {mass_b:.4f}
+"""
+
 PRESSURE_BLOCK = """\
 # Spot pressure: the local stress inside a real contact spot is of order the
 # contact microhardness (GPa), NOT the apparent contact pressure (MPa).
@@ -250,12 +313,28 @@ def build_input_deck(spec: NEMDSpec) -> str:
             press_steps=max(10_000, spec.equilibrate_steps // 5),
         )
 
+    if spec.structure_mode == "build":
+        a_ang = spec.lattice_used * M_TO_ANG
+        sa, sb = spec.lattice_strain
+        structure_block = BUILD_BLOCK.format(
+            lattice_ang=a_ang,
+            cross_ang=spec.snapped_cross_section * M_TO_ANG,
+            nz_ang=g.total_length * M_TO_ANG,
+            interface_ang=g.interface_z * M_TO_ANG,
+            mass_a=spec.mass_a, mass_b=spec.mass_b,
+            strain_a=sa, strain_b=sb,
+        )
+    elif spec.structure_mode == "read_data":
+        structure_block = READ_DATA_BLOCK.format(data_file=spec.data_file)
+    else:
+        raise ValueError(f"unknown structure_mode {spec.structure_mode!r}")
+
     n_samples = max(1, spec.production_steps // spec.profile_every)
 
     return DECK.format(
+        structure_block=structure_block,
         element_a=spec.element_a,
         element_b=spec.element_b,
-        data_file=spec.data_file,
         pair_style=spec.pair_style,
         pair_file=spec.pair_file,
         timestep_ps=spec.timestep_fs * FS_TO_PS,
@@ -277,7 +356,7 @@ def build_input_deck(spec: NEMDSpec) -> str:
         profile_every=spec.profile_every,
         n_profile_samples=n_samples,
         bin_width=g.bin_width * a,
-        area=g.area,
+        area=(spec.snapped_area if spec.structure_mode == "build" else g.area),
         interface_ang=g.interface_z * a,
         pressure_block=pressure_block,
     )
@@ -327,6 +406,25 @@ def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:
                 "single-temperature quantity."
             ),
         )
+
+    if spec.structure_mode == "build":
+        sa, sb = spec.lattice_strain
+        worst = max(abs(sa), abs(sb))
+        if worst > 0.01:
+            flags.add(
+                Code.NEMD_LATTICE_STRAIN,
+                Severity.WARNING,
+                f"The built cell uses one lattice constant, so the sides carry "
+                f"{sa:+.2%} and {sb:+.2%} in-plane strain.",
+                remedy=(
+                    "Strain of this size shifts phonon frequencies and changes "
+                    "h_K. It is the usual simplification for a coherent "
+                    "interface, but report it, and use the Phase-2 structure "
+                    "module with a strain-minimising supercell when the "
+                    "mismatch matters."
+                ),
+                strain=worst,
+            )
 
     if min(g.bulk_a_length, g.bulk_b_length) < 10e-9:
         flags.add(

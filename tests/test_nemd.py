@@ -289,6 +289,56 @@ class TestDeck(unittest.TestCase):
         deck = build_input_deck(self.spec)
         self.assertIn(f"bin/1d z lower {self.spec.geometry.bin_width * 1e10:.4f}", deck)
 
+    def test_build_mode_is_self_contained(self):
+        """The deck must run without an externally supplied structure file."""
+        deck = build_input_deck(self.spec)
+        self.assertIn("create_box", deck)
+        self.assertIn("create_atoms", deck)
+        self.assertNotIn("read_data", deck)
+
+    def test_read_data_mode_still_available(self):
+        self.spec.structure_mode = "read_data"
+        deck = build_input_deck(self.spec)
+        self.assertIn("read_data       interface.data", deck)
+        self.assertNotIn("create_atoms", deck)
+
+    def test_unknown_structure_mode_rejected(self):
+        self.spec.structure_mode = "telepathy"
+        with self.assertRaises(ValueError):
+            build_input_deck(self.spec)
+
+    def test_periodic_cross_section_snaps_to_whole_unit_cells(self):
+        """x and y are periodic; a partial cell leaves a seam at the image."""
+        a = self.spec.lattice_used
+        n = self.spec.snapped_cross_section / a
+        self.assertAlmostEqual(n, round(n), places=9)
+
+    def test_flux_area_follows_the_snapped_cross_section(self):
+        """Using the requested area instead would scale h_K by the ratio."""
+        self.assertNotAlmostEqual(self.spec.snapped_area,
+                                  self.spec.geometry.area, places=20)
+        deck = build_input_deck(self.spec)
+        self.assertIn(f"area_m2 {self.spec.snapped_area:.6e}", deck)
+
+    def test_lattice_strain_reported_for_mismatched_pair(self):
+        sa, sb = self.spec.lattice_strain
+        self.assertAlmostEqual(sa, 0.0, places=9)          # A sets the lattice
+        self.assertLess(sb, -0.03)                          # Ge compressed ~4 %
+
+    def test_strained_build_is_flagged(self):
+        f = FlagSet()
+        check_spec(self.spec, f)
+        self.assertIn(Code.NEMD_LATTICE_STRAIN, f.codes())
+        # strain and size limitation are different problems with different
+        # remedies, so they must not share a code
+        self.assertNotIn(Code.NEMD_SIZE_LIMITED, f.codes())
+
+    def test_common_lattice_override(self):
+        self.spec.common_lattice = 5.545e-10                # midpoint
+        sa, sb = self.spec.lattice_strain
+        self.assertGreater(sa, 0.0)
+        self.assertLess(sb, 0.0)
+
     def test_timestep_converted_to_picoseconds(self):
         self.assertIn("timestep        0.001000", build_input_deck(self.spec))
 
@@ -309,11 +359,19 @@ class TestSpecChecks(unittest.TestCase):
                             temperature=300.0, delta_reservoir=200.0), f)
         self.assertIn(Code.NEMD_FLUX_NONLINEAR, f.codes())
 
-    def test_reasonable_spec_is_clean(self):
+    def test_reasonable_spec_raises_only_the_strain_flag(self):
+        """A Si/Ge build cell legitimately carries ~4 % strain and says so."""
         f = FlagSet()
         check_spec(NEMDSpec(geometry=NEMDGeometry(), element_a="Si",
                             element_b="Ge", lattice_a=5.4e-10, lattice_b=5.6e-10,
                             temperature=300.0), f)
+        self.assertEqual(f.codes(), {Code.NEMD_LATTICE_STRAIN})
+
+    def test_lattice_matched_pair_is_entirely_clean(self):
+        f = FlagSet()
+        check_spec(NEMDSpec(geometry=NEMDGeometry(), element_a="Si",
+                            element_b="Si", lattice_a=5.431e-10,
+                            lattice_b=5.431e-10, temperature=300.0), f)
         self.assertEqual(f.codes(), set())
 
 

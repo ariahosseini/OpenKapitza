@@ -224,6 +224,36 @@ round-tripped against LAMMPS-format files, decks checked directive by
 directive, job runners driven through real success and failure paths. Treat
 the first real run as a shakedown.
 
+### Start here once LAMMPS is installed
+
+```bash
+python3 scripts/smoke_lammps.py --lmp /path/to/lmp
+```
+
+A deliberately tiny Si/Ge cell — a few minutes on a laptop — that exercises
+the whole chain: build deck → run → parse profile → parse reservoir energy →
+extract h_K. **It is a plumbing test, not a measurement.** The box is far too
+small for a converged number; what matters is that every stage runs and the
+result lands in a plausible range rather than orders of magnitude out. The
+script prints the corrected DMM value (334 MW/m²·K) and the published NEMD
+range (266–368) for orientation only.
+
+Expect the first attempt to fail. Deck syntax, the `SiGe.sw` potential path
+and the `fix ave/chunk` column layout are the likely culprits, and the script
+prints the relevant log tail for each.
+
+Decks are **self-contained**: the structure is built in place with
+`create_atoms` on a diamond lattice, so no external data file is needed. That
+uses one lattice constant for both sides, leaving Ge about 4 % strained —
+flagged as `NEMD_LATTICE_STRAIN`, since the strain shifts phonon frequencies
+and therefore h_K. Phase 2's structure module replaces this with a
+strain-minimising supercell. `structure_mode="read_data"` takes an external
+file instead.
+
+The periodic cross-section snaps to a whole number of unit cells, and the
+flux uses that snapped area — a 5.000 nm request becomes 4.888 nm, a 4.4 %
+area difference that would otherwise have gone straight into h_K.
+
 ### Extraction is the piece that matters
 
 Differencing the bins either side of the interface does not give the jump. It
