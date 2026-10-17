@@ -29,10 +29,11 @@ from ..schema.flags import Code, FlagSet, Severity
 from ..schema.quantities import Confidence, Quantity, make_derived
 from .regime import Regime
 
-# Fitted range of the plastic CMY correlation. Outside it the correlation is
-# extrapolation, not interpolation.
-CMY_PRESSURE_MIN = 1e-5
-CMY_PRESSURE_MAX = 2e-2
+# Fitted range of Yovanovich's 1982 recorrelation of the CMY plastic model,
+# as published alongside the 1.25 prefactor and 0.95 exponent used below.
+# Outside it the correlation is extrapolation, not interpolation.
+CMY_PRESSURE_MIN = 1e-6
+CMY_PRESSURE_MAX = 2.3e-2
 
 # Correlation constants. Part of the published fits, not tunable parameters.
 _CMY_PREFACTOR = 1.25

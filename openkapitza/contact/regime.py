@@ -12,13 +12,21 @@ combined asperity slope and the contact microhardness:
 
 Large psi means the asperities yield; small psi means they spring back.
 
-IMPORTANT CAVEAT ON THE THRESHOLDS. The numerical cut-offs below are a
-convention, and sources differ on both the exact form of the index and where
-the boundaries sit. They are therefore exposed as parameters and the
-transition band is treated as genuinely ambiguous: inside it, the package
-computes BOTH branches and reports both rather than silently picking one.
-Treat a joint in that band as having a conductance uncertain by whatever the
-two branches disagree by.
+ON THE CONVENTION. Mikic's index is usually written the other way up,
+gamma = H_c / (E' * m), with the published thresholds "gamma <= 0.33 deforms
+plastically" and "gamma >= 3.0 deforms elastically". Since gamma = 1/psi,
+those map exactly onto the thresholds used here: psi >= 3.0 plastic,
+psi <= 0.33 elastic. The reciprocal form is used so that larger psi means
+more plastic, which reads more naturally. The numbers are the published ones,
+not invented.
+
+Sources do differ on the precise form of the index, so the thresholds are
+exposed as parameters, and the transition band is treated as genuinely
+ambiguous: inside it the package computes BOTH branches and reports both
+rather than silently picking one. Treat a joint in that band as having a
+conductance uncertain by whatever the two branches disagree by. Note also
+that the deformation mode is set by material properties and asperity shape,
+not by the applied load, so psi does not move as pressure changes.
 """
 
 from __future__ import annotations

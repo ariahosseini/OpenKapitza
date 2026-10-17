@@ -30,7 +30,13 @@ from openkapitza.contact import (
 )
 from openkapitza.gap import gas_state, gap_conductance, vacuum_gap
 from openkapitza.md import debye_heat_capacity, dmm_conductance, user_kapitza
-from openkapitza.network import combine
+from openkapitza.md.dmm import (
+    branch_cutoff_frequencies,
+    common_cutoff_frequency,
+    debye_integral,
+    debye_wavevector,
+)
+from openkapitza.network import combine, sample_lognormal
 from openkapitza.schema import (
     Code,
     Confidence,
@@ -42,7 +48,7 @@ from openkapitza.schema import (
     load_material,
     make_derived,
 )
-from openkapitza.schema.units import K_B, from_si, to_si
+from openkapitza.schema.units import HBAR, K_B, from_si, to_si
 
 
 def Q(v, u, **kw):
@@ -329,6 +335,88 @@ class TestDebyeHeatCapacity(unittest.TestCase):
         self.assertAlmostEqual(c2 / c1, 8.0, delta=0.3)
 
 
+class TestDMMElasticCutoff(unittest.TestCase):
+    """Regression tests for the missing-cutoff defect found in the audit.
+
+    Elastic scattering admits only frequencies present on both sides, so the
+    integral must stop at the slowest branch of the softer material. Omitting
+    that inflated Si/Ge by about 4.5x and broke detailed balance.
+    """
+
+    def test_detailed_balance(self):
+        """h_K must not depend on which side it is computed from.
+
+        This is exact for DMM and is the sharpest available check on the
+        formulation. The pre-fix code weighted by one side's heat capacity
+        and failed this outright.
+        """
+        f = FlagSet()
+        a, b = load_material("Si"), load_material("Ge")
+        T = Q(300.0, "K")
+        ab = dmm_conductance(a, b, T, f).h_K.si
+        ba = dmm_conductance(b, a, T, f).h_K.si
+        self.assertAlmostEqual(ab / ba, 1.0, places=9)
+
+    def test_detailed_balance_across_several_pairs(self):
+        f = FlagSet()
+        T = Q(300.0, "K")
+        for ka, kb in [("Si", "Al"), ("Si", "SiO2"), ("Ge", "Cu"), ("Al", "SiO2")]:
+            a, b = load_material(ka), load_material(kb)
+            ab = dmm_conductance(a, b, T, f).h_K.si
+            ba = dmm_conductance(b, a, T, f).h_K.si
+            self.assertAlmostEqual(ab / ba, 1.0, places=9, msg=f"{ka}/{kb}")
+
+    def test_cutoff_set_by_slowest_branch_of_softer_material(self):
+        si, ge = load_material("Si"), load_material("Ge")
+        omega, limiting = common_cutoff_frequency(si, ge)
+        self.assertEqual(limiting, "Ge")
+        self.assertAlmostEqual(omega, min(branch_cutoff_frequencies(ge)), places=6)
+        self.assertLess(omega, min(branch_cutoff_frequencies(si)))
+
+    def test_cutoff_is_symmetric_in_argument_order(self):
+        si, ge = load_material("Si"), load_material("Ge")
+        self.assertEqual(common_cutoff_frequency(si, ge),
+                         common_cutoff_frequency(ge, si))
+
+    def test_si_ge_matches_published_range(self):
+        """Si/Ge at 300 K against published MD and DMM values.
+
+        Reported in the literature: NEMD 315-368 MW/m^2K, AEMD sharp
+        interface 266 MW/m^2K, a cited DMM prediction of 417 MW/m^2K. A
+        Debye-DMM estimate should land in that neighbourhood. The pre-fix
+        code returned 1896 MW/m^2K, which this test rejects.
+        """
+        f = FlagSet()
+        h = dmm_conductance(load_material("Si"), load_material("Ge"),
+                            Q(300.0, "K"), f).h_K.si / 1e6
+        self.assertGreater(h, 150.0, "implausibly low for Si/Ge")
+        self.assertLess(h, 600.0, "implausibly high - is the elastic cutoff applied?")
+
+    def test_cutoff_reduces_conductance_substantially(self):
+        """Without the cutoff the integral runs to the host's own Debye limit."""
+        si, ge = load_material("Si"), load_material("Ge")
+        f = FlagSet()
+        with_cut = dmm_conductance(si, ge, Q(300.0, "K"), f).h_K.si
+
+        omega_host = min(branch_cutoff_frequencies(si))
+        x_host = HBAR * omega_host / (K_B * 300.0)
+        omega_cut, _ = common_cutoff_frequency(si, ge)
+        x_cut = HBAR * omega_cut / (K_B * 300.0)
+        ratio = debye_integral(x_host) / debye_integral(x_cut)
+
+        self.assertGreater(ratio, 2.0)
+        self.assertAlmostEqual(with_cut * ratio / with_cut, ratio, places=9)
+
+    def test_debye_integral_small_x_limit(self):
+        """Integrand -> u^2 as u -> 0, so I(x) -> x^3/3."""
+        x = 0.01
+        self.assertAlmostEqual(debye_integral(x), x ** 3 / 3.0, delta=1e-8)
+
+    def test_debye_integral_monotonic(self):
+        vals = [debye_integral(x) for x in (0.5, 1.0, 2.0, 4.0)]
+        self.assertEqual(vals, sorted(vals))
+
+
 class TestDMM(unittest.TestCase):
     def test_identical_materials_give_half_transmission(self):
         """A diffuse interface between identical solids transmits exactly 1/2.
@@ -470,6 +558,61 @@ class TestMonteCarlo(unittest.TestCase):
         self.assertLess(mc.p05, mc.nominal)
         self.assertGreater(mc.p95, mc.nominal)
         self.assertEqual(mc.n_failed, 0)
+
+    def _drift(self, **unc):
+        off = dict(sigma_rel_unc=None, slope_rel_unc=None,
+                   pressure_rel_unc=None, hardness_rel_unc=None)
+        off.update(unc)
+        j = build_joint("SS304", "SS304", sigma_a_um=1.2, sigma_b_um=1.2,
+                        slope_a=0.08, slope_b=0.08, pressure_MPa=2.0,
+                        temperature_K=300.0, gas="air",
+                        gas_pressure_kPa=101.325, **off)
+        mc = run_continuum(j, n_samples=3000).uncertainty["h_joint"]
+        return mc.median / mc.nominal
+
+    def test_single_monotonic_input_keeps_median_on_nominal(self):
+        """Sampler correctness, isolated from propagation effects.
+
+        Pressure enters through one monotonic power law, so a
+        median-preserving sampler must put the output median on the nominal.
+        The earlier mean-preserving sampler failed this.
+        """
+        self.assertAlmostEqual(self._drift(pressure_rel_unc=0.05), 1.0, delta=0.01)
+
+    def test_quadrature_inputs_barely_shift_the_median(self):
+        self.assertAlmostEqual(self._drift(sigma_rel_unc=0.10), 1.0, delta=0.02)
+        self.assertAlmostEqual(self._drift(slope_rel_unc=0.20), 1.0, delta=0.02)
+
+    def test_hardness_min_biases_the_median_upward(self):
+        """H_c = min(Hv_a, Hv_b) over two uncertain hardnesses is biased low.
+
+        This is real propagation, not a defect: when both solids are
+        nominally equal and each uncertain, the softer REALISATION is
+        systematically softer than the nominal, so P/H_c and hence h_c run
+        high. It is the sole source of the median-nominal gap, and the
+        report explains it rather than hiding it.
+        """
+        drift = self._drift(hardness_rel_unc=0.30)
+        self.assertGreater(drift, 1.02, "the min() bias should be visible")
+        self.assertLess(drift, 1.12, "but bounded")
+
+    def test_only_kapitza_band_remains_when_inputs_are_exact(self):
+        """With every measured input held fixed, h_K's own band still applies.
+
+        The DMM placeholder carries a factor-of-2.5 uncertainty that is not
+        the user's to switch off, so the spread does not go to zero. For a
+        constriction-limited joint its influence is negligible, which is
+        itself the sensitivity gate's claim restated.
+        """
+        self.assertAlmostEqual(self._drift(), 1.0, delta=1e-3)
+
+    def test_sampler_preserves_median_not_mean(self):
+        import random as _r
+        q = Quantity(si=2.0, unit="GPa", uncertainty=0.6)
+        rng = _r.Random(1)
+        s = sorted(sample_lognormal(q, rng) for _ in range(20000))
+        median = s[len(s) // 2]
+        self.assertAlmostEqual(median / q.si, 1.0, delta=0.02)
 
     def test_reproducible(self):
         def once():

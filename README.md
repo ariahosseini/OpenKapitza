@@ -125,6 +125,49 @@ rendering known to contain exactly those numbers.
 
 ---
 
+## Verification
+
+`scripts/audit.py` recomputes every model from first principles with literals
+and different numerical methods, then compares against the package. Run it
+alongside the test suite.
+
+**Algebra: exact.** 21/21 independent recomputations match to machine
+precision — combined roughness and slope, `k_s`, `E'`, `H_c`, the plasticity
+index, CMY, `xi`, `Y`, all gas properties, the rarefaction parameter and the
+whole resistance network.
+
+**Absolute checks against known values:**
+
+| quantity | model | reference | error |
+|---|---|---|---|
+| air mean free path, 300 K / 1 atm | 67.00 nm | ~67 nm | — |
+| air thermal conductivity, 300 K | 0.02623 W/m·K | ~0.0262 | 0.1 % |
+| air viscosity, 300 K | 1.8459e-5 Pa·s | 1.846e-5 | 0.00 % |
+| Debye C_V (Si, 300 K) | 1.661e6 J/m³·K | 1.630e6 (expt) | 1.9 % |
+| h_K (Si/Ge, 300 K) | 334 MW/m²·K | 315–368 (NEMD) | in range |
+
+**Correlations checked against sources.** The CMY prefactor/exponent (1.25,
+0.95 — Yovanovich's 1982 recorrelation), the Mikic elastic form, `E'`, and
+the plasticity-index thresholds all verified. One source rendered the Mikic
+group as `P/(√2·E'·m)`; its own stated simplification (m = 0.1 → prefactor
+1.9) proves the correct form is `√2·P/(m·E')`, which is what is implemented —
+0.975 vs 1.870 under that check.
+
+**Two defects found and fixed:**
+
+1. **Missing DMM elastic cutoff.** Scattering is elastic, so only frequencies
+   present on *both* sides can cross. The integral must stop at the slowest
+   branch of the softer solid. Omitting it inflated Si/Ge by 4.5× (1896 vs
+   334 MW/m²·K) and broke detailed balance — h(Si→Ge) ≠ h(Ge→Si), which is
+   exact for DMM. Both are now regression-tested.
+2. **Monte Carlo centring.** The sampler preserved the arithmetic mean, which
+   put every input's median below its nominal. Now median-preserving, verified
+   at 0.9997 for a single monotonic input.
+
+The residual ~6 % median–nominal gap is *not* a defect: it comes from
+`H_c = min(Hv_a, Hv_b)`, where the softer of two uncertain realisations is
+systematically softer than nominal. The report explains it when it exceeds 2 %.
+
 ## Honest status of the bundled data
 
 **Every entry in `data/*.yaml` is marked `verified: false` and none has been

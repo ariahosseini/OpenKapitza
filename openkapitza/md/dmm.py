@@ -17,20 +17,40 @@ probability is the ratio of the available flux on the far side:
 
     alpha_12 = S2_2 / (S2_1 + S2_2)
 
-and the conductance from side 1 is
+THE ELASTIC CUTOFF. Scattering here is elastic, so a phonon can only cross if
+its frequency exists on BOTH sides. Phonons above the softer material's
+maximum frequency have no states to transmit into and carry nothing. The
+frequency integral must therefore stop at the highest frequency common to all
+branches in both solids -- set by the most restrictive (slowest) branch, in
+practice the transverse branch of the softer material.
 
-    h = (1/4) * C_1(T) * (S2_1 / S3_1) * alpha_12
+Omitting that cutoff is not a small error. For Si/Ge at 300 K it inflates the
+answer by roughly a factor of 4.5, because only about a fifth of silicon's
+phonon spectrum lies below germanium's transverse cutoff.
 
-with C_1(T) the Debye volumetric heat capacity.
+Each branch gets its own Debye cutoff from the material's own zone boundary:
 
-HOW WRONG IS THIS? DMM is a severe idealisation: elastic, diffuse scattering
-of a Debye phonon gas with no inelastic channels, no interfacial bonding
-chemistry, no disorder or intermixing. Against measurement it is commonly off
-by a factor of two and can be worse for strongly mismatched pairs, where
-inelastic transport that DMM cannot represent carries a real share of the
-heat. Everything this module returns is therefore marked PLACEHOLDER with
-LOW-to-UNRELIABLE confidence, and the network module refuses to present it as
-a final answer.
+    k_D,i      = (6 pi^2 n_i)^(1/3)
+    omega_D,ij = v_ij * k_D,i
+    omega_cut  = min over every branch of both materials
+
+and the conductance from side 1 becomes
+
+    h = (k_B / 8 pi^2) * (k_B T / hbar)^3 * S2_1 * I(x_cut) * alpha_12
+    I(x)  = integral_0^x u^4 e^u / (e^u - 1)^2 du
+    x_cut = hbar * omega_cut / (k_B T)
+
+HOW WRONG IS THIS, EVEN WHEN RIGHT? DMM remains a severe idealisation:
+elastic, diffuse scattering of a Debye phonon gas with no inelastic channels,
+no interfacial bonding chemistry, no disorder or intermixing, and no optical
+branches at all -- which for Ge/Si can carry over 40 % of the conductance at
+300 K. The error is also DIRECTIONAL: the Debye construction overestimates
+the maximum frequency of each branch, inflating the incident phonon flux, so
+Debye-DMM systematically OVER-predicts. Against real dispersion it can be off
+by a large factor in strongly mismatched systems.
+
+Everything this module returns is therefore marked PLACEHOLDER with LOW
+confidence, and the network module refuses to present it as a final answer.
 """
 
 from __future__ import annotations
@@ -41,11 +61,12 @@ from dataclasses import dataclass
 from ..schema.flags import Code, FlagSet, Severity
 from ..schema.inputs import MaterialSpec
 from ..schema.quantities import Confidence, Provenance, Quantity, make_derived
-from ..schema.units import K_B
+from ..schema.units import HBAR, K_B
 
 # Factor-of-N band reported as the uncertainty on a DMM estimate. This is a
 # statement about how far DMM typically sits from measurement, not a
-# propagated uncertainty.
+# propagated uncertainty. The band is deliberately wide and the bias is known
+# to be upward (see the module docstring).
 DMM_UNCERTAINTY_FACTOR = 2.5
 
 
@@ -98,6 +119,54 @@ def _velocity_sums(mat: MaterialSpec) -> tuple[float, float]:
     return s2, s3
 
 
+def debye_wavevector(number_density: float) -> float:
+    """Debye zone-boundary wavevector, k_D = (6 pi^2 n)^(1/3)."""
+    return (6.0 * math.pi ** 2 * number_density) ** (1.0 / 3.0)
+
+
+def branch_cutoff_frequencies(mat: MaterialSpec) -> list[float]:
+    """Debye cutoff angular frequency of each branch: one LA, two TA."""
+    k_D = debye_wavevector(mat.number_density.si)
+    return [mat.v_long.si * k_D, mat.v_trans.si * k_D, mat.v_trans.si * k_D]
+
+
+def common_cutoff_frequency(a: MaterialSpec, b: MaterialSpec) -> tuple[float, str]:
+    """Highest frequency present in every branch of both solids.
+
+    Elastic scattering admits only frequencies that exist on both sides, so
+    the limiting branch is the slowest one of either material. Returns the
+    frequency and which material set it, for reporting.
+    """
+    cuts_a = branch_cutoff_frequencies(a)
+    cuts_b = branch_cutoff_frequencies(b)
+    w_a, w_b = min(cuts_a), min(cuts_b)
+    return (w_a, a.key) if w_a <= w_b else (w_b, b.key)
+
+
+def debye_integral(x_max: float, steps: int = 4000) -> float:
+    """I(x) = integral_0^x u^4 e^u / (e^u - 1)^2 du, by Simpson's rule.
+
+    The integrand tends to u^2 as u -> 0 and is exponentially damped at large
+    u, so it is smooth and bounded and a modest grid is ample.
+    """
+    if x_max <= 0:
+        return 0.0
+    if steps % 2:
+        steps += 1
+    h = x_max / steps
+    total = 0.0
+    for i in range(steps + 1):
+        u = i * h
+        if u < 1e-8:
+            f = 0.0
+        else:
+            eu = math.exp(u) if u < 700 else float("inf")
+            f = 0.0 if eu == float("inf") else (u ** 4) * eu / (eu - 1.0) ** 2
+        w = 1 if i in (0, steps) else (4 if i % 2 else 2)
+        total += w * f
+    return total * h / 3.0
+
+
 def dmm_conductance(
     material_a: MaterialSpec,
     material_b: MaterialSpec,
@@ -113,31 +182,45 @@ def dmm_conductance(
                 f"temperature or number density needed for a DMM estimate"
             )
 
-    s2_a, s3_a = _velocity_sums(material_a)
+    s2_a, _ = _velocity_sums(material_a)
     s2_b, _ = _velocity_sums(material_b)
 
     alpha = s2_b / (s2_a + s2_b)
-    C_a = debye_heat_capacity(
-        material_a.theta_debye, material_a.number_density, temperature
+
+    # Elastic cutoff: only frequencies present on both sides can cross.
+    omega_cut, limiting = common_cutoff_frequency(material_a, material_b)
+    T = temperature.si
+    x_cut = HBAR * omega_cut / (K_B * T)
+
+    h_si = (
+        (K_B / (8.0 * math.pi ** 2))
+        * (K_B * T / HBAR) ** 3
+        * s2_a
+        * debye_integral(x_cut)
+        * alpha
     )
-    v_eff = s2_a / s3_a
-    h_si = 0.25 * C_a.si * v_eff * alpha
 
     flags.add(
         Code.KAPITZA_PLACEHOLDER,
         Severity.WARNING,
         f"Kapitza conductance is a Debye-DMM placeholder, not an MD result: "
-        f"h_K = {h_si / 1e6:.1f} MW/m^2K with transmission {alpha:.3f}.",
+        f"h_K = {h_si / 1e6:.1f} MW/m^2K with transmission {alpha:.3f}, "
+        f"cut off at the slowest branch of '{limiting}' "
+        f"(hbar*omega/kT = {x_cut:.2f}).",
         remedy=(
             f"DMM assumes elastic diffuse scattering of a Debye phonon gas and "
-            f"ignores interfacial bonding, disorder and inelastic channels. "
-            f"Treat it as good to roughly a factor of {DMM_UNCERTAINTY_FACTOR:g}. "
-            f"Run the Phase-1 NEMD calculation before quoting h_K, and check "
-            f"the sensitivity report first to see whether it would move the "
-            f"joint conductance at all."
+            f"ignores interfacial bonding, disorder, inelastic channels and "
+            f"optical branches. Its error is directional: the Debye "
+            f"construction overestimates each branch's maximum frequency, so "
+            f"it systematically OVER-predicts. Treat it as good to roughly a "
+            f"factor of {DMM_UNCERTAINTY_FACTOR:g}, biased high. Run the "
+            f"Phase-1 NEMD calculation before quoting h_K, and check the "
+            f"sensitivity report first to see whether it would move the joint "
+            f"conductance at all."
         ),
         h_K_MW=h_si / 1e6,
         transmission=alpha,
+        x_cut=x_cut,
     )
 
     quantum_check(material_a, material_b, temperature, flags)

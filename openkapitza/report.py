@@ -96,6 +96,14 @@ def render(result: JointResult, *, show_samples: bool = False) -> str:
             + (f", {mc.n_failed} failed" if mc.n_failed else "") + ")")
         add("  NOTE: inputs with no stated uncertainty were held fixed, so this")
         add("        band is a LOWER BOUND on the true uncertainty.")
+        drift = mc.median / mc.nominal if mc.nominal else 1.0
+        if abs(drift - 1.0) > 0.02:
+            add(f"  NOTE: the median sits {(drift - 1.0) * 100:+.1f} % off the nominal")
+            add("        case. The sampler is median-preserving, so this is")
+            add("        propagation, not sampling: H_c is the minimum of two")
+            add("        uncertain hardnesses, and the softer realisation is")
+            add("        systematically softer than the nominal value. Narrowing")
+            add("        the hardness uncertainty removes most of the gap.")
         add("")
 
     add("-- caveats " + "-" * 61)

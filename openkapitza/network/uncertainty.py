@@ -48,6 +48,18 @@ class MonteCarloResult:
 def sample_lognormal(q: Quantity, rng: random.Random) -> float:
     """Draw one sample of a positive quantity from its stated uncertainty.
 
+    The distribution is MEDIAN-preserving: the nominal value is the median of
+    the samples, so a stated "+/- 30 %" is symmetric in log space, which is
+    how a relative uncertainty on a positive quantity is normally meant.
+
+    The alternative -- preserving the arithmetic mean, mu = ln(x) - sigma^2/2 --
+    puts the median BELOW the nominal for every input. Those shifts then
+    propagate through 1/H_c and the other reciprocal terms and compound, so
+    the reported median of the joint conductance drifts away from the nominal
+    case (measured at +7.6 % for a representative stainless joint) with
+    nothing in the report to explain the gap. Centring on the median keeps
+    "nominal" and "median" the same quantity.
+
     A quantity with no uncertainty is returned unchanged -- "unquantified" is
     treated as "do not perturb", and the resulting band is therefore a lower
     bound on the true uncertainty. The report says so.
@@ -57,8 +69,7 @@ def sample_lognormal(q: Quantity, rng: random.Random) -> float:
     rel = q.uncertainty / q.si
     # sigma of the underlying normal that reproduces this relative spread
     sigma = math.sqrt(math.log(1.0 + rel * rel))
-    mu = math.log(q.si) - 0.5 * sigma * sigma
-    return math.exp(rng.gauss(mu, sigma))
+    return math.exp(rng.gauss(math.log(q.si), sigma))
 
 
 def propagate(
