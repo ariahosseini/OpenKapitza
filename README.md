@@ -215,13 +215,82 @@ tests/
   test_benchmarks.py  skips until a dataset is supplied
 ```
 
+## Phase 1 — direct NEMD and the compute layer
+
+**Not yet run against LAMMPS.** No LAMMPS binary exists in CI, so the decks
+this generates have never been executed. Everything around that boundary is
+verified: extraction against synthetic profiles with a known answer, parsers
+round-tripped against LAMMPS-format files, decks checked directive by
+directive, job runners driven through real success and failure paths. Treat
+the first real run as a shakedown.
+
+### Extraction is the piece that matters
+
+Differencing the bins either side of the interface does not give the jump. It
+gives the jump plus the bulk gradient across the distance to those bins:
+
+```
+dT_naive = dT_true + q·(dz_A/k_A + dz_B/k_B)
+```
+
+Both terms are positive, so it **overstates** the jump and understates h_K —
+and the error is proportional to q, so it masquerades as physical flux
+dependence and survives a careless convergence check. `md/profile.py` fits
+each side's linear region and extrapolates both to the interface plane.
+
+Against synthetic profiles with a planted 8.000 K jump:
+
+| case | extrapolated fit | adjacent bins |
+|---|---|---|
+| clean | +0.00 % | +0.20 % |
+| noise 0.4 K | +1.08 % | +10.85 % |
+| interface curvature 1.5 K | +3.59 % | +33.75 % |
+| wide curvature 6 nm | +26.09 % | +68.95 % |
+
+Across a flux sweep the fit's error stays flat at +3.7 % while the naive error
+holds near +22 % and climbs with flux — the signature that makes it dangerous.
+
+Quality gating is on the **standard error of the extrapolation**, not R².
+With a shallow gradient R² measures signal-to-noise, not linearity, and
+rejects perfectly good fits. The standard error of the mean response at the
+interface grows with the distance extrapolated, which is the right penalty,
+and it gives h_K an honest uncertainty instead of a pass/fail.
+
+`NEMDGeometry` publishes the exact bulk ranges and hands them to the
+extractor. Guessing the fit window as a fraction leaves thermostatted bins in
+the fit and biases the jump low — found during validation, now flagged.
+
+### Compute layer
+
+`JobRunner` submits and returns immediately; nothing blocks on a run that
+takes days. Handles are JSON and survive the session, so a job can be picked
+up later — which is what lets the Phase-3 agent put a run behind an interrupt.
+
+Two bugs worth recording, both found by a test hanging rather than failing:
+an unreaped child becomes a **zombie** and answers `os.kill(pid, 0)`, so
+`poll()` reported RUNNING forever; and a command containing `exit N`
+terminated the wrapper before the exit status was recorded. Both are fixed
+and regression-tested, including `kill -9 $$`.
+
+The cost model feeds Phase 0's gate — the continuum model says how much h_K
+could move the answer, this says what finding out costs. Same 40k-atom system:
+0.2 node-hours on Stillinger–Weber, 248 on an MLIP.
+
+### Convergence
+
+Four axes: cross-section, length, duration, flux. Flux linearity is a
+*validity* test, not a convergence test — h_K = q/ΔT only means anything if
+ΔT ∝ q through the origin. A significant intercept means a fixed offset that
+is not the interface.
+
 ## Next
 
-- **Phase 1** — `JobRunner` protocol (local + SLURM) and direct NEMD with
-  Tier-1 potentials. ΔT from linear fits extrapolated to the interface plane,
-  not adjacent bin temperatures. Validate h_K on Si/Ge.
 - **Phase 2** — structure module: crystalline supercell matching, then
   melt-quench with quench-rate reporting and RDF/bond-angle validation.
 - **Phase 3** — LangGraph agent layer wrapping Phases 0–2.
 - **Phase 4** — Tier-2 MLIPs behind a phonon-DOS/elastic-constant gate, the
-  temperature-fluctuation equilibrium cross-check, accommodation-coefficient MD.
+  temperature-fluctuation equilibrium cross-check (not Green–Kubo),
+  accommodation-coefficient MD.
+
+Still outstanding from Phase 0: **no comparison against a measured joint
+conductance.** `tests/benchmarks/` remains empty by design.

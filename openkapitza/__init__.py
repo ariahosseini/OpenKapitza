@@ -22,7 +22,7 @@ from .pipeline import JointResult, run_continuum
 from .report import render
 from .schema import Confidence, FlagSet, Provenance, Quantity, Severity
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "build_joint",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openkapitza"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multiscale thermal contact resistance: contact mechanics, gas-gap conductance and interfacial (Kapitza) resistance combined on a consistent area basis."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,7 +26,7 @@ classifiers = [
 
 # Phase 0 is deliberately near-dependency-free: the continuum core is pure
 # Python plus a YAML parser. numpy, ASE and the MD stack arrive with Phase 1.
-dependencies = ["pyyaml>=6.0"]
+dependencies = ["pyyaml>=6.0", "numpy>=1.24"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
