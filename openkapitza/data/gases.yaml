@@ -1,0 +1,121 @@
+# Interstitial gas properties, SI units throughout.
+#
+# ---------------------------------------------------------------------------
+# VERIFICATION STATUS -- all entries are marked `verified: false`.
+#
+# gamma, Pr and M are standard and likely correct. The Sutherland constants
+# for viscosity and thermal conductivity are engineering-handbook values
+# entered from memory and NOT checked against a primary source; Sutherland's
+# form in particular is a poor fit for helium and hydrogen, where it can be
+# several percent off over a wide temperature span.
+#
+# The mean free path is computed from viscosity via kinetic theory
+#     Lambda = (mu / P) * sqrt(pi * R_specific * T / 2)
+# rather than from a tabulated collision diameter, because viscosity data is
+# better established and the relation is exact within the hard-sphere model.
+# ---------------------------------------------------------------------------
+
+air:
+  name: Dry air
+  verified: false
+  M: 28.97e-3           # kg/mol
+  gamma: 1.400
+  Pr: 0.71
+  mu_ref: 1.716e-5      # Pa*s at T_ref
+  mu_T_ref: 273.15      # K
+  mu_S: 110.4           # K, Sutherland constant for viscosity
+  k_ref: 0.0241         # W/(m*K) at T_ref
+  k_T_ref: 273.15
+  k_S: 194.0            # K, Sutherland constant for conductivity
+
+N2:
+  name: Nitrogen
+  verified: false
+  M: 28.014e-3
+  gamma: 1.400
+  Pr: 0.72
+  mu_ref: 1.663e-5
+  mu_T_ref: 273.15
+  mu_S: 107.0
+  k_ref: 0.0242
+  k_T_ref: 273.15
+  k_S: 150.0
+
+He:
+  name: Helium
+  verified: false
+  M: 4.0026e-3
+  gamma: 1.667
+  Pr: 0.68
+  mu_ref: 1.865e-5
+  mu_T_ref: 273.15
+  mu_S: 79.4
+  k_ref: 0.1420
+  k_T_ref: 273.15
+  k_S: 79.4
+  notes: >
+    Sutherland's law fits helium poorly. Treat k(T) and mu(T) away from 273 K
+    as accurate to a few percent at best. Helium's high conductivity and long
+    mean free path make it the gas most likely to push the gap model into the
+    rarefied regime, so check the M/Y flag.
+
+Ar:
+  name: Argon
+  verified: false
+  M: 39.948e-3
+  gamma: 1.667
+  Pr: 0.67
+  mu_ref: 2.125e-5
+  mu_T_ref: 273.15
+  mu_S: 144.0
+  k_ref: 0.0163
+  k_T_ref: 273.15
+  k_S: 170.0
+
+H2:
+  name: Hydrogen
+  verified: false
+  M: 2.016e-3
+  gamma: 1.405
+  Pr: 0.70
+  mu_ref: 8.411e-6
+  mu_T_ref: 273.15
+  mu_S: 97.0
+  k_ref: 0.168
+  k_T_ref: 273.15
+  k_S: 120.0
+  notes: Sutherland fit is poor, as for helium.
+
+
+# ---------------------------------------------------------------------------
+# Thermal accommodation coefficients.
+#
+# These are the weakest numbers in the whole gap model. Measured values for a
+# single gas/solid pair span an order of magnitude depending on surface
+# cleanliness, adsorbed layers, roughness and temperature. A clean, outgassed
+# surface accommodates far less than the same surface in lab air.
+#
+# The values below are mid-range defaults ONLY, to let the pipeline run. They
+# are always emitted with LOW confidence and a GAP_ACCOMMODATION_DEFAULT flag.
+# For any result that matters, either measure them, take them from a source
+# matched to your actual surface condition, or compute them with the optional
+# MD gas-surface scattering run (Phase 4).
+# ---------------------------------------------------------------------------
+accommodation_defaults:
+  verified: false
+  # keyed by gas, then by solid; `default` applies when the pair is absent
+  He:
+    default: 0.30
+    Si: 0.30
+    Al: 0.30
+    Cu: 0.30
+    SS304: 0.35
+  H2:
+    default: 0.35
+  N2:
+    default: 0.80
+  air:
+    default: 0.85
+  Ar:
+    default: 0.85
+  _fallback: 0.80

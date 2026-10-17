@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openkapitza"
+version = "0.1.0"
+description = "Multiscale thermal contact resistance: contact mechanics, gas-gap conductance and interfacial (Kapitza) resistance combined on a consistent area basis."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Aria Hosseini" }]
+keywords = [
+    "thermal-contact-conductance",
+    "kapitza-resistance",
+    "molecular-dynamics",
+    "heat-transfer",
+    "cooper-mikic-yovanovich",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3",
+]
+
+# Phase 0 is deliberately near-dependency-free: the continuum core is pure
+# Python plus a YAML parser. numpy, ASE and the MD stack arrive with Phase 1.
+dependencies = ["pyyaml>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["openkapitza*"]
+
+[tool.setuptools.package-data]
+openkapitza = ["data/*.yaml"]

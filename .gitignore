@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+*.zip
+
+# Simulation scratch (Phase 1+): LAMMPS runs produce large trajectories that
+# must not enter version control. Keep inputs and extracted results, not dumps.
+*.lammpstrj
+*.dump
+log.lammps
+restart.*
+runs/
+scratch/

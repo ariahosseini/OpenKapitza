@@ -1,0 +1,115 @@
+"""Caveat flags.
+
+The agent's contract with the user is that it never hands back a number
+without saying what might be wrong with it. Flags are how the deterministic
+layer states that; the LLM layer may only *render* flags, never invent or
+suppress them.
+
+Each flag carries a stable code so the agent layer can key explanations and
+remedies off it rather than off prose.
+"""
+
+from __future__ import annotations
+
+import enum
+from dataclasses import dataclass, field
+
+
+class Severity(enum.IntEnum):
+    INFO = 0        # worth knowing, does not change the answer
+    CAUTION = 1     # answer is usable but the stated uncertainty is optimistic
+    WARNING = 2     # a model is being used outside its fitted range
+    CRITICAL = 3    # the answer is probably wrong; do not report it unqualified
+
+    @property
+    def label(self) -> str:
+        return self.name.lower()
+
+
+@dataclass(frozen=True)
+class Flag:
+    code: str
+    severity: Severity
+    message: str
+    remedy: str | None = None
+    context: dict[str, float] = field(default_factory=dict)
+
+    def __str__(self) -> str:
+        txt = f"[{self.severity.label.upper()}] {self.code}: {self.message}"
+        if self.remedy:
+            txt += f"\n    -> {self.remedy}"
+        return txt
+
+
+@dataclass
+class FlagSet:
+    """Accumulator passed down through a calculation."""
+
+    flags: list[Flag] = field(default_factory=list)
+
+    def add(
+        self,
+        code: str,
+        severity: Severity,
+        message: str,
+        remedy: str | None = None,
+        **context: float,
+    ) -> None:
+        """Record a caveat. Identical (code, message) pairs are deduplicated.
+
+        Deduplication matters because the same material can be loaded twice in
+        a symmetric joint, and a report that says the same thing twice trains
+        the reader to skim the caveats.
+        """
+        for existing in self.flags:
+            if existing.code == code and existing.message == message:
+                return
+        self.flags.append(
+            Flag(code=code, severity=severity, message=message, remedy=remedy, context=context)
+        )
+
+    def extend(self, other: "FlagSet") -> None:
+        self.flags.extend(other.flags)
+
+    @property
+    def worst(self) -> Severity:
+        return max((f.severity for f in self.flags), default=Severity.INFO)
+
+    def at_least(self, severity: Severity) -> list[Flag]:
+        return [f for f in self.flags if f.severity >= severity]
+
+    def codes(self) -> set[str]:
+        return {f.code for f in self.flags}
+
+    def __iter__(self):
+        return iter(self.flags)
+
+    def __len__(self) -> int:
+        return len(self.flags)
+
+    def render(self) -> str:
+        if not self.flags:
+            return "No caveats raised."
+        ordered = sorted(self.flags, key=lambda f: -f.severity)
+        return "\n".join(str(f) for f in ordered)
+
+
+# Stable codes used across the package. Keeping them in one place stops the
+# agent layer from pattern-matching on message text.
+class Code:
+    CMY_PRESSURE_RANGE = "CMY_PRESSURE_RANGE"
+    CMY_SLOPE_ESTIMATED = "CMY_SLOPE_ESTIMATED"
+    HARDNESS_FALLBACK = "HARDNESS_FALLBACK"
+    REGIME_AMBIGUOUS = "REGIME_AMBIGUOUS"
+    REGIME_ELASTIC = "REGIME_ELASTIC"
+    GAP_RAREFIED = "GAP_RAREFIED"
+    GAP_ACCOMMODATION_DEFAULT = "GAP_ACCOMMODATION_DEFAULT"
+    GAP_CONTINUUM_BREAKDOWN = "GAP_CONTINUUM_BREAKDOWN"
+    KAPITZA_PLACEHOLDER = "KAPITZA_PLACEHOLDER"
+    KAPITZA_NEGLIGIBLE = "KAPITZA_NEGLIGIBLE"
+    KAPITZA_DOMINANT = "KAPITZA_DOMINANT"
+    QUANTUM_EFFECTS = "QUANTUM_EFFECTS"
+    MATERIAL_UNVERIFIED = "MATERIAL_UNVERIFIED"
+    GAS_UNVERIFIED = "GAS_UNVERIFIED"
+    AREA_FRACTION_MODEL = "AREA_FRACTION_MODEL"
+    CONTACT_SATURATED = "CONTACT_SATURATED"

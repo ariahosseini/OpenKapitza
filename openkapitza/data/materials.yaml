@@ -1,0 +1,155 @@
+# Solid material properties, SI units throughout.
+#
+# ---------------------------------------------------------------------------
+# VERIFICATION STATUS -- READ THIS BEFORE TRUSTING ANY NUMBER HERE.
+#
+# Every entry is marked `verified: false`. These are starting values entered
+# to make the package runnable; they have NOT been checked against primary
+# sources. Before publishing anything, replace each with a cited value and
+# set `verified: true`.
+#
+# Reliability varies sharply by field:
+#   k, rho, E, nu, v_long, v_trans, theta_debye
+#       -- standard handbook properties, likely close to correct, but still
+#          unverified here and in several cases anisotropic values reduced to
+#          a single polycrystalline-ish number.
+#   Hv  -- MOST SUSPECT FIELD. Microhardness depends strongly on processing,
+#          surface finish, indenter load and work hardening. The values below
+#          are rough mid-range figures and can be wrong by a factor of 2+ for
+#          a specific sample. Always prefer the user's own indentation data.
+#   c1, c2 (Song-Yovanovich Vickers correlation coefficients)
+#       -- deliberately left null. These are fitted per material from
+#          load-dependent indentation data and are NOT safely guessable.
+#          With them absent the code falls back to H_c = Hv and flags it.
+# ---------------------------------------------------------------------------
+
+Si:
+  name: Silicon (single crystal)
+  phase: crystalline
+  verified: false
+  k: 148.0              # W/(m*K) at 300 K
+  rho: 2329.0           # kg/m^3
+  E: 160.0e9            # Pa, averaged; Si is strongly anisotropic (130-188 GPa)
+  nu: 0.22
+  v_long: 8433.0        # m/s
+  v_trans: 5843.0       # m/s
+  theta_debye: 645.0    # K
+  number_density: 5.00e28   # atoms/m^3; rho/M * N_A, M = 28.085 g/mol
+  Hv: 11.0e9            # Pa, rough; brittle, indentation-size dependent
+  c1: null
+  c2: null
+  notes: >
+    Elastic constants are direction dependent; the single E/nu pair here is an
+    approximation adequate for a plasticity-index screen, not for a stress
+    analysis.
+
+Ge:
+  name: Germanium (single crystal)
+  phase: crystalline
+  verified: false
+  k: 60.0
+  rho: 5323.0
+  E: 103.0e9
+  nu: 0.26
+  v_long: 4914.0
+  v_trans: 3537.0
+  theta_debye: 374.0
+  number_density: 4.42e28   # atoms/m^3; rho/M * N_A, M = 72.63 g/mol
+  Hv: 7.6e9
+  c1: null
+  c2: null
+  notes: Anisotropic elastic constants reduced to one pair, as for Si.
+
+Al:
+  name: Aluminium (pure, annealed)
+  phase: crystalline
+  verified: false
+  k: 237.0
+  rho: 2700.0
+  E: 70.0e9
+  nu: 0.35
+  v_long: 6420.0
+  v_trans: 3040.0
+  theta_debye: 428.0
+  number_density: 6.03e28   # atoms/m^3; rho/M * N_A, M = 26.982 g/mol
+  Hv: 0.35e9            # Pa; VERY processing dependent, 0.2-1.2 GPa range
+  c1: null
+  c2: null
+  notes: >
+    Work-hardens heavily under indentation, so a single Hv is a poor summary.
+    Alloys (6061, 2024) are several times harder than pure annealed Al.
+
+Cu:
+  name: Copper (pure, annealed)
+  phase: crystalline
+  verified: false
+  k: 401.0
+  rho: 8960.0
+  E: 120.0e9
+  nu: 0.34
+  v_long: 4760.0
+  v_trans: 2325.0
+  theta_debye: 343.0
+  number_density: 8.49e28   # atoms/m^3; rho/M * N_A, M = 63.546 g/mol
+  Hv: 0.6e9             # Pa; 0.4-1.2 GPa depending on temper
+  c1: null
+  c2: null
+  notes: As with Al, temper dominates the hardness.
+
+SiO2:
+  name: Silica (fused / amorphous)
+  phase: amorphous
+  verified: false
+  k: 1.38
+  rho: 2200.0
+  E: 73.0e9
+  nu: 0.17
+  v_long: 5968.0
+  v_trans: 3764.0
+  theta_debye: 470.0    # K; ill-defined for a glass, used only for the
+  number_density: 6.61e28   # atoms/m^3; 3 atoms per SiO2 unit, M = 60.08 g/mol
+                        # quantum-effects screen, never for transport
+  Hv: 8.9e9
+  c1: null
+  c2: null
+  notes: >
+    Debye temperature is not strictly meaningful for an amorphous solid. It is
+    retained only as a rough scale for the low-temperature quantum warning, and
+    any model that uses it for transport should be treated as unreliable.
+
+SS304:
+  name: Stainless steel 304
+  phase: crystalline
+  verified: false
+  k: 16.2
+  rho: 8000.0
+  E: 193.0e9
+  nu: 0.29
+  v_long: 5790.0
+  v_trans: 3100.0
+  theta_debye: 477.0
+  number_density: 8.65e28   # atoms/m^3; treated as Fe, M = 55.845 g/mol
+  Hv: 2.0e9             # Pa; 1.5-2.5 GPa typical, cold work raises it
+  c1: null
+  c2: null
+  notes: >
+    A common thermal-contact-conductance benchmark material. Published
+    Yovanovich-style joint conductance data exists for SS/SS pairs in vacuum
+    and in gas, which is why it is included here.
+
+Ni200:
+  name: Nickel 200
+  phase: crystalline
+  verified: false
+  k: 70.0
+  rho: 8890.0
+  E: 207.0e9
+  nu: 0.31
+  v_long: 5600.0
+  v_trans: 2960.0
+  theta_debye: 450.0
+  number_density: 9.12e28   # atoms/m^3; M = 58.693 g/mol
+  Hv: 1.6e9
+  c1: null
+  c2: null
+  notes: Another classic contact-conductance benchmark material.
