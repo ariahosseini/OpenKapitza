@@ -490,6 +490,33 @@ difference that otherwise passes straight into h_K.
 
 ---
 
+### Benchmark data may be buried in a thesis appendix, not the papers
+
+**Symptom.** The papers that fit a correlation show agreement only as
+nondimensionalised plots. PDF table extraction returns empty cells. The
+primary dissertations are not openly available.
+
+**Where to look instead.** A later thesis that *validates a model against*
+those datasets often tabulates them in full, because the author needed the
+numbers. Bahrami's 2004 Waterloo thesis, Appendix A.2, carries 207 conforming-
+contact points from Hegazy (1985) as force and measured resistance, plus a
+metadata table giving σ, m, the Vickers coefficients, k_s at the test
+temperature and the specimen radius.
+
+**Unit traps when using such a table.** Resistance is quoted in K/W, not per
+unit area, so the specimen size is needed: `P = F/A`, `h = 1/(R·A)`. Check
+whether the quoted radius is radius or diameter by reconstructing the pressure
+range and comparing against the range the source states elsewhere — here
+treating b_L as the radius gives 0.41–8.89 MPa against a published
+0.459–8.769, and as the diameter gives 1.6–35.5.
+
+**Rule.** Benchmark against the properties the source used, not your own
+database. These tests ran at 110–145 °C where stainless conductivity is
+~19 W/m·K against 16.2 at 300 K; using the database value puts ~19 % into
+h_c and the suite grades the database instead of the correlation.
+
+---
+
 ## 6. Working rules
 
 ### Do not fabricate data to make something run

@@ -168,6 +168,30 @@ The residual ~6 % median–nominal gap is *not* a defect: it comes from
 `H_c = min(Hv_a, Hv_b)`, where the softer of two uncertain realisations is
 systematically softer than nominal. The report explains it when it exceeds 2 %.
 
+## Benchmark: validated against 207 measured points
+
+The contact path is no longer unvalidated. `tests/benchmarks/joint_conductance.csv`
+holds 207 measurements — Ni 200 and SS 304, conforming rough flats in a
+vacuum, 0.41–8.89 MPa — from Bahrami (2004) Appendix A.2, data originally
+Hegazy (1985).
+
+| | |
+|---|---|
+| geometric mean ratio | **1.030** |
+| RMS difference | **12.7 %** |
+| within a factor of 2 | **100 %** (207/207) |
+
+Roughness spans 0.48 to 13.94 µm, a factor of 29, with no trend in the ratio.
+Ni 200 and SS 304 independently land at gm = 1.030 — two metals differing
+fourfold in conductivity agreeing to the same factor. The published figure for
+the *extended* CMY correlation on these materials is 3.95–6.43 % RMS; this
+package implements the plainer 1982 recorrelation.
+
+**What it does not cover:** every point is in vacuum, so the gap model is
+untouched and the area-scaling bridge contributes nothing measurable; eight of
+nine specimens are plastic, so the elastic branch has no clean test. Details
+and the remaining gaps are in `tests/benchmarks/SOURCES.md`.
+
 ## Honest status of the bundled data
 
 **Every entry in `data/*.yaml` is marked `verified: false` and none has been
@@ -186,10 +210,10 @@ checked against a primary source.** Reliability varies sharply:
   per material from load-dependent indentation data and are not safely
   guessable. Supply your own.
 
-No measured joint-conductance data ships with the package. `tests/benchmarks/`
-is empty by design — inventing plausible experimental numbers to turn a
-validation suite green is worse than having none. See that directory's README
-for what to populate it with.
+Measured joint-conductance data now ships in `tests/benchmarks/`, transcribed
+from a published source by `scripts/build_benchmark_csv.py` so every number is
+auditable. It covers the contact path in vacuum only; the gap path still has
+no measured comparison.
 
 **Si/Ge cannot validate Phase 0.** Two polished semiconductors in vacuum
 exercise neither the plastic branch nor the gas model. Phase 0 needs metal

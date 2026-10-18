@@ -1,9 +1,76 @@
-# Where the benchmark data lives
+# Benchmark data
 
-`joint_conductance.csv` is still empty. This records what was found in an open
-literature search, what it does and does not give, and what is still needed.
+`joint_conductance.csv` holds **207 measured points**: Ni 200 and SS 304,
+conforming rough flats in a vacuum, 0.41–8.89 MPa, from Bahrami (2004) PhD
+thesis Appendix A.2 (data originally Hegazy 1985). `scripts/build_benchmark_csv.py`
+regenerates it and carries the transcription, so the numbers are auditable.
 
-## What the search established
+## Result
+
+| | |
+|---|---|
+| points | 207 (115 Ni 200, 92 SS 304) |
+| geometric mean ratio | **1.030** |
+| RMS difference | **12.7 %** |
+| within a factor of 2 | **100 %** |
+| worst single point | 0.62× |
+
+Per specimen, across roughness from 0.48 to 13.94 µm — a factor of 29 — with
+no trend in the ratio:
+
+| specimen | σ (µm) | m | n | gm ratio | RMS % |
+|---|---|---|---|---|---|
+| PNI0102 | 0.90 | 0.110 | 23 | 0.994 | 11.5 |
+| PNI0304 | 3.43 | 0.190 | 23 | 1.019 | 11.7 |
+| PNI0506 | 4.24 | 0.188 | 23 | 1.105 | 14.7 |
+| PNI0708 | 9.53 | 0.228 | 23 | 0.986 | 10.8 |
+| PNI0910 | 13.94 | 0.233 | 23 | 1.048 | 9.9 |
+| PSS0102 | 0.48 | 0.072 | 23 | 0.988 | 7.0 |
+| PSS0304 | 2.71 | 0.116 | 23 | 1.144 | 19.5 |
+| PSS0506 | 5.88 | 0.146 | 23 | 0.994 | 12.9 |
+| PSS0708 | 10.95 | 0.190 | 23 | 1.003 | 12.2 |
+
+Ni 200 and SS 304 both land at gm = 1.030 independently, which is better
+evidence than either alone: two metals differing fourfold in conductivity
+agreeing to the same factor is hard to get by accident.
+
+For scale, the published figure for the **extended** CMY correlation on these
+same materials is 3.95–6.43 % RMS. This package implements the plainer 1982
+recorrelation, so 12.7 % is the expected neighbourhood rather than a shortfall.
+
+**One specimen is in the elastoplastic transition.** PSS0102 has ψ = 2.04,
+inside the ambiguous band, so the regime selector reports both branches. The
+measurement prefers plastic (gm 0.988, RMS 7.0 %) over elastic (gm 0.906,
+RMS 10.5 %) — but the elastic branch is not absurd there, which is what the
+band is supposed to mean.
+
+## What this does NOT validate
+
+- **The gap model.** Every point is in a vacuum, so `h_g` is zero throughout
+  and nothing in `openkapitza/gap` is exercised. Its *form* is confirmed
+  against the literature; its predictions are not.
+- **The area-scaling bridge.** The Kapitza term is negligible at these
+  conductances, so `1/(ξ·h_K)` contributes nothing measurable and the central
+  Phase-0 correction is untested against experiment.
+- **The elastic branch.** Eight of nine specimens are plastic and the ninth
+  is ambiguous. Mikic's correlation has no clean test here.
+- **`materials.yaml`.** Properties come from the CSV, per row, as the source
+  reported them. The tests ran at 110–145 °C where stainless conductivity is
+  ~19 W/m·K against the 16.2 at 300 K in the database; using the database
+  value would put ~19 % into `h_c` and the suite would be grading the
+  database rather than the correlation.
+
+## Still wanted
+
+Gas-filled data on characterised specimens, which would exercise the gap
+path. Song (1988) is the dataset — SS 304 and Ni 200 with N₂, Ar and He from
+10⁻⁵ to 650 torr — and its experimental chapter is openly hosted as
+`mhtl88-7.pdf` on the Waterloo MHTL site, but it is a scan with no text
+layer.
+
+## What was found in the literature search
+
+### Confirmations
 
 **The gap model's form is externally confirmed.** Bahrami, Yovanovich & Culham,
 *Thermal joint resistance of conforming rough surfaces with gas-filled gaps*
