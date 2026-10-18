@@ -658,6 +658,61 @@ class TestParsers(unittest.TestCase):
         prof = parse_profile(path, g, FlagSet())
         self.assertTrue(np.allclose(prof.T, 300.0))
 
+    def test_thermo_parsing_and_health_checks(self):
+        """Both conditions the first successful shakedown exhibited.
+
+        Mean temperature 275 K against a 300 K setpoint (equilibration
+        unfinished) and 6.4 GPa internal pressure (the cell strained by
+        building both sides on one lattice constant). Numbers taken from
+        that run's log.
+        """
+        from openkapitza.md.nemd import check_run_health, parse_log_thermo
+        path = self.tmp / "log.lammps"
+        path.write_text(
+            "Per MPI rank memory allocation\n"
+            "   Step          Temp          PotEng       TotEng       Press\n"
+            "     20000   270.29788   -20551.175   -20377.913   64316.599\n"
+            "     30000   273.95657   -20570.748   -20395.142   64722.733\n"
+            "     40000   281.06879   -20587.022   -20406.857   63898.313\n"
+            "Loop time of 78.0349 on 1 procs\n",
+            encoding="utf-8",
+        )
+        rows = parse_log_thermo(path)
+        self.assertEqual(len(rows), 3)
+        self.assertAlmostEqual(rows[0]["Temp"], 270.29788)
+        self.assertAlmostEqual(rows[2]["Press"], 63898.313)
+
+        f = FlagSet()
+        check_run_health(rows, 300.0, f)
+        self.assertIn(Code.NEMD_UNEQUILIBRATED, f.codes())
+        self.assertIn(Code.NEMD_CELL_STRESS, f.codes())
+
+    def test_healthy_run_raises_nothing(self):
+        from openkapitza.md.nemd import check_run_health, parse_log_thermo
+        path = self.tmp / "log.lammps"
+        path.write_text(
+            "   Step          Temp          Press\n"
+            "     10000   299.4   120.5\n"
+            "     20000   300.8  -90.2\n"
+            "Loop time of 1.0 on 1 procs\n",
+            encoding="utf-8",
+        )
+        f = FlagSet()
+        check_run_health(parse_log_thermo(path), 300.0, f)
+        self.assertEqual(f.codes(), set())
+
+    def test_multiple_thermo_blocks_are_all_collected(self):
+        from openkapitza.md.nemd import parse_log_thermo
+        path = self.tmp / "log.lammps"
+        path.write_text(
+            "   Step          Temp\n     0   300.0\n  1000   301.0\n"
+            "Loop time of 1.0\n"
+            "   Step          Temp\n  2000   299.0\n  3000   300.5\n"
+            "Loop time of 1.0\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(len(parse_log_thermo(path)), 4)
+
     def test_reservoir_energy_uses_the_difference(self):
         path = self.tmp / "e.dat"
         path.write_text("# time E_hot E_cold\n0.0 10.0 -10.0\n"

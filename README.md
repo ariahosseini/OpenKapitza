@@ -217,12 +217,44 @@ tests/
 
 ## Phase 1 — direct NEMD and the compute layer
 
-**Not yet run against LAMMPS.** No LAMMPS binary exists in CI, so the decks
-this generates have never been executed. Everything around that boundary is
-verified: extraction against synthetic profiles with a known answer, parsers
-round-tripped against LAMMPS-format files, decks checked directive by
-directive, job runners driven through real success and failure paths. Treat
-the first real run as a shakedown.
+**The pipeline has run end to end against real LAMMPS** (30 Sep 2026,
+macOS/arm64, Si/Ge with SiCGe.tersoff): deck generation, execution, profile
+parsing, reservoir-energy parsing and extraction all completed, exit 0.
+
+**No physics result has been validated.** The shakedown cell is 21 nm long
+and 2.17 nm square, run for 60 ps, and it returned h_K = 1348 MW/m²·K
+against a published Si/Ge range of 266–368. Nine flags explain the gap:
+37 % standard error on ΔT, R² of 0.24/0.11 on the fits, 28 % sensitivity to
+the fit window, 15 % reservoir flux imbalance, and apparent conductivities
+7 % and 36 % of bulk. The code reported every one of them rather than
+presenting the number as an answer. That is the behaviour being verified
+here, not the value.
+
+Six defects were found by running on a real machine that 144 Linux-side
+tests, an independent numerical audit and synthetic-profile validation had
+all missed. They are listed under *What running it actually found* below.
+
+### What running it actually found
+
+Each of these survived every form of verification done beforehand, because
+all of it ran on Linux against code I had written, not against LAMMPS.
+
+| # | Defect | Why nothing caught it |
+|---|---|---|
+| 1 | `_pid_alive` read `/proc`, which does not exist on macOS, so a SIGKILLed job reported RUNNING forever | Linux-only syscall path; the suite hung rather than failed |
+| 2 | The registry named `SiGe.sw`, which LAMMPS does not ship | A filename written from assumption |
+| 3 | Element labels are `Si(D)`, not `Si` | Assumed the plain chemical symbol |
+| 4 | Cross terms exist for only one of three Si parameterizations | Reading labels was not enough; completeness had to be checked |
+| 5 | `fix ave/chunk` was missing its chunk ID | LAMMPS argument order, discovered two minutes into a run |
+| 6 | The averaging window reached back before the fix existed, so the profile file was created empty with no error | Only visible after a full successful run |
+
+Defects 2–4 are the same error narrowing: treating "what the file probably
+contains" as knowledge. The fix was to make the code interrogate the
+potential file and refuse combinations it cannot verify.
+
+`validate_deck()` and `check_run_health()` now catch classes 5, 6 and the
+cell-stress problem before or immediately after a run, instead of minutes in
+or not at all.
 
 ### Start here once LAMMPS is installed
 

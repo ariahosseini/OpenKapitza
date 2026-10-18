@@ -31,9 +31,11 @@ from openkapitza.md.nemd import (
     NEMDGeometry,
     NEMDSpec,
     build_input_deck,
+    check_run_health,
     check_spec,
     complete_pairs,
     match_species,
+    parse_log_thermo,
     parse_profile,
     parse_reservoir_energy,
     potential_elements,
@@ -222,6 +224,11 @@ def main() -> int:
               "executed. Deck syntax, the potential file and the fix ave/chunk\n"
               "column layout are the likely culprits.")
         return 1
+
+    # Did the run do what the deck asked? Checked before anything is
+    # extracted from it.
+    thermo = parse_log_thermo(wd / "log.lammps") if (wd / "log.lammps").exists() else []
+    check_run_health(thermo, spec.temperature, flags)
 
     print("\nParsing output ...")
     try:

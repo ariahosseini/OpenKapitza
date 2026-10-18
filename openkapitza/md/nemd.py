@@ -744,6 +744,106 @@ def parse_profile(
     )
 
 
+def parse_log_thermo(path: Path | str) -> list[dict[str, float]]:
+    """Thermo rows from a LAMMPS log, as dicts keyed by column name.
+
+    A thermo block is a header line beginning with "Step" followed by numeric
+    rows, ending at "Loop time". Several blocks appear in one log, one per
+    `run`; all are returned in order.
+    """
+    rows: list[dict[str, float]] = []
+    headers: list[str] | None = None
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            parts = line.split()
+            if not parts:
+                continue
+            if parts[0] == "Step":
+                headers = parts
+                continue
+            if headers is None:
+                continue
+            if len(parts) == len(headers) and all(_is_number(p) for p in parts):
+                rows.append({h: float(v) for h, v in zip(headers, parts)})
+            else:
+                headers = None
+    return rows
+
+
+def check_run_health(
+    rows: list[dict[str, float]],
+    target_temperature: float,
+    flags: FlagSet,
+    *,
+    temperature_tolerance: float = 0.08,
+    max_pressure_GPa: float = 1.0,
+) -> None:
+    """Did the run actually do what the deck asked?
+
+    Two things the first successful shakedown showed are worth checking
+    automatically rather than reading off a log by eye.
+
+    A mean temperature well away from the setpoint means equilibration did
+    not finish; the system is still converting kinetic to potential energy
+    and nothing measured on top of it is a steady state.
+
+    A large internal pressure means the cell is strained. Building both
+    sides on one lattice constant put 6.4 GPa into a Si/Ge cell -- the same
+    4 % mismatch the strain flag describes, now with a magnitude. Pressure
+    of that order shifts phonon frequencies enough to change h_K outright,
+    so it is reported as a number rather than a caution.
+    """
+    if not rows:
+        flags.add(
+            Code.NEMD_UNEQUILIBRATED,
+            Severity.CAUTION,
+            "No thermo output could be read from the log, so the run could "
+            "not be checked for equilibration or cell stress.",
+            remedy="Confirm thermo_style and that the log was captured.",
+        )
+        return
+
+    temps = [r["Temp"] for r in rows if "Temp" in r]
+    if temps:
+        mean_T = sum(temps) / len(temps)
+        drift = abs(mean_T - target_temperature) / target_temperature
+        if drift > temperature_tolerance:
+            flags.add(
+                Code.NEMD_UNEQUILIBRATED,
+                Severity.WARNING,
+                f"Mean temperature over the run was {mean_T:.0f} K against a "
+                f"{target_temperature:.0f} K setpoint ({drift * 100:.0f} % off).",
+                remedy=(
+                    "Equilibration has not finished: the system is still "
+                    "relaxing, so the profile measured on top of it is not a "
+                    "steady state. Lengthen the equilibration stage, and "
+                    "check for stored strain energy draining into the "
+                    "kinetic degrees of freedom."
+                ),
+                mean_T=mean_T,
+            )
+
+    presses = [r["Press"] for r in rows if "Press" in r]
+    if presses:
+        mean_P_GPa = (sum(presses) / len(presses)) / 1e4   # bar -> GPa
+        if abs(mean_P_GPa) > max_pressure_GPa:
+            flags.add(
+                Code.NEMD_CELL_STRESS,
+                Severity.WARNING,
+                f"Mean internal pressure was {mean_P_GPa:.2f} GPa; a relaxed "
+                f"crystal at this temperature sits near zero.",
+                remedy=(
+                    "The cell is strained, almost always from building both "
+                    "sides on one lattice constant. Stress of this magnitude "
+                    "shifts phonon frequencies and changes h_K directly, so "
+                    "the result is not the unstrained interface. Use a "
+                    "strain-minimising supercell, or relax the cell before "
+                    "imposing the gradient."
+                ),
+                pressure_GPa=mean_P_GPa,
+            )
+
+
 def parse_reservoir_energy(path: Path | str) -> tuple[float, float, float]:
     """Read the reservoir accumulators: (E_hot J, E_cold J, duration s).
 
