@@ -249,6 +249,7 @@ class NEMDSpec:
     steady_steps: int = 500_000
     production_steps: int = 2_000_000
     profile_every: int = 100
+    profile_frames: int = 4
     damping_fs: float = 100.0
     spot_pressure_GPa: float | None = None
     seed: int = 12345
@@ -365,7 +366,14 @@ fix             cold gcold langevin {t_cold:.2f} {t_cold:.2f} {damp_ps:.4f} {see
 run             {steady_steps}
 
 # ---- production -----------------------------------------------------------
-# Reset the energy accumulators so the measured flux covers the production
+# Restart the clock. fix ave/chunk writes on multiples of Nfreq and averages
+# backwards over Nevery*Nrepeat steps, so on a non-zero starting timestep the
+# window reaches back before the fix existed and NO frame is written at all --
+# the file ends up holding nothing but its header. Resetting makes the
+# averaging windows align exactly with this run.
+reset_timestep  0
+
+# Recreate the reservoirs so their energy accumulators cover the production
 # window only. The flux comes from these, never from a nominal setpoint.
 unfix           hot
 unfix           cold
@@ -378,7 +386,7 @@ fix             cold gcold langevin {t_cold:.2f} {t_cold:.2f} {damp_ps:.4f} {see
 # computes, fixes, or variables used in fix ave/chunk command".
 compute         layers gmobile chunk/atom bin/1d z lower {bin_width:.4f} units box
 fix             profile gmobile ave/chunk {profile_every} {n_profile_samples} \
-{production_steps} layers temp file temperature_profile.dat
+{profile_window} layers temp file temperature_profile.dat
 
 variable        ehot  equal f_hot
 variable        ecold equal f_cold
@@ -460,7 +468,15 @@ def build_input_deck(spec: NEMDSpec) -> str:
     else:
         raise ValueError(f"unknown structure_mode {spec.structure_mode!r}")
 
-    n_samples = max(1, spec.production_steps // spec.profile_every)
+    # Emit several frames rather than one average over everything: the
+    # extractor uses the last, and the earlier ones make drift visible if the
+    # run had not actually reached steady state.
+    window = max(
+        spec.profile_every,
+        (spec.production_steps // spec.profile_frames // spec.profile_every)
+        * spec.profile_every,
+    )
+    n_samples = max(1, window // spec.profile_every)
 
     return DECK.format(
         structure_block=structure_block,
@@ -488,6 +504,7 @@ def build_input_deck(spec: NEMDSpec) -> str:
         production_steps=spec.production_steps,
         profile_every=spec.profile_every,
         n_profile_samples=n_samples,
+        profile_window=window,
         bin_width=g.bin_width * a,
         area=(spec.snapped_area if spec.structure_mode == "build" else g.area),
         interface_ang=g.interface_z * a,
@@ -558,6 +575,25 @@ def validate_deck(deck: str) -> list[str]:
             problems.append(
                 f"ave/chunk Nevery*Nrepeat ({nevery * nrepeat}) exceeds Nfreq "
                 f"({nfreq}); the averaging window does not fit"
+            )
+
+    # An ave/chunk whose averaging window predates the fix writes nothing at
+    # all -- the file is created with a header and left empty. Guard it by
+    # requiring the clock to be reset before the fix is defined.
+    chunk_at = next(
+        (i for i, ln in enumerate(lines)
+         if ln.startswith("fix") and "ave/chunk" in ln),
+        None,
+    )
+    if chunk_at is not None:
+        reset_before = any(
+            ln.split()[:2] == ["reset_timestep", "0"] for ln in lines[:chunk_at]
+        )
+        if not reset_before:
+            problems.append(
+                "no 'reset_timestep 0' before the ave/chunk fix; on a non-zero "
+                "starting timestep the averaging window reaches back before "
+                "the fix existed and no frame is ever written"
             )
 
     for ln in lines:

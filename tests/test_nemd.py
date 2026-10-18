@@ -477,6 +477,58 @@ class TestDeck(unittest.TestCase):
                          "the chunk ID must follow Nevery Nrepeat Nfreq")
         self.assertIn("compute         layers", deck)
 
+    def test_clock_is_reset_before_the_profile_fix(self):
+        """Regression: the first complete run produced an EMPTY profile file.
+
+        fix ave/chunk writes on multiples of Nfreq and averages backwards
+        over Nevery*Nrepeat steps. Starting at step 12000 with Nfreq=60000,
+        the only candidate output step was 60000, whose window reached back
+        to step 100 -- 119 samples before the fix existed -- so LAMMPS wrote
+        the header and nothing else. The run cost five minutes to discover.
+        """
+        deck = build_input_deck(self.spec)
+        commands = [ln.split("#", 1)[0].strip() for ln in deck.splitlines()]
+        reset = next(i for i, ln in enumerate(commands)
+                     if ln.split()[:2] == ["reset_timestep", "0"])
+        chunk = next(i for i, ln in enumerate(commands)
+                     if ln.startswith("fix") and "ave/chunk" in ln)
+        self.assertLess(reset, chunk)
+
+    def test_every_averaging_window_fits_inside_the_production_run(self):
+        for production in (20_000, 60_000, 200_000, 2_000_000):
+            spec = NEMDSpec(
+                geometry=NEMDGeometry(), element_a="Si", element_b="Ge",
+                lattice_a=5.431e-10, lattice_b=5.658e-10, temperature=300.0,
+                production_steps=production,
+            )
+            deck = build_input_deck(spec)
+            commands = [ln.split("#", 1)[0] for ln in deck.splitlines()]
+            line = next(ln for ln in commands if "ave/chunk" in ln)
+            after = line.split("ave/chunk")[1].split()
+            every, repeat, freq = (int(x) for x in after[:3])
+            self.assertEqual(freq % every, 0, f"production={production}")
+            self.assertLessEqual(every * repeat, freq, f"production={production}")
+            # with the clock reset, the earliest sample must be >= step 0
+            self.assertGreaterEqual(freq - (repeat - 1) * every, 0)
+            # and at least one output must land inside the run
+            self.assertLessEqual(freq, production, f"production={production}")
+
+    def test_several_frames_are_emitted_so_drift_is_visible(self):
+        deck = build_input_deck(self.spec)
+        line = next(ln.split("#", 1)[0] for ln in deck.splitlines()
+                    if "ave/chunk" in ln and not ln.strip().startswith("#"))
+        freq = int(line.split("ave/chunk")[1].split()[2])
+        self.assertGreaterEqual(self.spec.production_steps // freq, 2,
+                                "one frame hides whether the run drifted")
+
+    def test_validator_catches_a_missing_reset(self):
+        from openkapitza.md.nemd import validate_deck
+        bad = ("boundary p p f\n"
+               "pair_coeff * * X.sw Si\n"
+               "compute layers all chunk/atom bin/1d z lower 4.0 units box\n"
+               "fix profile all ave/chunk 100 150 15000 layers temp file t.dat\n")
+        self.assertTrue(any("reset_timestep" in p for p in validate_deck(bad)))
+
     def test_validator_catches_a_missing_chunk_id(self):
         from openkapitza.md.nemd import validate_deck
         bad = ("boundary p p f\n"
@@ -558,8 +610,10 @@ class TestParsers(unittest.TestCase):
         )
         path = self.tmp / "temperature_profile.dat"
         with open(path, "w") as fh:
-            fh.write("# Chunk-averaged data\n# Timestep Number-of-chunks\n"
-                     "# Chunk Coord1 Ncount v_kT\n")
+            # Header copied verbatim from a real LAMMPS 30 Sep 2026 run.
+            fh.write("# Chunk-averaged data for fix profile and group gmobile\n"
+                     "# Timestep Number-of-chunks Total-count\n"
+                     "# Chunk Coord1 Ncount temp\n")
             fh.write(f"2000000 {n} {n * 100}\n")
             for i, (zz, tt) in enumerate(zip(z, T), start=1):
                 fh.write(f"{i} {zz * 1e10:.6f} 100 {tt:.6f}\n")
