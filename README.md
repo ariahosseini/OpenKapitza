@@ -198,6 +198,19 @@ specimens. Si/Ge validates Phase 1, where the atomistic physics arrives.
 
 ---
 
+## Knowledge base
+
+`docs/knowledge-base.md` is the agent layer's retrieval corpus: every defect
+this project hit, in Symptom / Cause / Fix / Verify form, with literal LAMMPS
+error text in the headings so lexical and semantic retrieval both hit. It
+covers the LAMMPS errors, the silent failures that raise nothing at all, the
+physics corrections that change the answer rather than refine it, run-quality
+diagnostics, and what LAMMPS actually ships.
+
+Three tests keep it from rotting: every flag code it names must exist, the
+corrections that answers depend on must still be present, and entries must
+carry a symptom rather than only a fix.
+
 ## Layout
 
 ```
@@ -210,8 +223,16 @@ openkapitza/
   pipeline.py end-to-end run_continuum
   report.py   text rendering
   builder.py  the IO boundary
+  compute/    JobRunner protocol, local + SLURM backends, cost model
+docs/
+  knowledge-base.md   retrieval corpus for the agent layer
+scripts/
+  audit.py            independent recomputation of every Phase-0 model
+  verify_extraction.py  extraction against synthetic ground truth
+  smoke_lammps.py     end-to-end LAMMPS shakedown
 tests/
-  test_physics.py     63 invariant tests, no published data needed
+  test_physics.py     invariant tests, no published data needed
+  test_nemd.py        Phase-1 geometry, decks, extraction, compute layer
   test_benchmarks.py  skips until a dataset is supplied
 ```
 

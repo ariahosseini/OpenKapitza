@@ -696,5 +696,48 @@ class TestMonotonicity(unittest.TestCase):
         self.assertGreater(hi, lo)
 
 
+class TestKnowledgeBase(unittest.TestCase):
+    """Keep docs/knowledge-base.md honest.
+
+    The knowledge base is the agent layer's retrieval corpus. A stale entry
+    is worse than a missing one, because it is retrieved with the same
+    confidence as a correct one.
+    """
+
+    @property
+    def kb(self) -> str:
+        from pathlib import Path
+        path = Path(__file__).resolve().parent.parent / "docs" / "knowledge-base.md"
+        self.assertTrue(path.exists(), "docs/knowledge-base.md is missing")
+        return path.read_text(encoding="utf-8")
+
+    def test_every_flag_code_it_names_actually_exists(self):
+        """A renamed code must not leave a dangling entry behind."""
+        import re
+        from openkapitza.schema.flags import Code
+        known = {v for k, v in vars(Code).items() if not k.startswith("_")}
+        named = set(re.findall(r"\b(?:NEMD|CMY|GAP|KAPITZA|COMPUTE)_[A-Z_]+\b",
+                               self.kb))
+        unknown = named - known
+        self.assertEqual(unknown, set(),
+                         f"knowledge base names codes that do not exist: {unknown}")
+
+    def test_the_corrections_that_change_answers_are_all_present(self):
+        """These are the findings a wrong answer depends on."""
+        kb = self.kb
+        for topic in ("1/ξ", "spot pressure", "plasticity index",
+                      "Song–Yovanovich", "elastic cutoff", "Detailed balance",
+                      "adjacent bins", "temperature-fluctuation",
+                      "reset_timestep 0", "zombie"):
+            self.assertIn(topic, kb, f"knowledge base has lost: {topic}")
+
+    def test_entries_carry_a_symptom_not_only_a_fix(self):
+        """An entry recording only the fix is not retrievable by symptom."""
+        kb = self.kb
+        self.assertGreaterEqual(kb.count("**Symptom.**"), 15)
+        self.assertGreaterEqual(kb.count("**Cause.**"), 15)
+        self.assertGreaterEqual(kb.count("**Fix.**"), 12)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
