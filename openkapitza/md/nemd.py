@@ -89,6 +89,73 @@ def potential_elements(path: Path | str) -> list[str]:
     return labels
 
 
+def _is_number(token: str) -> bool:
+    try:
+        float(token)
+    except ValueError:
+        return False
+    return True
+
+
+def potential_triples(path: Path | str) -> set[tuple[str, str, str]]:
+    """Every (el1, el2, el3) entry present in a Tersoff or SW file.
+
+    Knowing the labels is not sufficient. A LAMMPS potential file may carry
+    several parameterisations of the same element -- SiCGe.tersoff has
+    Si(B), Si(C) and Si(D) -- while providing cross-species terms for only
+    ONE of them. Choosing a silicon label that has no Si-Ge entry fails with
+    "Potential file is missing an entry for: Si(B) Si(B) Ge", which is how
+    this was found.
+
+    Entries are three labels followed by numeric parameters and may wrap
+    across lines, so the file is tokenised whole and any run of three
+    consecutive non-numeric tokens is taken as a triple.
+    """
+    tokens: list[str] = []
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            tokens.extend(line.split("#", 1)[0].split())
+
+    triples: set[tuple[str, str, str]] = set()
+    i = 0
+    while i < len(tokens) - 2:
+        window = tokens[i:i + 3]
+        if not any(_is_number(tok) for tok in window):
+            triples.add((window[0], window[1], window[2]))
+            i += 3
+        else:
+            i += 1
+    return triples
+
+
+def complete_pairs(
+    triples: set[tuple[str, str, str]], symbol_a: str, symbol_b: str
+) -> list[tuple[str, str]]:
+    """Label pairs for which EVERY triple LAMMPS needs is present.
+
+    A two-element many-body system requires all eight ordered triples over
+    the two labels. Returning only complete pairs means the deck cannot be
+    written against a combination the potential file does not support.
+    """
+    labels = {lab for triple in triples for lab in triple}
+
+    def candidates(symbol: str) -> list[str]:
+        return sorted(
+            lab for lab in labels
+            if lab == symbol or lab.split("(", 1)[0] == symbol
+        )
+
+    found: list[tuple[str, str]] = []
+    for a in candidates(symbol_a):
+        for b in candidates(symbol_b):
+            required = {
+                (x, y, z) for x in (a, b) for y in (a, b) for z in (a, b)
+            }
+            if required <= triples:
+                found.append((a, b))
+    return found
+
+
 def match_species(labels: list[str], symbol: str) -> str | None:
     """Find the label in `labels` denoting the element `symbol`.
 

@@ -32,10 +32,12 @@ from openkapitza.md.nemd import (
     NEMDSpec,
     build_input_deck,
     check_spec,
+    complete_pairs,
     match_species,
     parse_profile,
     parse_reservoir_energy,
     potential_elements,
+    potential_triples,
 )
 from openkapitza.md.profile import extract_kapitza, flux_from_reservoirs
 from openkapitza.schema import FlagSet
@@ -88,31 +90,38 @@ def choose_potential(dirs: list[Path]) -> tuple[Path, str, tuple[str, str], str]
     parameters recalled rather than cited. An invented potential yields
     numbers that look entirely reasonable and mean nothing.
     """
-    # 1. A real Si-Ge cross-species fit, if one is installed. The labels are
-    #    read from the file rather than assumed: LAMMPS writes the Tersoff-D
-    #    silicon entry as "Si(D)", and passing "Si" fails outright.
+    # 1. A real Si-Ge fit, if one is installed AND actually carries every
+    #    triple LAMMPS will ask for. A file may hold several silicon
+    #    parameterisations while providing cross terms for only one, so
+    #    completeness is checked rather than assumed.
     for d in dirs:
         for name in ("SiCGe.tersoff", "SiGe.tersoff"):
             f = d / name
             if not f.exists():
                 continue
-            labels = potential_elements(f)
-            si, ge = match_species(labels, "Si"), match_species(labels, "Ge")
-            if si and ge:
+            triples = potential_triples(f)
+            pairs = complete_pairs(triples, "Si", "Ge")
+            if pairs:
+                si, ge = pairs[0]
+                extra = f" (of {len(pairs)} complete pairs)" if len(pairs) > 1 else ""
                 return (f, "tersoff", (si, ge),
-                        f"real Si-Ge cross-species Tersoff fit "
-                        f"(labels {si!r}, {ge!r})")
-            print(f"  {name} has no Si/Ge pair in {labels}; skipping")
+                        f"real Si-Ge cross-species Tersoff fit, labels "
+                        f"{si!r}/{ge!r}{extra}")
+            labels = sorted({lab for tr in triples for lab in tr})
+            print(f"  {name}: no Si/Ge pair has all 8 triples "
+                  f"(labels present: {labels}); skipping")
 
-    # 2. Mass-mismatch model on a single-species potential.
+    # 2. Mass-mismatch model: one species' potential, two masses. Only the
+    #    single-species triple is needed, so this works with any Si file.
     for d in dirs:
         for name, style in (("Si.sw", "sw"), ("Si.tersoff", "tersoff")):
             f = d / name
             if not f.exists():
                 continue
-            labels = potential_elements(f)
-            si = match_species(labels, "Si")
-            if si:
+            triples = potential_triples(f)
+            pairs = complete_pairs(triples, "Si", "Si")
+            if pairs:
+                si = pairs[0][0]
                 return (f, style, (si, si),
                         f"MASS-MISMATCH MODEL (label {si!r}): silicon "
                         f"potential throughout, germanium mass on side B "

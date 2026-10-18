@@ -328,6 +328,50 @@ class TestDeck(unittest.TestCase):
         self.assertEqual(potential_elements(f), ["Si"])
         shutil.rmtree(d, ignore_errors=True)
 
+    def _tersoff_fixture(self):
+        """A file shaped like SiCGe.tersoff: several Si fits, cross terms on one."""
+        d = Path(tempfile.mkdtemp())
+        f = d / "SiCGe.tersoff"
+        rows = ["# Tersoff parameters"]
+        for a in ("Si(B)", "Si(C)", "Si(D)", "C", "Ge"):
+            rows.append(f"{a} {a} {a} 3.0 1.0 0.0 1.0e5 16.2 -0.6")
+            rows.append("    0.78 1.1e-6 1.73 471.18 2.85 0.15 2.47 1830.8")
+        for x, y, z in (("Si(D)", "Si(D)", "Ge"), ("Si(D)", "Ge", "Si(D)"),
+                        ("Si(D)", "Ge", "Ge"), ("Ge", "Si(D)", "Si(D)"),
+                        ("Ge", "Si(D)", "Ge"), ("Ge", "Ge", "Si(D)")):
+            rows.append(f"{x} {y} {z} 3.0 1.0 0.0 1.0e5 16.2 -0.6")
+            rows.append("    0.78 1.1e-6 1.73 471.18 2.85 0.15 2.47 1830.8")
+        f.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        return d, f
+
+    def test_only_the_parameterisation_with_cross_terms_is_chosen(self):
+        """Regression: picking Si(B) failed on "missing entry Si(B) Si(B) Ge".
+
+        Reading the labels was not enough -- the file carries three silicon
+        fits and Si-Ge cross terms for exactly one of them.
+        """
+        from openkapitza.md.nemd import complete_pairs, potential_triples
+        d, f = self._tersoff_fixture()
+        pairs = complete_pairs(potential_triples(f), "Si", "Ge")
+        self.assertEqual(pairs, [("Si(D)", "Ge")])
+        shutil.rmtree(d, ignore_errors=True)
+
+    def test_incomplete_pair_is_rejected_entirely(self):
+        from openkapitza.md.nemd import complete_pairs, potential_triples
+        d, f = self._tersoff_fixture()
+        triples = potential_triples(f)
+        self.assertEqual(complete_pairs(triples, "Si", "C"), [],
+                         "C has no cross terms and must not be offered")
+        shutil.rmtree(d, ignore_errors=True)
+
+    def test_single_species_pair_needs_only_its_own_triple(self):
+        """The mass-mismatch fallback works with any single-species file."""
+        from openkapitza.md.nemd import complete_pairs, potential_triples
+        d, f = self._tersoff_fixture()
+        self.assertIn(("Si(B)", "Si(B)"),
+                      complete_pairs(potential_triples(f), "Si", "Si"))
+        shutil.rmtree(d, ignore_errors=True)
+
     def test_registry_lists_only_files_lammps_actually_ships(self):
         """Regression: the registry once named SiGe.sw, which does not exist.
 
