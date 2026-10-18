@@ -192,6 +192,29 @@ untouched and the area-scaling bridge contributes nothing measurable; eight of
 nine specimens are plastic, so the elastic branch has no clean test. Details
 and the remaining gaps are in `tests/benchmarks/SOURCES.md`.
 
+### The gap model: a diagnostic, not a validation
+
+`tests/benchmarks/gap_conductance_digitised.csv` holds 113 points **digitised**
+from Song & Yovanovich's figures by `scripts/digitize_gap_figures.py`. It is
+kept separate from the exact benchmark, tagged as digitised, and excluded from
+the 1.030 statistic above, because the extraction has a documented bias: upper
+bounds recover within 1–5 %, but lower gas pressures come out 25–45 % high
+where the extractor loses the dense overlapping low-pressure cluster.
+
+Run `python3 scripts/compare_gap_digitised.py`. The useful output is not the
+aggregate but the **trend**: model/measured falls monotonically from 1.05 in
+the rarefied limit to 0.679 in the continuum limit. Since `h_g → k_g/Y` as
+`M → 0`, that shortfall cannot come from the rarefaction term or the
+accommodation coefficients — it implicates the uniform-gap assumption. Local
+gap thickness is Gaussian about `Y` and `1/(t+M)` is convex, so the true area
+average exceeds the value at the mean thickness.
+
+`gap_conductance_integral` evaluates that average and closes about a third of
+the gap. It is **opt-in**; `k_g/(Y+M)` remains the default, with a test
+asserting so. Changing a specified default on digitised evidence — with ~25 %
+of the discrepancy still unexplained — would risk being worse than the error
+it fixes.
+
 ## Honest status of the bundled data
 
 **Every entry in `data/*.yaml` is marked `verified: false` and none has been
@@ -212,8 +235,8 @@ checked against a primary source.** Reliability varies sharply:
 
 Measured joint-conductance data now ships in `tests/benchmarks/`, transcribed
 from a published source by `scripts/build_benchmark_csv.py` so every number is
-auditable. It covers the contact path in vacuum only; the gap path still has
-no measured comparison.
+auditable. It covers the contact path in vacuum only; the gap path has no
+*exact* measured comparison, only the digitised diagnostic described above.
 
 **Si/Ge cannot validate Phase 0.** Two polished semiconductors in vacuum
 exercise neither the plastic branch nor the gas model. Phase 0 needs metal
