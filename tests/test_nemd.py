@@ -11,6 +11,7 @@ Run with:  python3 -m unittest discover -s tests -v
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import time
@@ -561,10 +562,32 @@ class TestLocalRunner(unittest.TestCase):
         self.assertIs(res.state, JobState.FAILED)
 
     def test_killed_job_does_not_report_running_forever(self):
-        """A zombie child answers os.kill(pid, 0); poll must not be fooled."""
+        """A zombie child answers os.kill(pid, 0); poll must not be fooled.
+
+        SIGKILL cannot be trapped, so no sentinel is written and poll() has to
+        decide from the process state alone. The /proc check is Linux-only;
+        without the ps fallback this hangs on macOS and the BSDs until the
+        deadline, which is how the bug was found.
+        """
+        t0 = time.time()
         res = self._run("kill -9 $$", "killed")
+        elapsed = time.time() - t0
+        self.assertLess(elapsed, 15.0,
+                        "poll() never reached a terminal state -- a zombie is "
+                        "being reported as RUNNING")
         self.assertTrue(res.state.terminal)
         self.assertIs(res.state, JobState.FAILED)
+
+    def test_pid_alive_is_false_for_a_reaped_process(self):
+        from openkapitza.compute.runner import _pid_alive
+        import subprocess as sp
+        p = sp.Popen(["/bin/sh", "-c", "exit 0"])
+        p.wait()
+        self.assertFalse(_pid_alive(p.pid))
+
+    def test_pid_alive_is_true_for_a_live_process(self):
+        from openkapitza.compute.runner import _pid_alive
+        self.assertTrue(_pid_alive(os.getpid()))
 
     def test_handle_round_trips_through_disk(self):
         h = self.r.submit(JobSpec(name="rt", command="echo x",

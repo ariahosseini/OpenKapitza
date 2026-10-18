@@ -21,6 +21,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -261,19 +262,55 @@ def _pid_alive(pid: int) -> bool:
 
     `os.kill(pid, 0)` is not enough. A child this process started and never
     reaped stays in the table as a ZOMBIE, and signalling a zombie succeeds --
-    so a job that exited seconds ago would be reported as RUNNING forever,
-    and any loop waiting on it would hang. On Linux the process state in
-    /proc tells them apart; elsewhere the sentinel file is the fallback, and
-    poll() checks it first in any case.
+    so a job that exited seconds ago is reported as RUNNING forever and any
+    loop waiting on it hangs.
+
+    This matters only when the sentinel file is absent, since poll() checks
+    that first and the EXIT trap writes it even on a trappable signal. SIGKILL
+    cannot be trapped, so that path is reachable and must be handled.
+
+    Three steps, because no single one is portable:
+
+    1. Reap first. If this process is the parent, waitpid() clears the zombie
+       outright and the question answers itself.
+    2. Ask the OS for the process state: /proc on Linux, `ps` on macOS and the
+       BSDs, where /proc does not exist. An earlier version did only the
+       /proc check, which silently degraded to the broken os.kill() path on
+       macOS -- found by running the suite on a Mac.
+    3. Fall back to os.kill(), which is right except for zombies.
     """
-    stat_path = f"/proc/{pid}/stat"
+    # 1. Reap, if we happen to be the parent.
     try:
-        with open(stat_path, "r", encoding="utf-8") as fh:
+        reaped, _ = os.waitpid(pid, os.WNOHANG)
+        if reaped == pid:
+            return False
+    except (ChildProcessError, OSError):
+        pass
+
+    # 2a. Linux.
+    try:
+        with open(f"/proc/{pid}/stat", "r", encoding="utf-8") as fh:
             fields = fh.read().rsplit(")", 1)[-1].split()
-        # First field after the comm field is the process state.
         return bool(fields) and fields[0] != "Z"
     except (FileNotFoundError, PermissionError, IndexError, OSError):
         pass
+
+    # 2b. macOS and the BSDs: `ps` reports Z for a zombie.
+    if sys.platform != "win32":
+        try:
+            out = subprocess.run(
+                ["ps", "-o", "state=", "-p", str(pid)],
+                capture_output=True, text=True, timeout=5,
+            )
+            state = out.stdout.strip()
+            if state:
+                return not state.startswith("Z")
+            if out.returncode != 0:
+                return False        # ps knows of no such process
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    # 3. Last resort.
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
