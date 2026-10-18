@@ -32,8 +32,10 @@ from openkapitza.md.nemd import (
     NEMDSpec,
     build_input_deck,
     check_spec,
+    match_species,
     parse_profile,
     parse_reservoir_energy,
+    potential_elements,
 )
 from openkapitza.md.profile import extract_kapitza, flux_from_reservoirs
 from openkapitza.schema import FlagSet
@@ -86,17 +88,35 @@ def choose_potential(dirs: list[Path]) -> tuple[Path, str, tuple[str, str], str]
     parameters recalled rather than cited. An invented potential yields
     numbers that look entirely reasonable and mean nothing.
     """
+    # 1. A real Si-Ge cross-species fit, if one is installed. The labels are
+    #    read from the file rather than assumed: LAMMPS writes the Tersoff-D
+    #    silicon entry as "Si(D)", and passing "Si" fails outright.
     for d in dirs:
-        f = d / "SiCGe.tersoff"
-        if f.exists():
-            return (f, "tersoff", ("Si", "Ge"),
-                    "real Si-Ge cross-species Tersoff fit")
+        for name in ("SiCGe.tersoff", "SiGe.tersoff"):
+            f = d / name
+            if not f.exists():
+                continue
+            labels = potential_elements(f)
+            si, ge = match_species(labels, "Si"), match_species(labels, "Ge")
+            if si and ge:
+                return (f, "tersoff", (si, ge),
+                        f"real Si-Ge cross-species Tersoff fit "
+                        f"(labels {si!r}, {ge!r})")
+            print(f"  {name} has no Si/Ge pair in {labels}; skipping")
+
+    # 2. Mass-mismatch model on a single-species potential.
     for d in dirs:
-        f = d / "Si.sw"
-        if f.exists():
-            return (f, "sw", ("Si", "Si"),
-                    "MASS-MISMATCH MODEL: silicon potential throughout, "
-                    "germanium mass on side B -- not real Si/Ge")
+        for name, style in (("Si.sw", "sw"), ("Si.tersoff", "tersoff")):
+            f = d / name
+            if not f.exists():
+                continue
+            labels = potential_elements(f)
+            si = match_species(labels, "Si")
+            if si:
+                return (f, style, (si, si),
+                        f"MASS-MISMATCH MODEL (label {si!r}): silicon "
+                        f"potential throughout, germanium mass on side B "
+                        f"-- not real Si/Ge")
     return None
 
 
@@ -134,7 +154,7 @@ def main() -> int:
     pot, pair_style, pair_elements, note = chosen
     print(f"Potential:  {pot.name}  [{pair_style}]")
     print(f"            {note}")
-    model_only = pair_elements == ("Si", "Si")
+    model_only = pair_elements[0] == pair_elements[1]
 
     # Small on purpose: this is plumbing, not physics.
     geom = NEMDGeometry(

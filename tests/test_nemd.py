@@ -290,6 +290,44 @@ class TestDeck(unittest.TestCase):
         deck = build_input_deck(self.spec)
         self.assertIn(f"bin/1d z lower {self.spec.geometry.bin_width * 1e10:.4f}", deck)
 
+    def test_potential_labels_are_read_not_assumed(self):
+        """Regression: LAMMPS writes the Tersoff-D silicon entry as "Si(D)".
+
+        Passing the plain symbol gave "Potential file is missing an entry
+        for: Si Si Si" on a real install. Labels now come from the file.
+        """
+        from openkapitza.md.nemd import match_species, potential_elements
+        d = Path(tempfile.mkdtemp())
+        f = d / "SiCGe.tersoff"
+        f.write_text(
+            "# Tersoff parameters\n"
+            "Si(D) Si(D) Si(D) 3.0 1.0 1.7322 1.0039e5\n"
+            "                  16.217 -0.59825 0.78734\n"
+            "Ge Ge Ge 3.0 1.0 1.7322 1.0643e5\n"
+            "         15.652 -0.43884 0.75627\n",
+            encoding="utf-8",
+        )
+        labels = potential_elements(f)
+        self.assertEqual(labels, ["Si(D)", "Ge"])
+        self.assertEqual(match_species(labels, "Si"), "Si(D)")
+        self.assertEqual(match_species(labels, "Ge"), "Ge")
+        self.assertIsNone(match_species(labels, "Al"))
+        shutil.rmtree(d, ignore_errors=True)
+
+    def test_potential_parser_skips_comments_and_continuations(self):
+        from openkapitza.md.nemd import potential_elements
+        d = Path(tempfile.mkdtemp())
+        f = d / "x.sw"
+        f.write_text(
+            "# header\n\n"
+            "Si Si Si 2.1683 2.0951 1.80 21.0 1.20\n"
+            "         -0.333333333333 7.049556277 0.6022245584 4.0 0.0 0.0\n"
+            "# trailing comment\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(potential_elements(f), ["Si"])
+        shutil.rmtree(d, ignore_errors=True)
+
     def test_registry_lists_only_files_lammps_actually_ships(self):
         """Regression: the registry once named SiGe.sw, which does not exist.
 

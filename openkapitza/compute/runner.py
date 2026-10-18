@@ -208,6 +208,7 @@ class LocalRunner:
         finally:
             out_fh.close()
             err_fh.close()
+        _LAUNCHED.append(proc)
         handle = JobHandle(
             job_id=f"local-{uuid.uuid4().hex[:12]}",
             backend=self.name,
@@ -264,6 +265,14 @@ class LocalRunner:
                 pass
         handle.state = JobState.CANCELLED.value
         handle.save()
+
+
+# Popen objects for jobs this process launched. A detached job is still
+# running when submit() returns, and Python emits a ResourceWarning if the
+# Popen is garbage-collected in that state. Holding the reference silences a
+# warning that describes intended behaviour, and keeps this process able to
+# reap the child in _pid_alive once it exits.
+_LAUNCHED: list[subprocess.Popen] = []
 
 
 def _pid_alive(pid: int) -> bool:

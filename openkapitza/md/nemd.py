@@ -55,6 +55,55 @@ TIER1_POTENTIALS = {
 MASS_MISMATCH = ("sw", "Si.sw", ("Si", "Si"))
 
 
+def potential_elements(path: Path | str) -> list[str]:
+    """Element labels exactly as written in a Tersoff or SW potential file.
+
+    Both formats begin each entry with three element labels followed by
+    numeric parameters, and both allow entries to wrap across lines. A
+    continuation line therefore starts with a number, which is how the two
+    are told apart here.
+
+    This exists because labels are NOT always the plain chemical symbol.
+    LAMMPS distinguishes parameterisations in the label -- the silicon entry
+    in a Tersoff file may be written "Si(D)" for the Tersoff-D fit -- and
+    passing "Si" to pair_coeff when the file says "Si(D)" fails with
+    "Potential file is missing an entry for: Si Si Si". Reading the labels
+    beats guessing them.
+    """
+    labels: list[str] = []
+    seen: set[str] = set()
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            token = line.split()[0]
+            try:                      # a continuation line starts with a number
+                float(token)
+                continue
+            except ValueError:
+                pass
+            if token not in seen:
+                seen.add(token)
+                labels.append(token)
+    return labels
+
+
+def match_species(labels: list[str], symbol: str) -> str | None:
+    """Find the label in `labels` denoting the element `symbol`.
+
+    Exact match wins; otherwise the part before any parenthesised
+    parameterisation tag is compared, so "Si" finds "Si(D)".
+    """
+    for label in labels:
+        if label == symbol:
+            return label
+    for label in labels:
+        if label.split("(", 1)[0] == symbol:
+            return label
+    return None
+
+
 @dataclass
 class NEMDGeometry:
     """Slab layout, in metres. All positions measured from z = 0."""
