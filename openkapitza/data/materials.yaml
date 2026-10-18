@@ -130,8 +130,14 @@ SS304:
   theta_debye: 477.0
   number_density: 8.65e28   # atoms/m^3; treated as Fe, M = 55.845 g/mol
   Hv: 2.0e9             # Pa; 1.5-2.5 GPa typical, cold work raises it
-  c1: null
-  c2: null
+  # Fitted Vickers correlation coefficients, HV = c1*(dV/d0)^c2, d0 = 1 um.
+  # These are measured fits, not estimates, and are the single biggest
+  # improvement available to the contact model for this material.
+  c1: 6.271e9           # Pa
+  c2: -0.229
+  hardness_coefficients_source: >
+    Bahrami, Yovanovich & Culham, "Micro and Macro Hardness Measurements,
+    Correlations, and Contact Models", Table 3 (fitted values).
   notes: >
     A common thermal-contact-conductance benchmark material. Published
     Yovanovich-style joint conductance data exists for SS/SS pairs in vacuum
@@ -150,6 +156,9 @@ Ni200:
   theta_debye: 450.0
   number_density: 9.12e28   # atoms/m^3; M = 58.693 g/mol
   Hv: 1.6e9
-  c1: null
-  c2: null
+  c1: 6.304e9           # Pa
+  c2: -0.264
+  hardness_coefficients_source: >
+    Bahrami, Yovanovich & Culham, "Micro and Macro Hardness Measurements,
+    Correlations, and Contact Models", Table 3 (fitted values).
   notes: Another classic contact-conductance benchmark material.

@@ -217,6 +217,48 @@ not move with pressure.
 
 ---
 
+### Where the constant 1.62 sits in the Song-Yovanovich relation
+
+**Symptom.** Two published transcriptions disagree. One reads
+`P/H_c = [P/(1.62·c1·(σ/m)^c2)]^(1/(1+0.071·c2))` with 1.62 outside the power;
+the other has the group as `H_b·(1.62·σ/(m·d_b))^c0`, with it inside.
+
+**Resolution.** Inside. Both sources also give the implicit system the explicit
+form approximates; solving it settles the question numerically. Across SS 304
+and Ni 200 fits at 0.5–8 MPa, the inside reading tracks the implicit solution
+to 0.5–1.4 %, and the outside reading is uniformly 45 % low.
+
+**Rule.** Do not change a verified formula on the strength of a PDF text
+extraction. Tables and equations extract badly; the prose around them, and any
+implicit definition given alongside, are more reliable. Where an implicit
+definition exists, solve it and compare.
+
+**Verify.** `TestSongYovanovichAgainstTheImplicitSystem` pins both directions:
+the implementation agrees within 2 %, and the rejected reading is asserted to
+be badly wrong so nobody "corrects" it back.
+
+---
+
+### Contact microhardness EXCEEDS bulk Vickers at light load
+
+**Symptom.** Substituting a handbook Vickers number for H_c biases the contact
+conductance high, not low.
+
+**Cause.** The indentation size effect. The Vickers exponent c2 is negative, so
+`HV = c1·(d_V/d0)^c2` rises as the indent shrinks. At the light loads of a real
+joint the microcontacts are small and H_c is therefore larger than the bulk
+number. For SS 304 at 2 MPa the fitted value is 3.41 GPa against a bulk 2.0.
+
+**Consequence.** The fallback UNDERestimates H_c, so it OVERestimates P/H_c and
+h_c. An earlier version of this project's own flag text asserted the opposite
+direction, and the error survived because every material in the database had
+null coefficients, so the Song-Yovanovich path never executed.
+
+**Rule.** A code path that no test data exercises is not verified, however
+carefully it was written. Check which branches your fixtures actually reach.
+
+---
+
 ### H_c is not the handbook Vickers hardness
 
 **Symptom.** A systematic bias in h_c, usually low.

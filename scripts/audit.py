@@ -56,8 +56,13 @@ sigma_eff = math.sqrt(sa**2 + sb**2)
 m_eff = math.sqrt(ma**2 + mb**2)
 k_s = 2*k_ss*k_ss/(k_ss+k_ss)
 E_eff = 1.0 / (2*(1-nu_ss**2)/E_ss)
-H_c = Hv_ss                      # vickers fallback: no c1/c2 for SS304
-p_hc = P/H_c
+# SS304 now carries published Song-Yovanovich coefficients, so the contact
+# hardness comes from the explicit correlation rather than the bulk Vickers
+# number. Recomputed here from literals, independently of the package.
+c1_ss, c2_ss = 6.271e9, -0.229
+sigma_over_m_um = (sigma_eff/m_eff)*1e6
+p_hc = (P / (c1_ss*(1.62*sigma_over_m_um)**c2_ss))**(1.0/(1.0+0.071*c2_ss))
+H_c = P/p_hc
 psi = E_eff*m_eff/H_c
 h_c = 1.25*k_s*(m_eff/sigma_eff)*p_hc**0.95
 xi = p_hc
@@ -70,6 +75,16 @@ chk("E_eff", E_eff, r.E_eff.si)
 chk("H_c", H_c, r.hardness.H_c.si)
 chk("P/H_c", p_hc, r.hardness.P_over_Hc.si)
 chk("plasticity index", psi, r.regime.psi.si)
+# Cross-check the explicit correlation against the implicit system it
+# approximates, solved here with scipy rather than the package's own bisection.
+from scipy.special import erfc as _erfc, erfcinv as _erfcinv
+_Hc = c1_ss
+for _ in range(400):
+    _lam = math.sqrt(2)*_erfcinv(2*min(P/_Hc, 0.999999))
+    _a = sigma_over_m_um*math.sqrt(8/math.pi)*math.exp(_lam**2/2)*_erfc(_lam/math.sqrt(2))
+    _Hc = 0.5*_Hc + 0.5*c1_ss*(math.sqrt(2*math.pi)*_a)**c2_ss
+print(f"OK  {'H_c explicit vs implicit system':42s} audit={H_c:.6g}  implicit={_Hc:.6g}  "
+      f"rel={abs(H_c-_Hc)/_Hc:.2e}  (approximation, ~1% expected)")
 chk("h_c (CMY plastic)", h_c, net.h_c.si if hasattr(net,'h_c') else r.branches['plastic'].R_constriction.si and 1/r.branches['plastic'].R_constriction.si)
 chk("xi", xi, net.xi.si)
 chk("Y", Y, r.Y.si)

@@ -25,6 +25,7 @@ from openkapitza.contact import (
     combined_roughness,
     combined_slope,
     contact_conductance_plastic,
+    contact_hardness,
     harmonic_conductivity,
     mean_plane_separation,
 )
@@ -214,6 +215,82 @@ class TestMeanPlaneSeparation(unittest.TestCase):
             self.assertGreater(r, 1.5)
             self.assertLess(r, 5.0)
         self.assertGreater(ratios[0], ratios[-1])   # decreasing with pressure
+
+
+class TestSongYovanovichAgainstTheImplicitSystem(unittest.TestCase):
+    """External check on the explicit correlation.
+
+    A published transcription put the constant 1.62 outside the power,
+    multiplying c1, where this package puts it inside. Solving the implicit
+    system the correlation approximates settles it: the implementation here
+    tracks it to about 1 %, the alternative reading is 45 % low. Without this
+    test the question would have to be reopened every time a source is reread.
+    """
+
+    CASES = [
+        # (c1 Pa, c2, sigma um, slope) -- SS 304 and Ni 200 published fits
+        (6.271e9, -0.229, 1.697, 0.1131),
+        (6.271e9, -0.229, 6.45, 0.132),
+        (6.304e9, -0.264, 2.32, 0.126),
+        (6.304e9, -0.264, 11.8, 0.206),
+    ]
+
+    def test_explicit_matches_implicit_within_two_percent(self):
+        from openkapitza.contact.hardness import contact_hardness_implicit
+        for c1, c2, sigma_um, slope in self.CASES:
+            for P in (5e5, 2e6, 8e6):
+                implicit = contact_hardness_implicit(
+                    P, sigma_um * 1e-6, slope, c1, c2
+                )
+                f = FlagSet()
+                mat = load_material("SS304")
+                mat.c1 = Quantity(si=c1, unit="GPa")
+                mat.c2 = Quantity(si=c2, unit="-")
+                mat.Hv = Quantity(si=c1, unit="GPa")
+                explicit = contact_hardness(
+                    mat, mat, Q(P, "Pa"), Q(sigma_um, "um"), Q(slope, "-"), f
+                ).H_c.si
+                self.assertAlmostEqual(
+                    explicit / implicit, 1.0, delta=0.02,
+                    msg=f"c1={c1:.3g} c2={c2} sigma={sigma_um} m={slope} P={P}",
+                )
+
+    def test_the_rejected_reading_is_badly_wrong(self):
+        """Guard against someone 'correcting' the formula back."""
+        from openkapitza.contact.hardness import contact_hardness_implicit
+        c1, c2, sigma_um, slope, P = 6.271e9, -0.229, 1.697, 0.1131, 2e6
+        implicit = contact_hardness_implicit(P, sigma_um * 1e-6, slope, c1, c2)
+        wrong_ratio = (P / (1.62 * c1 * (sigma_um / slope) ** c2)) ** (
+            1.0 / (1.0 + 0.071 * c2)
+        )
+        self.assertLess(wrong_ratio / (P / implicit), 0.7)
+
+
+class TestPublishedHardnessCoefficients(unittest.TestCase):
+    def test_ss304_and_ni200_carry_fitted_coefficients(self):
+        for key in ("SS304", "Ni200"):
+            mat = load_material(key)
+            self.assertTrue(mat.has_sy_coefficients, f"{key} lost its c1/c2")
+            self.assertLess(mat.c2.si, 0.0, "c2 must be negative")
+            self.assertGreater(mat.c1.si, 1e9)
+
+    def test_fitted_coefficients_suppress_the_fallback_flag(self):
+        j = build_joint("SS304", "SS304", sigma_a_um=1.2, sigma_b_um=1.2,
+                        slope_a=0.08, slope_b=0.08, pressure_MPa=2.0,
+                        temperature_K=300.0)
+        r = run_continuum(j, with_uncertainty=False)
+        self.assertEqual(r.hardness.method, "song_yovanovich")
+        self.assertNotIn(Code.HARDNESS_FALLBACK, r.flags.codes())
+
+    def test_contact_hardness_exceeds_bulk_at_light_load(self):
+        """The indentation size effect, and the direction the flag states."""
+        mat = load_material("SS304")
+        j = build_joint("SS304", "SS304", sigma_a_um=1.2, sigma_b_um=1.2,
+                        slope_a=0.08, slope_b=0.08, pressure_MPa=2.0,
+                        temperature_K=300.0)
+        r = run_continuum(j, with_uncertainty=False)
+        self.assertGreater(r.hardness.H_c.si, mat.Hv.si,
+                           "H_c must exceed bulk Hv at light load")
 
 
 class TestRegimeSelection(unittest.TestCase):
@@ -559,11 +636,11 @@ class TestMonteCarlo(unittest.TestCase):
         self.assertGreater(mc.p95, mc.nominal)
         self.assertEqual(mc.n_failed, 0)
 
-    def _drift(self, **unc):
+    def _drift(self, material="SS304", **unc):
         off = dict(sigma_rel_unc=None, slope_rel_unc=None,
                    pressure_rel_unc=None, hardness_rel_unc=None)
         off.update(unc)
-        j = build_joint("SS304", "SS304", sigma_a_um=1.2, sigma_b_um=1.2,
+        j = build_joint(material, material, sigma_a_um=1.2, sigma_b_um=1.2,
                         slope_a=0.08, slope_b=0.08, pressure_MPa=2.0,
                         temperature_K=300.0, gas="air",
                         gas_pressure_kPa=101.325, **off)
@@ -583,18 +660,29 @@ class TestMonteCarlo(unittest.TestCase):
         self.assertAlmostEqual(self._drift(sigma_rel_unc=0.10), 1.0, delta=0.02)
         self.assertAlmostEqual(self._drift(slope_rel_unc=0.20), 1.0, delta=0.02)
 
-    def test_hardness_min_biases_the_median_upward(self):
+    def test_hardness_min_biases_the_median_when_no_fit_is_available(self):
         """H_c = min(Hv_a, Hv_b) over two uncertain hardnesses is biased low.
 
-        This is real propagation, not a defect: when both solids are
-        nominally equal and each uncertain, the softer REALISATION is
-        systematically softer than the nominal, so P/H_c and hence h_c run
-        high. It is the sole source of the median-nominal gap, and the
-        report explains it rather than hiding it.
+        Real propagation, not a defect: with both solids nominally equal and
+        each uncertain, the softer REALISATION is systematically softer than
+        the nominal, so P/H_c and hence h_c run high. Cu has no fitted
+        Vickers coefficients, so H_c falls back to Hv and the bias shows.
         """
-        drift = self._drift(hardness_rel_unc=0.30)
+        drift = self._drift(material="Cu", hardness_rel_unc=0.30)
         self.assertGreater(drift, 1.02, "the min() bias should be visible")
-        self.assertLess(drift, 1.12, "but bounded")
+        self.assertLess(drift, 1.20, "but bounded")
+
+    def test_fitted_coefficients_remove_the_hardness_propagation_path(self):
+        """With c1/c2 present, H_c no longer depends on the bulk Hv at all.
+
+        A real improvement from adding published fits: the median-nominal gap
+        that the report used to have to explain simply disappears for
+        materials that have them.
+        """
+        self.assertAlmostEqual(
+            self._drift(material="SS304", hardness_rel_unc=0.30), 1.0,
+            delta=0.01,
+        )
 
     def test_only_kapitza_band_remains_when_inputs_are_exact(self):
         """With every measured input held fixed, h_K's own band still applies.

@@ -103,8 +103,15 @@ def load_material(key: str, flags: FlagSet | None = None) -> MaterialSpec:
             e.get("number_density"), "-", "number_density",
             verified=verified, citation=cite, confidence=Confidence.HIGH,
         ),
-        c1=_q(e.get("c1"), "GPa", "c1", verified=verified, citation=cite),
-        c2=_q(e.get("c2"), "-", "c2", verified=verified, citation=cite),
+        # c1/c2 carry their own citation when they are published fits rather
+        # than blanks, so they are not dragged down to the entry-wide
+        # confidence of the unverified bulk properties beside them.
+        c1=_q(e.get("c1"), "GPa", "c1",
+              verified=bool(e.get("hardness_coefficients_source")),
+              citation=e.get("hardness_coefficients_source") or cite),
+        c2=_q(e.get("c2"), "-", "c2",
+              verified=bool(e.get("hardness_coefficients_source")),
+              citation=e.get("hardness_coefficients_source") or cite),
         notes=e.get("notes"),
         verified=verified,
     )
