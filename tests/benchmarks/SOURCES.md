@@ -41,21 +41,45 @@ form used here (inside) tracks it to within 1 %, and the other reading is 45 %
 low. `TestSongYovanovichAgainstTheImplicitSystem` locks this down so the
 question does not have to be reopened. Do not "correct" it from a transcription.
 
-## The primary datasets, and why they are not here
+## The primary datasets
 
-The measured conductance values behind the papers above come from two
-University of Waterloo dissertations:
+Citations verified verbatim from the reference list of Bahrami, Yovanovich &
+Culham, *J. Thermophysics and Heat Transfer* **18**(3), 2004
+(`mhtl04-1.pdf`). Both are PhD dissertations from the Department of
+Mechanical Engineering, University of Waterloo, Waterloo, ON, Canada:
 
-- **Hegazy, A. A. (1985)** — *Thermal joint conductance of conforming rough
-  surfaces: effect of surface micro-hardness variation.* SS 304, N₂ and
+- **Hegazy, A. A. (1985)**, *Thermal Joint Conductance of Conforming Rough
+  Surfaces: Effect of Surface Micro-Hardness Variation*. SS 304, N₂ and
   helium, vacuum and 40–574 torr. About **160 points**.
-- **Song, S. (1988)** — SS 304 and Ni 200, N₂, argon and helium, gas pressures
-  from 10⁻⁵ to 650 torr. More than **350 points**.
+- **Song, S. (1988)**, *Analytical and Experimental Study of Heat Transfer
+  Through Gas Layers of Contact Interfaces*. SS 304 and Ni 200, N₂, argon and
+  helium, gas pressures 10⁻⁵ to 650 torr. More than **350 points**.
 
-Their test conditions *are* tabulated in the 2004 paper, which is why the
-specimen table below can be filled in. The conductance values themselves appear
-in the published papers only as nondimensionalised plots, and PDF text
-extraction returns the data tables as empty cells.
+### A better route than the theses
+
+Song's experimental chapter was published separately, and the Microelectronics
+Heat Transfer Laboratory hosts the PDFs openly:
+
+- Song, S., Yovanovich, M. M. & Goodman, F. (1988), *Thermal Gap Conductance
+  of Conforming Surfaces in Contact, Part I: Theory*, 10th Symposium on
+  Thermophysical Properties, Gaithersburg MD.
+- **Song, S. & Yovanovich, M. M. (1988), *Thermal Gap Conductance of
+  Conforming Surfaces in Contact, Part II: Experimental Results*, same
+  symposium** — hosted as `mhtl88-7.pdf` under
+  `https://www.mhtlab.uwaterloo.ca/pdf_papers/`.
+
+Part II is the data paper and is freely downloadable. **It is a scanned
+image with no text layer**, so automated extraction returns nothing; the
+tables have to be read from the page images. There is also a later journal
+version, *Thermal Gap Conductance of Conforming Surfaces in Contact*, ASME
+J. Heat Transfer **115**(3), 533 (1993), which may carry the same tables with
+a text layer.
+
+A related conference paper, Song & Yovanovich (1989), *Contact Interface Gas
+Heat Transfer: A Method of Measuring Thermal Accommodation Coefficient*, 9th
+Annual International Electronics Packaging Conference, Vol. 2, pp. 925–936, is
+the right source for the accommodation coefficients the gap model currently
+defaults — the weakest numbers in `gases.yaml`.
 
 ### Specimen conditions, available now
 
