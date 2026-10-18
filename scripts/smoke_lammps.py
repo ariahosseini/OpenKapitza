@@ -55,22 +55,48 @@ def find_lammps(explicit: str | None) -> str | None:
     return None
 
 
-def find_potential(potentials_dir: str | None) -> Path | None:
-    """Locate SiGe.sw, which ships with LAMMPS under potentials/."""
-    candidates = []
+def potential_dirs(potentials_dir: str | None, lmp: str | None) -> list[Path]:
+    dirs = []
     if potentials_dir:
-        candidates.append(Path(potentials_dir))
+        dirs.append(Path(potentials_dir))
     if os.environ.get("LAMMPS_POTENTIALS"):
-        candidates.append(Path(os.environ["LAMMPS_POTENTIALS"]))
-    lmp = shutil.which("lmp") or shutil.which("lmp_serial")
+        dirs.append(Path(os.environ["LAMMPS_POTENTIALS"]))
     if lmp:
         root = Path(lmp).resolve().parent.parent
-        candidates += [root / "share" / "lammps" / "potentials",
-                       root / "potentials"]
-    for d in candidates:
-        p = d / "SiGe.sw"
-        if p.exists():
-            return p
+        dirs += [root / "share" / "lammps" / "potentials", root / "potentials"]
+    return [d for d in dirs if d.is_dir()]
+
+
+def choose_potential(dirs: list[Path]) -> tuple[Path, str, tuple[str, str], str] | None:
+    """Pick the best Si/Ge-capable potential actually present.
+
+    Returns (file, pair_style, element names as written in that file, note).
+
+    Preference order, and why:
+
+    1. SiCGe.tersoff -- a real Si-Ge cross-species fit, and the Tersoff family
+       is what the published Si/Ge NEMD comparisons used, so the result is
+       answerable against them.
+    2. Si.sw as a MASS-MISMATCH model: both atom types take silicon's
+       potential, type 2 takes germanium's mass. There is no real chemistry
+       across the junction, only an acoustic mismatch. It is a legitimate
+       model system and it exercises the pipeline, but the number is not Si/Ge.
+
+    What this deliberately does NOT do is write a SiGe.sw file from
+    parameters recalled rather than cited. An invented potential yields
+    numbers that look entirely reasonable and mean nothing.
+    """
+    for d in dirs:
+        f = d / "SiCGe.tersoff"
+        if f.exists():
+            return (f, "tersoff", ("Si", "Ge"),
+                    "real Si-Ge cross-species Tersoff fit")
+    for d in dirs:
+        f = d / "Si.sw"
+        if f.exists():
+            return (f, "sw", ("Si", "Si"),
+                    "MASS-MISMATCH MODEL: silicon potential throughout, "
+                    "germanium mass on side B -- not real Si/Ge")
     return None
 
 
@@ -91,13 +117,24 @@ def main() -> int:
         return 2
     print(f"LAMMPS:     {lmp}")
 
-    pot = find_potential(args.potentials)
-    if not pot:
-        print("Could not find SiGe.sw. It ships with LAMMPS under potentials/.\n"
-              "Pass --potentials /path/to/lammps/potentials, or set "
-              "LAMMPS_POTENTIALS.")
+    dirs = potential_dirs(args.potentials, lmp)
+    if not dirs:
+        print("No LAMMPS potentials directory found. Pass --potentials DIR or "
+              "set LAMMPS_POTENTIALS.")
         return 2
-    print(f"Potential:  {pot}")
+    print(f"Potentials: {dirs[0]}")
+
+    chosen = choose_potential(dirs)
+    if not chosen:
+        print("Neither SiCGe.tersoff nor Si.sw is present in:")
+        for d in dirs:
+            print(f"    {d}")
+        print("At least one is needed. Si.sw ships with every LAMMPS build.")
+        return 2
+    pot, pair_style, pair_elements, note = chosen
+    print(f"Potential:  {pot.name}  [{pair_style}]")
+    print(f"            {note}")
+    model_only = pair_elements == ("Si", "Si")
 
     # Small on purpose: this is plumbing, not physics.
     geom = NEMDGeometry(
@@ -109,7 +146,8 @@ def main() -> int:
         geometry=geom, element_a="Si", element_b="Ge",
         lattice_a=5.431e-10, lattice_b=5.658e-10,
         temperature=300.0, delta_reservoir=40.0,
-        pair_style="sw", pair_file=pot.name,
+        pair_style=pair_style, pair_file=pot.name,
+        pair_elements=pair_elements,
         equilibrate_steps=max(5_000, args.steps // 10),
         steady_steps=max(5_000, args.steps // 10),
         production_steps=args.steps,
@@ -185,6 +223,11 @@ def main() -> int:
     print(f"  naive adjacent-bin dT would have been {r.naive_delta_T:.3f} K "
           f"({r.naive_error * 100:+.1f} %)")
 
+    if model_only:
+        print("\n  NOTE: this was the mass-mismatch MODEL, not Si/Ge. The "
+              "published\n        Si/Ge values below do NOT apply to it; they "
+              "are shown only as a\n        scale check that the pipeline is "
+              "not off by orders of magnitude.")
     print(f"\n  reference: corrected Debye-DMM {DMM_REFERENCE_MW:.0f}, "
           f"published NEMD {NEMD_PUBLISHED_MW[0]:.0f}-{NEMD_PUBLISHED_MW[1]:.0f} "
           f"MW/m^2K")

@@ -290,6 +290,41 @@ class TestDeck(unittest.TestCase):
         deck = build_input_deck(self.spec)
         self.assertIn(f"bin/1d z lower {self.spec.geometry.bin_width * 1e10:.4f}", deck)
 
+    def test_registry_lists_only_files_lammps_actually_ships(self):
+        """Regression: the registry once named SiGe.sw, which does not exist.
+
+        Caught on a real machine, not by any test. This at least pins the
+        shape, so a future entry has to declare its element names and cannot
+        silently reintroduce a file nobody verified.
+        """
+        from openkapitza.md.nemd import MASS_MISMATCH, TIER1_POTENTIALS
+        self.assertNotIn(
+            "SiGe.sw", [v[1] for v in TIER1_POTENTIALS.values()],
+            "SiGe.sw does not ship with LAMMPS",
+        )
+        for key, value in TIER1_POTENTIALS.items():
+            self.assertEqual(len(value), 3,
+                             f"{key} must give (style, file, elements)")
+            style, fname, elements = value
+            self.assertTrue(style and fname and elements)
+            self.assertEqual(len(elements), len(key))
+        self.assertEqual(MASS_MISMATCH[1], "Si.sw")
+
+    def test_pair_elements_override_maps_both_types_to_one_species(self):
+        """The mass-mismatch model: one potential, two masses."""
+        self.spec.pair_style = "sw"
+        self.spec.pair_file = "Si.sw"
+        self.spec.pair_elements = ("Si", "Si")
+        self.spec.mass_b = 72.630
+        deck = build_input_deck(self.spec)
+        self.assertIn("pair_coeff      * * Si.sw Si Si", deck)
+        self.assertIn("mass            1 28.0855", deck)
+        self.assertIn("mass            2 72.6300", deck)
+
+    def test_pair_elements_defaults_to_the_two_elements(self):
+        deck = build_input_deck(self.spec)
+        self.assertIn("Si Ge", deck)
+
     def test_build_mode_is_self_contained(self):
         """The deck must run without an externally supplied structure file."""
         deck = build_input_deck(self.spec)

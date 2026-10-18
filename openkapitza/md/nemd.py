@@ -32,14 +32,27 @@ from .profile import TemperatureProfile
 
 # Pairings of (potential style, pair_coeff file) by element set. Tier 1 only;
 # Tier 2 MLIPs arrive in Phase 4 behind the validation gate.
+# Each entry is (pair_style, file, elements-as-named-in-that-file).
+#
+# ONLY files that actually ship with LAMMPS belong here. An earlier version
+# listed "SiGe.sw", which does not exist in the distribution -- the shakedown
+# found it immediately. Verify a file is present before adding it, and never
+# invent potential parameters to fill a gap: a fabricated potential produces
+# numbers that look fine and mean nothing.
 TIER1_POTENTIALS = {
-    ("Si",): ("sw", "Si.sw"),
-    ("Si", "Ge"): ("sw", "SiGe.sw"),
-    ("Ge",): ("sw", "Ge.sw"),
-    ("Si", "C"): ("tersoff", "SiC.tersoff"),
-    ("Al",): ("eam/alloy", "Al.eam.alloy"),
-    ("Cu",): ("eam/alloy", "Cu.eam.alloy"),
+    ("Si",): ("sw", "Si.sw", ("Si",)),
+    ("Si", "Ge"): ("tersoff", "SiCGe.tersoff", ("Si", "Ge")),
+    ("Si", "C"): ("tersoff", "SiC.tersoff", ("Si", "C")),
+    ("Al",): ("eam/alloy", "Al.eam.alloy", ("Al",)),
+    ("Cu",): ("eam/alloy", "Cu.eam.alloy", ("Cu",)),
 }
+
+# A model interface built from ONE element's potential with the second atom
+# type given a different mass. There is no real chemistry across the junction,
+# only an acoustic mismatch, so it is not a substitute for a fitted
+# cross-species potential -- but it is a standard model system, it needs only
+# Si.sw, and it exercises the whole pipeline with a genuine temperature jump.
+MASS_MISMATCH = ("sw", "Si.sw", ("Si", "Si"))
 
 
 @dataclass
@@ -112,8 +125,9 @@ class NEMDSpec:
     lattice_b: float                    # m
     temperature: float                  # K, mean
     delta_reservoir: float = 40.0       # K, hot/cold split about the mean
-    pair_style: str = "sw"
-    pair_file: str = "SiGe.sw"
+    pair_style: str = "tersoff"
+    pair_file: str = "SiCGe.tersoff"
+    pair_elements: tuple[str, ...] | None = None   # names AS IN the file
     timestep_fs: float = 1.0
     equilibrate_steps: int = 500_000
     steady_steps: int = 500_000
@@ -197,7 +211,7 @@ timestep        {timestep_ps:.6f}
 
 {structure_block}
 pair_style      {pair_style}
-pair_coeff      * * {pair_file} {element_a} {element_b}
+pair_coeff      * * {pair_file} {pair_a} {pair_b}
 
 # ---- regions, in Angstrom -------------------------------------------------
 region          wall_lo  block INF INF INF INF INF {z_wall_lo:.4f} units box
@@ -337,6 +351,8 @@ def build_input_deck(spec: NEMDSpec) -> str:
         element_b=spec.element_b,
         pair_style=spec.pair_style,
         pair_file=spec.pair_file,
+        pair_a=(spec.pair_elements or (spec.element_a, spec.element_b))[0],
+        pair_b=(spec.pair_elements or (spec.element_a, spec.element_b))[1],
         timestep_ps=spec.timestep_fs * FS_TO_PS,
         damp_ps=spec.damping_fs * FS_TO_PS,
         z_wall_lo=g.wall_thickness * a,

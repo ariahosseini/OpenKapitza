@@ -192,13 +192,22 @@ class LocalRunner:
         )
         script.chmod(0o755)
 
-        proc = subprocess.Popen(
-            [self.shell, str(script)],
-            stdout=open(out, "w"),
-            stderr=open(err, "w"),
-            cwd=str(spec.workdir),
-            start_new_session=True,
-        )
+        # Close our copies once Popen has dup'd them into the child, or the
+        # parent leaks a descriptor per submitted job (ResourceWarning under
+        # -W default, and eventually an fd exhaustion in a long campaign).
+        out_fh = open(out, "w", encoding="utf-8")
+        err_fh = open(err, "w", encoding="utf-8")
+        try:
+            proc = subprocess.Popen(
+                [self.shell, str(script)],
+                stdout=out_fh,
+                stderr=err_fh,
+                cwd=str(spec.workdir),
+                start_new_session=True,
+            )
+        finally:
+            out_fh.close()
+            err_fh.close()
         handle = JobHandle(
             job_id=f"local-{uuid.uuid4().hex[:12]}",
             backend=self.name,
