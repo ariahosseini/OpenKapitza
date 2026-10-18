@@ -33,20 +33,22 @@ N2:
   verified: false
   M: 28.014e-3
   gamma: 1.400
-  Pr: 0.72
+  Pr: 0.69
   mu_ref: 1.663e-5
   mu_T_ref: 273.15
   mu_S: 107.0
   k_ref: 0.0242
   k_T_ref: 273.15
   k_S: 150.0
+  # gamma and Pr verified against Song & Yovanovich (1988) Table 1:
+  # gamma = 1.41, Pr = 0.69. Pr was 0.72 here, now corrected.
 
 He:
   name: Helium
   verified: false
   M: 4.0026e-3
   gamma: 1.667
-  Pr: 0.68
+  Pr: 0.67
   mu_ref: 1.865e-5
   mu_T_ref: 273.15
   mu_S: 79.4
@@ -90,32 +92,57 @@ H2:
 # ---------------------------------------------------------------------------
 # Thermal accommodation coefficients.
 #
-# These are the weakest numbers in the whole gap model. Measured values for a
-# single gas/solid pair span an order of magnitude depending on surface
-# cleanliness, adsorbed layers, roughness and temperature. A clean, outgassed
-# surface accommodates far less than the same surface in lab air.
+# Still the weakest numbers in the gap model, but no longer guesses for the
+# pairs below. Song & Yovanovich (1989), "Contact Interface Gas Heat
+# Transfer: A Method of Measuring Thermal Accommodation Coefficient", 9th
+# Annual International Electronics Packaging Conference, Vol. 2, pp. 925-936,
+# Table 2, reports least-square regression estimates from gap-conductance
+# measurements on the SAME bead-blasted SS 304 and Ni 200 specimens the
+# benchmark data comes from:
 #
-# The values below are mid-range defaults ONLY, to let the pipeline run. They
-# are always emitted with LOW confidence and a GAP_ACCOMMODATION_DEFAULT flag.
-# For any result that matters, either measure them, take them from a source
-# matched to your actual surface condition, or compute them with the optional
-# MD gas-surface scattering run (Phase 4).
+#              Exp 1 (SS)  Exp 2 (SS)  Exp 3 (Ni)  Exp 4 (Ni)
+#     He          0.67        0.58        0.61        0.60
+#     Ar          0.96        0.88        0.93        0.87
+#     N2          0.87        0.79        0.81        0.80
+#
+# The per-material values below are the means of the relevant pair.
+#
+# WHY THIS MATTERED. The previous helium default here was 0.30, taken from
+# the clean-surface literature. Table 3 of the same paper tabulates published
+# helium values from 0.327 (Zircaloy-2) to 0.65 (silver), confirming that
+# spread is real -- but ENGINEERING surfaces, bead-blasted and air-exposed,
+# accommodate far better than outgassed laboratory ones. Since
+# alpha = (2-a1)/a1 + (2-a2)/a2, moving helium from 0.30 to 0.61 changes the
+# rarefaction parameter M by a factor of 1.9, which moves h_g directly
+# wherever the gap is rarefied.
+#
+# A measured value for YOUR surface still beats any of these. Entries without
+# a measured source keep the old mid-range defaults and remain flagged.
 # ---------------------------------------------------------------------------
 accommodation_defaults:
   verified: false
+  source: >
+    Song & Yovanovich (1989), 9th Annual Int. Electronics Packaging Conf.,
+    Vol. 2, pp. 925-936, Table 2 (least-square regression estimates on
+    bead-blasted SS 304 and Ni 200).
   # keyed by gas, then by solid; `default` applies when the pair is absent
   He:
-    default: 0.30
-    Si: 0.30
-    Al: 0.30
-    Cu: 0.30
-    SS304: 0.35
+    default: 0.45        # mid-range of the published spread; unmeasured pairs
+    SS304: 0.63          # measured, mean of Exp 1 and 2
+    Ni200: 0.61          # measured, mean of Exp 3 and 4
+    Si: 0.30             # NOT measured; clean-surface literature value
+    Al: 0.30             # NOT measured
+    Cu: 0.30             # NOT measured
   H2:
-    default: 0.35
+    default: 0.35        # NOT measured
   N2:
     default: 0.80
+    SS304: 0.83          # measured
+    Ni200: 0.81          # measured
   air:
-    default: 0.85
+    default: 0.85        # NOT measured; air is not one of the tested gases
   Ar:
-    default: 0.85
+    default: 0.90
+    SS304: 0.92          # measured
+    Ni200: 0.90          # measured
   _fallback: 0.80

@@ -229,5 +229,76 @@ class TestBenchmarks(unittest.TestCase):
         )
 
 
+class TestMeasuredPowerExponents(unittest.TestCase):
+    """Check the correlation's exponents against measured ones.
+
+    Song & Yovanovich (1988), *Relative Contact Pressure: Dependence on
+    Surface Roughness and Vickers Microhardness*, J. Thermophysics and Heat
+    Transfer 2(1), 43-47, fit power laws to Hegazy's data:
+
+        Table 6, h_c proportional to P^n1:
+            Ni 200 0.95, SS 304 0.97, Zr-4 0.94, Zr-2.5Nb 0.95
+        Table 8, h_c proportional to (sigma/m)^n2:
+            Ni 200 -0.76, SS 304 -0.77, Zr-4 -0.76, Zr-2.5Nb -0.75
+
+    These test the SHAPE of the correlation rather than its magnitude, which
+    makes them independent of any error in H_c or in the material data. They
+    need no new measurements -- only the published exponents.
+    """
+
+    MEASURED_N1 = {"Ni200": 0.95, "SS304": 0.97}
+    MEASURED_N2 = {"Ni200": -0.76, "SS304": -0.77}
+
+    def _h_c(self, material, pressure_MPa, sigma_um, slope, k_s=19.0):
+        from openkapitza.contact import (contact_conductance_plastic,
+                                         contact_hardness)
+        flags = FlagSet()
+        mat_a = load_material(material)
+        mat_b = load_material(material)
+        for m in (mat_a, mat_b):
+            m.c1 = Quantity.parse(6.3, "GPa")
+            m.c2 = Quantity.parse(-0.26, "-")
+        sigma = Quantity.parse(sigma_um, "um")
+        m_eff = Quantity.parse(slope, "-")
+        P = Quantity.parse(pressure_MPa, "MPa")
+        hardness = contact_hardness(mat_a, mat_b, P, sigma, m_eff, flags)
+        return contact_conductance_plastic(
+            Quantity.parse(k_s, "W/mK"), sigma, m_eff,
+            hardness.P_over_Hc, flags,
+        ).h_c.si
+
+    def test_pressure_exponent_matches_measurement(self):
+        for material, n1 in self.MEASURED_N1.items():
+            pressures = [0.5, 1.0, 2.0, 4.0, 8.0]
+            hs = [self._h_c(material, P, 2.71, 0.116) for P in pressures]
+            slope = _slope([math.log(p) for p in pressures],
+                           [math.log(h) for h in hs])
+            self.assertAlmostEqual(
+                slope, n1, delta=0.05,
+                msg=f"{material}: d(ln h_c)/d(ln P) = {slope:.3f} vs "
+                    f"measured {n1}",
+            )
+
+    def test_roughness_slope_exponent_matches_measurement(self):
+        """h_c against sigma/m at fixed pressure.
+
+        The exponent is not simply -1 from the (m/sigma) prefactor: H_c
+        itself depends on sigma/m through the Vickers correlation, and the
+        two contributions combine to about -0.75.
+        """
+        for material, n2 in self.MEASURED_N2.items():
+            # vary sigma at fixed slope, so sigma/m spans a wide range
+            sigmas = [0.5, 1.5, 4.0, 8.0, 14.0]
+            ratio = [s / 0.15 for s in sigmas]
+            hs = [self._h_c(material, 2.0, s, 0.15) for s in sigmas]
+            slope = _slope([math.log(r) for r in ratio],
+                           [math.log(h) for h in hs])
+            self.assertAlmostEqual(
+                slope, n2, delta=0.05,
+                msg=f"{material}: d(ln h_c)/d(ln(sigma/m)) = {slope:.3f} vs "
+                    f"measured {n2}",
+            )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
