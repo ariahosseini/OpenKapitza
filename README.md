@@ -315,6 +315,46 @@ Six defects were found by running on a real machine that 144 Linux-side
 tests, an independent numerical audit and synthetic-profile validation had
 all missed. They are listed under *What running it actually found* below.
 
+### What IS verified about Phase 1
+
+Every Phase-1 defect found so far was statically checkable in hindsight, so
+`scripts/audit_nemd.py` now checks for that whole class. It parses the
+rendered deck text back and recomputes each number from the spec by hand,
+rather than reusing the builder's own helpers, so a unit or ordering error has
+to appear in both places to survive.
+
+Across **288 deck configurations** (cross-section, bulk length, bin width,
+lattice constant, run lengths, profile cadence) it verifies: the six region
+boundaries against the geometry in Ångström; that the extractor's fit windows
+clear both Langevin regions and meet at the interface; that the flux area is
+the *snapped* one and provably not the unsnapped value; `fix ave/chunk` Nfreq
+divisibility, `Nevery*Nrepeat <= Nfreq`, a named chunk ID that is actually
+defined, and a window that fits inside the production run; `reset_timestep 0`
+before the final run; non-periodic z; `velocity create` at 2× the setpoint;
+and the thermostat setpoints **as written into the deck**, with the group in
+the hot region required to carry the higher value.
+
+That last check exists because the first version of the audit compared
+`spec.t_hot` against `spec.t_cold` — two properties checked against each
+other, never reading the deck — so a template that swapped the two groups
+would have passed. A mutation test caught it. `tests/test_nemd_audit.py` now
+injects 11 defects into a known-good deck and asserts the audit reports each
+one, plus a control asserting the clean deck still passes. An audit nobody
+has tried to fool is not evidence.
+
+Extraction is verified separately against 13 synthetic profiles with known
+answers (`scripts/verify_extraction.py`): the extrapolated-fit method recovers
+ΔT to within 1–13 %, where the naive adjacent-bin difference is off by
+11–53 %. Note the 13 % worst case is the smallest jump (ΔT = 1 K) — the method
+degrades as the jump shrinks toward the noise floor.
+
+**None of this is physics validation.** A static audit confirms the deck says
+what the spec meant; it cannot confirm the spec is right. Closing that gap
+needs a converged run on a real engine — see *Start here once LAMMPS is
+installed* below. The convergence machinery itself (`check_series`,
+`check_flux_linearity`, `richardson_extrapolate`) is unit-tested against
+synthetic series but has never been run against real MD output.
+
 ### What running it actually found
 
 Each of these survived every form of verification done beforehand, because
@@ -431,9 +471,25 @@ is not the interface.
 - **Phase 2** — structure module: crystalline supercell matching, then
   melt-quench with quench-rate reporting and RDF/bond-angle validation.
 - **Phase 3** — LangGraph agent layer wrapping Phases 0–2.
-- **Phase 4** — Tier-2 MLIPs behind a phonon-DOS/elastic-constant gate, the
-  temperature-fluctuation equilibrium cross-check (not Green–Kubo),
-  accommodation-coefficient MD.
+- **Phase 4** — Tier-2 MLIPs behind a phonon-DOS/elastic-constant gate, and the
+  temperature-fluctuation equilibrium cross-check (not Green–Kubo).
 
-Still outstanding from Phase 0: **no comparison against a measured joint
-conductance.** `tests/benchmarks/` remains empty by design.
+### Open items carried forward
+
+1. **MD gas–surface scattering for the accommodation coefficients.** The one
+   piece of the original Phase-0 scope that is not built: §6 of the spec asked
+   for the gap model *with* an optional MD accommodation run, and only the
+   lookup of defaults exists. This matters more than "optional" suggests —
+   the spec itself calls accommodation coefficients the weakest input in the
+   whole model, measured values for one gas/solid pair span an order of
+   magnitude with surface cleanliness and adsorbed layers, and the defaults
+   are hard-flagged LOW confidence. Until this lands, the weakest input in
+   the model has no route to improvement. Needs MD, so it sits with Phase 1/4
+   work rather than blocking Phase 0.
+2. **The gap-model continuum deficit.** ~32 % low at M/Y < 0.1, monotone in
+   M/Y, cause identified (uniform-gap assumption), opt-in fix implemented,
+   default deliberately unchanged, ~25 % of the discrepancy unexplained.
+   Settling it needs exact tabulated h_j(P_gas) rather than digitised figures.
+3. **Elastic branch and the ξ·h_K bridge have no measured check** — 8 of 9
+   benchmark specimens are plastic, and the Kapitza term is negligible at
+   these conductances. Neither is a defect; both need different experiments.
