@@ -8,6 +8,7 @@ from .rarefaction import (
     GapResult,
     accommodation_term,
     gap_conductance,
+    gap_conductance_integral,
     vacuum_gap,
 )
 
@@ -20,5 +21,6 @@ __all__ = [
     "GapResult",
     "accommodation_term",
     "gap_conductance",
+    "gap_conductance_integral",
     "vacuum_gap",
 ]

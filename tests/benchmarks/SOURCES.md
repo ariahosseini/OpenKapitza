@@ -46,9 +46,13 @@ band is supposed to mean.
 
 ## What this does NOT validate
 
-- **The gap model.** Every point is in a vacuum, so `h_g` is zero throughout
-  and nothing in `openkapitza/gap` is exercised. Its *form* is confirmed
-  against the literature; its predictions are not.
+- **The gap model.** Every point in `joint_conductance.csv` is in a vacuum, so
+  `h_g` is zero throughout and nothing in `openkapitza/gap` is exercised by
+  the headline statistic. A separate, **digitised** dataset now gives an
+  exploratory test — see "Digitised gap data" below. That test is good enough
+  to show the model has roughly the right magnitude and to expose a trend; it
+  is **not** a validation, and it is deliberately excluded from the 207-point
+  result above.
 - **The area-scaling bridge.** The Kapitza term is negligible at these
   conductances, so `1/(ξ·h_K)` contributes nothing measurable and the central
   Phase-0 correction is untested against experiment.
@@ -110,6 +114,85 @@ error in H_c or the material properties:
 Inside the power. This confirms the implementation and the earlier numerical
 verification against the implicit system; a secondary transcription that put
 it outside was wrong.
+
+## Digitised gap data — exploratory only
+
+`gap_conductance_digitised.csv`, 113 points, produced by
+`scripts/digitize_gap_figures.py` from Song & Yovanovich (1989),
+`mhtl89-4.pdf` p. 11, Figures 3–6: joint conductance against gas pressure for
+four conforming rough specimen pairs (2 × SS 304, 2 × Ni 200) in He, Ar and
+N₂. Kept in a **separate file**, tagged `digitised`, and excluded from the
+headline statistic.
+
+**Why separate.** Digitising a figure introduces error that belongs to the
+extraction script, not to the source. These numbers are good enough to test
+whether the gap model has the right shape and magnitude. They are not good
+enough to quote as measurements.
+
+### Extraction quality, honestly
+
+| Check | Result |
+|---|---|
+| Upper gas pressure recovered vs published | within 1–3.5 % — x-calibration sound |
+| Upper `h_j` recovered vs published | within 1–5 % — y-calibration sound |
+| **Lower gas pressure recovered vs published** | **+25 to +45 % HIGH — biased** |
+| Vacuum markers detected | 0 of 4 plots |
+
+The lower-bound bias is the one that matters. The extractor systematically
+loses the dense, overlapping low-pressure marker cluster, which is exactly
+the rarefied regime where the gap model is hardest and most interesting.
+Recovered coverage is 12.5–712 torr against a published 9.4–711. Marker
+classification by gas was not independently verified. Nothing here should be
+read as covering the rarefied limit properly.
+
+### What the comparison shows
+
+`h_g` is compared as `h_j(digitised) − h_c(published vacuum)`, which avoids
+needing `k_s` at the test temperature — the subtraction removes the contact
+path using the source's own number rather than ours. Note this subtraction is
+ill-conditioned at low gas pressure, where `h_g` is a small difference of two
+larger numbers, compounding the extraction bias at that end.
+
+Geometric mean of model/measured, over 113 points:
+
+| | lumped `k_g/(Y+M)` | Gaussian gap integral |
+|---|---|---|
+| all points | 0.885 | 0.930 |
+| `M/Y > 2` (rarefied) | 1.053 | 1.056 |
+| `M/Y` 0.5–2 | 1.009 | 1.033 |
+| `M/Y` 0.1–0.5 | 0.879 | 0.934 |
+| `M/Y < 0.1` (continuum) | **0.679** | 0.746 |
+| log–log slope vs `P_g` | −0.0495 | −0.0251 |
+
+99 % of points fall within 2× either way.
+
+### The finding
+
+The agreement is not uniform. It is good in the rarefied limit and degrades
+monotonically toward the continuum limit, reaching a ~32 % shortfall at
+`M/Y < 0.1`. That direction is diagnostic: as `M → 0` the rarefaction term
+drops out and `h_g → k_g/Y`, so a continuum-limit shortfall **cannot** be
+blamed on `M` or on the accommodation coefficients. It points instead at the
+uniform-gap assumption built into the lumped form.
+
+Local gap thickness is not uniform — it is Gaussian about `Y` with spread
+`σ` — and local conductance goes as `1/(t+M)`, which is convex. Averaging
+over the distribution therefore exceeds the value at the mean thickness, and
+the gain is largest when `M` is small and the convexity is not softened by
+the `M` offset. `gap_conductance_integral` implements that average and closes
+about a third of the continuum gap while halving the pressure trend.
+
+**It is not the default, and should not become the default on this evidence.**
+The project specifies `h_g = k_g/(Y + M)`; the correction is motivated by
+digitised data with a documented bias at one end. `tests/test_gap_integral.py`
+pins the integral's invariants and includes a guard against quietly swapping
+the default. Settling this needs exact tabulated `h_j(P_g)` values.
+
+The residual ~25 % at `M/Y < 0.1` is unexplained. Candidates, untested: the
+effective gap thickness differing from `Y` as computed here (our `Y` = 5.41 µm
+against their effective gap `R_p` = 5.55 µm, 2.5 % apart, so probably not
+this); gas conductivity at the test temperature; or extraction error in `h_j`
+at the high-pressure end.
 
 ## Available but not yet entered
 

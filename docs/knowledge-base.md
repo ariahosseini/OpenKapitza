@@ -356,6 +356,45 @@ SiO₂ 470 K (not strictly meaningful for a glass — use only for this screen,
 never for transport), Al 428 K, Ge 374 K. **Si/Ge at 300 K is already below
 silicon's threshold.**
 
+### The lumped gap form underpredicts, worst in the continuum limit
+
+**Symptom.** `h_g = k_g/(Y + M)` agrees with measurement in the rarefied
+regime but falls short as gas pressure rises, reaching ~32 % low at
+`M/Y < 0.1`. Raising the accommodation coefficients to compensate makes the
+rarefied end worse.
+
+**Cause.** Not the accommodation coefficients, and the direction proves it:
+as `M → 0` the rarefaction term drops out and `h_g → k_g/Y`, so a
+continuum-limit shortfall cannot come from `M` or from `a1`/`a2` at all. It
+comes from the uniform-gap assumption. Local gap thickness is Gaussian about
+`Y` with spread `σ`, local conductance goes as `1/(t + M)`, and `1/x` is
+convex, so the true area average **exceeds** the value at the mean thickness:
+
+    E[1/(t+M)] > 1/(E[t]+M)
+
+The gain is largest when `M` is small, because then nothing softens the `1/t`
+convexity. The lumped form therefore has a pressure-dependent bias, not a
+constant offset — which is why a single fudge factor cannot fix it.
+
+**Fix.** `gap_conductance_integral` evaluates the area average directly,
+
+    h_g = k_g * ∫₀^∞ φ((t−Y)/σ)/σ · dt/(t + M)
+
+integrating only over `t > 0` and **not** renormalising, because the `t <= 0`
+region is contact area already carried by `h_c`; leaving it out is what
+correctly weights `h_g` by the gap's share of the apparent area. Numerically,
+substitute `w = ln(u + M/σ)`: the `1/(u+M)` factor cancels exactly against
+`du`, the integrand becomes bounded by 1, and the otherwise logarithmic
+divergence as `M → 0` needs no hand-placed cutoff.
+
+**Verify.** `σ → 0` must collapse to `k_g/(Y + M)` (a delta at `Y`). Note the
+accessible range is narrow: `mean_plane_separation` ties `Y/σ` to `P/H_c`, so
+across the whole CMY validity window `Y/σ` only spans ~2.2–5.8.
+
+**Status.** Opt-in, **not** the default — the evidence is digitised figure
+data with a documented bias, and ~25 % of the discrepancy is unexplained. See
+`tests/benchmarks/SOURCES.md`.
+
 ---
 
 ## 4. Run-quality diagnostics
@@ -561,3 +600,60 @@ first.
 Flags are structured, carry stable codes, and are rendered — never invented,
 never suppressed. A number quoted without its flags is a different claim from
 the one the calculation supports.
+
+### When a test fails, suspect the invariant before the code
+
+Developing the Gaussian gap integral, two successive "obvious" invariants
+failed while the implementation was correct:
+
+1. *Plain Jensen*, `I >= k_g/(Y+M)` — failed in 40 of 105 cases. The Gaussian
+   is deliberately **not** renormalised over `t > 0`, because the `t <= 0` tail
+   is contact area belonging to `h_c`. Jensen's inequality requires a
+   normalised probability measure, so it simply does not apply.
+2. *Jensen after dividing by the gas-covered area fraction* — still failed,
+   min 0.825. Truncating at `t > 0` removes the low tail, so the truncated
+   mean `E[t | t > 0]` is **larger** than `Y`; the bound has to use that larger
+   mean, not `Y`.
+
+The true invariant — Jensen on the normalised measure against the truncated
+mean, `I/Φ(Y/σ) >= k_g/(E[t|t>0] + M)` — held in 540 of 540 cases with a
+minimum ratio of exactly 1.00000, and an independent Monte Carlo agreed with
+the quadrature to 0.009 %. Two wrong invariants in a row nearly triggered a
+"fix" to correct code. Before editing, write down *why* the invariant should
+hold; if the derivation needs an assumption the code deliberately breaks, the
+test is wrong. Pin the corrected reasoning in the test docstring so the next
+reader does not reach for the same wrong bound.
+
+### Digitised figure data is a diagnostic, never a validation
+
+113 points extracted from Song & Yovanovich's gap figures gave a geometric
+mean model/measured of 0.885 with 99 % inside 2×. It would have been easy to
+report that as "the gap model is validated". It is not, for two reasons that
+must travel with any such number:
+
+- **Known extraction bias.** Upper bounds recovered within 1–3.5 %, but lower
+  gas pressures came out 25–45 % high because the extractor loses the dense
+  overlapping low-pressure cluster — precisely the rarefied regime of
+  interest. Quote the bias next to the statistic, keep digitised points in a
+  separate file from exact tabulated ones, and exclude them from the headline.
+- **Conditioning.** `h_g` was recovered as `h_j − h_c`, a difference of two
+  larger numbers. That is well-conditioned only where `h_g` is comparable to
+  or larger than `h_c`, i.e. at high gas pressure. The low-pressure end is
+  doubly weak: biased extraction *and* an ill-conditioned subtraction.
+
+What digitised data *is* good for: exposing a **trend**. The ratio fell
+monotonically from 1.05 (rarefied) to 0.68 (continuum), and that shape — not
+the aggregate number — is what identified a real modelling deficiency. Use
+figure extraction to find structure, then demand exact numbers before changing
+a default.
+
+### Do not change a specified default to chase a residual
+
+The continuum-limit shortfall above is real and physically explained, and the
+gap integral demonstrably improves it. It was still added as **opt-in**, with
+a test asserting the lumped `k_g/(Y+M)` remains the default, because the only
+evidence is digitised data with a documented bias at one end and ~25 % of the
+discrepancy is still unexplained. A model change justified by biased data can
+be worse than the error it fixes, since it also destroys the agreement that
+was previously honest. Implement the alternative, document the evidence, keep
+the specified form until exact data settles it.
