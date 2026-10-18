@@ -372,12 +372,13 @@ unfix           cold
 fix             hot  ghot  langevin {t_hot:.2f} {t_hot:.2f} {damp_ps:.4f} {seed_hot} tally yes
 fix             cold gcold langevin {t_cold:.2f} {t_cold:.2f} {damp_ps:.4f} {seed_cold} tally yes
 
-compute         ke all ke/atom
-variable        kT atom c_ke/(1.5*8.617333262e-5)
-
+# Bin along z and average the temperature in each bin. The chunk ID
+# ("layers") MUST follow Nfreq and precede the values -- omitting it makes
+# LAMMPS read the first value as the chunk ID and fail with "No values from
+# computes, fixes, or variables used in fix ave/chunk command".
 compute         layers gmobile chunk/atom bin/1d z lower {bin_width:.4f} units box
 fix             profile gmobile ave/chunk {profile_every} {n_profile_samples} \
-{production_steps} v_kT file temperature_profile.dat
+{production_steps} layers temp file temperature_profile.dat
 
 variable        ehot  equal f_hot
 variable        ecold equal f_cold
@@ -492,6 +493,86 @@ def build_input_deck(spec: NEMDSpec) -> str:
         interface_ang=g.interface_z * a,
         pressure_block=pressure_block,
     )
+
+
+def validate_deck(deck: str) -> list[str]:
+    """Structural checks on a generated deck, returned as a list of problems.
+
+    These are argument-order and consistency rules that LAMMPS enforces but
+    only discovers at the offending line -- which, for a fix set up after
+    equilibration, is minutes into a run. Checking the text costs
+    microseconds.
+
+    The rules here are the ones this package has actually got wrong:
+
+    - `fix ave/chunk` takes the chunk ID after Nfreq and before the values.
+      Omitting it makes LAMMPS read the first value as the chunk ID and fail
+      with "No values from computes, fixes, or variables used".
+    - Nfreq must be a multiple of Nevery, and Nevery*Nrepeat must not exceed
+      Nfreq, or the averaging window does not fit.
+    - z must be non-periodic, or heat short-circuits around the box and the
+      measured conductance is meaningless rather than merely wrong.
+    """
+    problems: list[str] = []
+
+    # Join backslash continuations so each command is one logical line.
+    joined = deck.replace("\\\n", " ")
+    lines = [ln.split("#", 1)[0].strip() for ln in joined.splitlines()]
+    lines = [ln for ln in lines if ln]
+
+    chunk_ids = {
+        parts[1]
+        for parts in (ln.split() for ln in lines)
+        if len(parts) > 3 and parts[0] == "compute" and "chunk/atom" in parts
+    }
+
+    for ln in lines:
+        parts = ln.split()
+        if parts[0] != "fix" or "ave/chunk" not in parts:
+            continue
+        i = parts.index("ave/chunk")
+        tail = parts[i + 1:]
+        if len(tail) < 4:
+            problems.append(f"ave/chunk has too few arguments: {ln}")
+            continue
+        try:
+            nevery, nrepeat, nfreq = (int(x) for x in tail[:3])
+        except ValueError:
+            problems.append(f"ave/chunk Nevery/Nrepeat/Nfreq not integers: {ln}")
+            continue
+        chunk_id = tail[3]
+        if chunk_id not in chunk_ids:
+            problems.append(
+                f"ave/chunk chunk ID {chunk_id!r} is not a compute chunk/atom "
+                f"(known: {sorted(chunk_ids) or 'none'}); the chunk ID must "
+                f"come straight after Nfreq"
+            )
+        if len(tail) < 5 or tail[4] in ("file", "ave", "norm", "title1"):
+            problems.append(f"ave/chunk names no value to average: {ln}")
+        if nevery <= 0 or nfreq % nevery:
+            problems.append(
+                f"ave/chunk Nfreq ({nfreq}) must be a multiple of Nevery "
+                f"({nevery})"
+            )
+        elif nevery * nrepeat > nfreq:
+            problems.append(
+                f"ave/chunk Nevery*Nrepeat ({nevery * nrepeat}) exceeds Nfreq "
+                f"({nfreq}); the averaging window does not fit"
+            )
+
+    for ln in lines:
+        if ln.startswith("boundary"):
+            parts = ln.split()
+            if len(parts) >= 4 and parts[3] != "f":
+                problems.append(
+                    f"z boundary is {parts[3]!r}, not 'f'; a periodic "
+                    f"transport direction lets heat bypass the interface"
+                )
+
+    if not any(ln.startswith("pair_coeff") for ln in lines):
+        problems.append("no pair_coeff line")
+
+    return problems
 
 
 def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:

@@ -133,8 +133,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--lmp", default=None)
     ap.add_argument("--potentials", default=None)
-    ap.add_argument("--steps", type=int, default=200_000,
-                    help="production steps; default is a few minutes")
+    ap.add_argument("--steps", type=int, default=60_000,
+                    help="production steps. The default is sized for a few "
+                         "minutes on one core -- enough to prove the "
+                         "pipeline, nowhere near enough for statistics.")
     ap.add_argument("--workdir", default="/tmp/openkapitza_smoke")
     ap.add_argument("--keep", action="store_true")
     args = ap.parse_args()

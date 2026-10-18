@@ -457,6 +457,49 @@ class TestDeck(unittest.TestCase):
         self.assertGreater(sa, 0.0)
         self.assertLess(sb, 0.0)
 
+    def test_generated_deck_passes_structural_validation(self):
+        from openkapitza.md.nemd import validate_deck
+        self.assertEqual(validate_deck(build_input_deck(self.spec)), [])
+
+    def test_ave_chunk_names_its_chunk_compute(self):
+        """Regression: the chunk ID was missing, so LAMMPS read `v_kT` as it.
+
+        Failed with "No values from computes, fixes, or variables used in fix
+        ave/chunk command" -- two minutes into a run, after equilibration.
+        """
+        # Strip comments first: the deck explains this very rule in a
+        # comment that itself contains "ave/chunk".
+        deck = build_input_deck(self.spec)
+        commands = [ln.split("#", 1)[0] for ln in deck.splitlines()]
+        chunk_line = next(ln for ln in commands if "ave/chunk" in ln)
+        after = chunk_line.split("ave/chunk")[1].split()
+        self.assertEqual(after[3], "layers",
+                         "the chunk ID must follow Nevery Nrepeat Nfreq")
+        self.assertIn("compute         layers", deck)
+
+    def test_validator_catches_a_missing_chunk_id(self):
+        from openkapitza.md.nemd import validate_deck
+        bad = ("boundary p p f\n"
+               "pair_coeff * * X.sw Si\n"
+               "compute layers all chunk/atom bin/1d z lower 4.0 units box\n"
+               "fix profile all ave/chunk 100 100 10000 v_kT file t.dat\n")
+        problems = validate_deck(bad)
+        self.assertTrue(any("chunk ID" in p for p in problems), problems)
+
+    def test_validator_catches_a_bad_averaging_window(self):
+        from openkapitza.md.nemd import validate_deck
+        bad = ("boundary p p f\n"
+               "pair_coeff * * X.sw Si\n"
+               "compute layers all chunk/atom bin/1d z lower 4.0 units box\n"
+               "fix profile all ave/chunk 100 500 10000 layers temp file t.dat\n")
+        self.assertTrue(any("exceeds Nfreq" in p for p in validate_deck(bad)))
+
+    def test_validator_catches_a_periodic_transport_direction(self):
+        from openkapitza.md.nemd import validate_deck
+        bad = ("boundary p p p\n"
+               "pair_coeff * * X.sw Si\n")
+        self.assertTrue(any("z boundary" in p for p in validate_deck(bad)))
+
     def test_timestep_converted_to_picoseconds(self):
         self.assertIn("timestep        0.001000", build_input_deck(self.spec))
 
