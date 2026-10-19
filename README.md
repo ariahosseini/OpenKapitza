@@ -609,21 +609,46 @@ constant — pushing a₍∥₎ up, toward Ge, in both the right direction and r
 the right size. Test by repeating the relaxation with a longer z or a free
 surface and seeing whether a₍∥₎ falls toward 5.55 Å.
 
-**2 — ANSWERED, and it changes the method.** At 294 ps the relaxed cell is
-still "not equilibrated" by the drift test — but the drift does not *decay*:
-across 16 windows it scatters 6.6 %–153 % with a **+3.8 %/window** trend and a
-38 % standard deviation. A decaying transient would trend clearly negative.
-This is noise, not a transient, so no run length will fix it.
+**2 — ANSWERED, and it changes the method.** The completed 400 ps relaxed run
+is still "not equilibrated" in all 23 windows — but the drift does not *decay*.
+Fitting drift against window index on the full trace gives a slope of
+**−0.41 ± 1.15 %/window (t = −0.35)**: no trend at all. A decaying transient
+would trend clearly and negatively. This is the metric's noise floor, not an
+unfinished transient, so no run length will fix it.
+
+*Correction to the partial-data reading:* the truncated 294 ps trace gave
+**+3.81 ± 1.86 %/window (t = +2.04)**, which I reported as a trend. The last
+106 ps removed it. The drift metric is a ratio of two fitted slopes, exactly
+the kind of quantity that moves when the tail of the data arrives — so the
+conclusion survived but the number quoted for it did not. Worth remembering
+before quoting a fitted trend from a run still in progress.
 
 **2b — give the stationarity test a noise floor.** With 4,787 atoms and a
 2.2 nm cross-section the reservoir power fluctuates enough that the drift
 metric's own uncertainty exceeds the 15 % tolerance, making the test
-unsatisfiable regardless of physics. Compare drift against its *statistical
+unsatisfiable regardless of physics. Quantified on the full run: drift spans
+3.4–152.7 %, mean 46 %, standard deviation 36 %, so a 15 % tolerance sits
+**0.9 standard deviations below the mean** — unreachable by construction. Compare drift against its *statistical
 uncertainty* rather than a fixed threshold, and/or widen the cross-section to
 cut the noise. Until that is fixed, `check_flux_stationarity` reports "not
 steady" for every run, which is useless in a different way from reporting
 nothing. Relaxation *did* help the energy balance: imbalance reached 2–6 % in
 several windows against a floor of 21 % unrelaxed.
+
+**What the completed 400 ps relaxed run did achieve.** Three flags cleared
+against the short unrelaxed run — `NEMD_POOR_FIT`,
+`NEMD_EXCLUSION_SENSITIVE` and `NEMD_FLUX_INCONSISTENT` all gone, so the fit
+is now well determined, the extracted jump no longer depends on where the
+fitting stopped, and the reservoir fluxes agree. h_K came out
+**427.8 MW/m²·K** against a published 266–368 and a corrected Debye-DMM
+estimate of 334 — still high and still not a measurement (`NEMD_UNEQUILIBRATED`
+and `NEMD_CONDUCTIVITY_MISMATCH` remain), but the right order and far from the
+1348 and 17453 of the unconverged runs. a₍∥₎ reproduced to 0.01 % against the
+shorter relaxation, confirming convergence.
+
+`NEMD_CELL_STRESS` now fires where it previously would not: mean pressure is
+0.715 GPa, *below* the 1 GPa threshold, so only the component-based check
+added today catches the 1.51 GPa Pzz. That is the fix working on real data.
 
 **3.** Then the convergence campaign (cross-section, length, duration, flux),
 ~100 core-hours — but only after 2b, or the campaign measures noise.

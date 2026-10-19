@@ -559,11 +559,21 @@ any h_K.
 **Symptom.** `check_flux_stationarity` reported "not steady" for a 60 ps run,
 and still reported it for a relaxed 294 ps run. Every window, every time.
 
-**The tell.** The drift did not *decay*. Across 16 sliding windows it
-scattered 6.6 %–153 % with a trend of **+3.8 % per window** and a standard
-deviation of 38 %. A decaying transient trends clearly negative; this is flat
-scatter. So the run was not failing to equilibrate — the metric was failing to
-resolve.
+**The tell.** The drift did not *decay*. On the completed 400 ps run, fitting
+drift against window index over all 23 windows gives a slope of
+**−0.41 ± 1.15 % per window (t = −0.35)** — no trend. A decaying transient
+trends clearly and negatively. So the run was not failing to equilibrate; the
+metric was failing to resolve. Quantified: drift spans 3.4–152.7 %, mean 46 %,
+standard deviation 36 %, so a 15 % tolerance sits 0.9 standard deviations
+*below* the mean and is unreachable by construction.
+
+**A second lesson, from getting this wrong once.** The same analysis on a
+truncated 294 ps trace gave **+3.81 ± 1.86 %/window (t = +2.04)**, which reads
+as a real upward trend and was reported as one. The final 106 ps removed it.
+The drift metric is a ratio of two fitted slopes — precisely the kind of
+quantity whose apparent trend moves when the tail of the data arrives. Do not
+quote a fitted trend from a run still in progress; quote it with its standard
+error, or wait.
 
 **Cause.** The drift metric is a ratio of two fitted slopes, each from half a
 window of reservoir power. With 4,787 atoms and a 2.2 nm cross-section that
