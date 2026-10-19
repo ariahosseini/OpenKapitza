@@ -276,6 +276,53 @@ it loudly — do not guess the coefficients.
 
 ---
 
+### A potential can nail the lattice constant and still invert the stiffness
+
+**Symptom.** The relaxed shared in-plane constant of a coherent Si/Ge cell
+came out 5.5968 Å — 73 % of the way from Si (5.432) to Ge (5.657). Si is the
+stiffer material, so the compromise should sit *nearer Si*, around 42 %.
+
+**First hypothesis, and it was wrong.** That the potential's own lattice
+constants differ from the experimental values the geometry is built from, so
+part of the "mismatch" being relaxed away is an artifact. Measured:
+Si(D) 5.4320 Å against 5.431, Ge 5.6567 Å against 5.658 — agreement to
+0.02 %. The potential is not the problem *there*.
+
+**Actual cause.** The elastic constants, which nobody had checked:
+
+| | a0 | C₁₁ | C₁₂ |
+|---|---|---|---|
+| Si(D) potential | 5.4320 | 142.5 | 75.4 |
+| Si experiment | 5.431 | 165.7 | 63.9 |
+| Ge potential | 5.6567 | 138.5 | 44.4 |
+| Ge experiment | 5.658 | 128.5 | 48.3 |
+
+Biaxial modulus M = C₁₁ + C₁₂ − 2C₁₂²/C₁₁ — the stiffness that decides how
+strain shares between coherently bonded layers — is Si 138 / Ge 154 GPa from
+the potential against Si 180 / Ge 141 from experiment. **The potential makes
+Ge the stiffer of the two when Si is.** Si/Ge ratio 0.89 against 1.28.
+
+Using the potential's own constants moves the prediction from 42 % to 51 %
+toward Ge, in the observed direction. (The remaining gap to 73 % is a separate
+question — nonlinear elasticity at ±2–4 % strain, and whether the box had
+converged.)
+
+**Fix.** `scripts/measure_potential_elastic.py` measures a0 and C_ij for a
+potential and flags an inverted ordering explicitly. Run it before trusting
+any strain-dependent result. Build geometry from reference elastic constants
+rather than the potential's, and say which was used.
+
+**The general lesson.** Checking a0 alone is not validating a potential. A0 is
+the quantity everyone checks and the easiest to fit; this potential reproduces
+it to 0.03 % while getting the quantity that actually decides the answer
+qualitatively wrong. Validate the property your result depends on, not the
+property that is conventional to quote — and h_K moves by a factor of two with
+cell strain, so strain partitioning is exactly that property here.
+
+**Scope.** The spec gated only Tier-2 machine-learned potentials on elastic
+constants, on the assumption that an established classical potential needs no
+checking. It does. The gate now applies to Tier 1.
+
 ### DMM needs an elastic cutoff at the softer material's slowest branch
 
 **Symptom.** A Debye-DMM estimate several times larger than published values.

@@ -124,6 +124,35 @@ phase), not by judgement.
 phonon DOS, elastic constants and bulk thermal conductivity against a
 reference. Report the results; do not skip to production.
 
+**[NEW] Tier 1 is gated too, and for a measured reason.** v2 gated only the
+machine-learned potentials, on the assumption that an established classical
+potential needs no checking. Measured on `SiCGe.tersoff`:
+
+| | a0 vs expt | C₁₁ vs expt | C₁₂ vs expt |
+|---|---|---|---|
+| Si(D) | +0.02 % | **−14.0 %** | **+18.0 %** |
+| Ge | −0.02 % | +7.8 % | −8.1 % |
+
+The lattice constants are excellent. The elastic constants are not, and the
+error is not a uniform scaling — it **inverts the ordering**. Biaxial modulus
+M = C₁₁ + C₁₂ − 2C₁₂²/C₁₁ comes out Si 138 / Ge 154 GPa from the potential
+against Si 180 / Ge 141 GPa from experiment, so the potential makes Ge the
+stiffer of the pair when Si is.
+
+That matters because M is exactly what decides how strain **shares** between
+two coherently bonded materials, and therefore the relaxed shared in-plane
+constant — which sets the strain on both sides, and h_K moves by a factor of
+two with cell strain. So:
+
+- Before using any Tier-1 potential, measure its own a0 and C_ij and report
+  them against reference values (`scripts/measure_potential_elastic.py`).
+- **Checking a0 alone is not a validation.** A potential can reproduce the
+  one quantity everyone checks to 0.03 % while getting the quantity that
+  decides the answer qualitatively wrong.
+- Build geometry from **reference** elastic constants, not the potential's,
+  and say which was used. If a strain-partitioning result must come from the
+  potential, flag that it rests on a property the potential gets backwards.
+
 **[NEW] Warn specifically, not generically:**
 
 - Foundation MLIPs carry an explicit accuracy–transferability trade-off and

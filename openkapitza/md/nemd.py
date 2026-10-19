@@ -536,6 +536,11 @@ minimize        1.0e-6 1.0e-8 10000 100000
 velocity        gmobile create {t_init:.2f} {seed} mom yes rot yes dist gaussian
 fix             relax gmobile npt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f} \
                 couple xy x 0.0 0.0 {pdamp_ps:.4f} y 0.0 0.0 {pdamp_ps:.4f}
+# Sample often enough to SEE the box converge. Inheriting a coarse interval
+# from an earlier stage left two samples across 30 000 steps, which cannot
+# distinguish a converged box from one still drifting -- and the relaxed
+# in-plane constant is the number everything downstream inherits.
+thermo          {relax_thermo}
 thermo_style    custom step temp press pxx pyy pzz lx ly
 run             {relax_steps}
 unfix           relax
@@ -567,6 +572,8 @@ def build_input_deck(spec: NEMDSpec) -> str:
             damp_ps=spec.damping_fs * FS_TO_PS,
             pdamp_ps=10 * spec.damping_fs * FS_TO_PS,
             relax_steps=spec.relax_steps,
+            # At least 20 samples, so a drifting box is visible.
+            relax_thermo=max(1, spec.relax_steps // 20),
         )
 
     pressure_block = ""
