@@ -422,6 +422,47 @@ of magnitude. The general lesson is in the knowledge base: a flag set that
 does not change when the answer changes by 13× is not measuring the thing that
 went wrong.
 
+### Relaxation: measured, and it matters a lot
+
+Two runs of the same cell differing only in `relax_structure`:
+
+| | unrelaxed | relaxed |
+|---|---|---|
+| Pxx / Pyy | 6.53 / 6.53 GPa | **0.067 / 0.065 GPa** |
+| Pzz | 5.76 GPa | 1.51 GPa |
+| total pressure | 6.46 GPa | **0.50 GPa** |
+| shared in-plane constant | 5.431 Å (Si, imposed) | **5.5968 Å** |
+| h_K | 449.6 | **904.9** MW/m²·K |
+
+In-plane stress is 99 % relieved, and the shared constant settles at 5.5968 Å
+between Si (5.431) and Ge (5.658) — the strained-layer compromise, rather
+than all −4.01 % dumped on the Ge side.
+
+**h_K doubled.** Cell strain is not a second-order correction to this
+measurement; it is a leading one. Neither number is a measurement — both runs
+still fail the stationarity check — but the size of the shift settles whether
+relaxation is worth doing before any convergence campaign. It is.
+
+**Pzz keeps a 1.51 GPa residual** and in-plane relaxation cannot remove it: z
+is non-periodic (walls) and cannot be barostatted. Closing that needs each
+side built on its own out-of-plane constant set by its Poisson ratio — the
+pseudomorphic strained-layer structure, i.e. the Phase-2 structure module.
+
+That residual exposed three further defects, all now fixed:
+
+- `NEMD_CELL_STRESS` tested the **mean** of `Press`, which is (Pxx+Pyy+Pzz)/3.
+  Pxx=Pyy=0.067 with Pzz=1.51 averages to 0.55 GPa — under the 1 GPa
+  threshold, no flag — while 1.5 GPa of uniaxial stress sat along the
+  transport direction. It now checks components and names the worst.
+- `check_run_health` averaged **every** thermo row in the log, mixing
+  minimisation at 6.5 GPa and 540 K with production at 1.5 GPa and 300 K. It
+  reported 3.64 GPa for a cell sitting at 1.51 — a state the run was never in.
+  `last_thermo_block()` now restricts the checks to the production block,
+  which `reset_timestep 0` makes unambiguous.
+- The production `thermo_style` logged **no pressure columns at all**, so the
+  stress check could only ever fire on the equilibration block, never where
+  the measurement happens. It now logs press, pxx, pyy and pzz.
+
 Throughput, measured: 4,787 atoms for 60 ps took 709 s single-core here. The
 converged target (~112,000 atoms, 500 ps) extrapolates to roughly 38 core-hours,
 so the container is fine for the small convergence rungs and too slow for the
@@ -545,6 +586,30 @@ is not the interface.
 - **Phase 3** — LangGraph agent layer wrapping Phases 0–2.
 - **Phase 4** — Tier-2 MLIPs behind a phonon-DOS/elastic-constant gate, and the
   temperature-fluctuation equilibrium cross-check (not Green–Kubo).
+
+### Action items — next session
+
+Ordered. The agreed sequence is: confirm Phase 0 and Phase 1, **then** Phase 2.
+
+1. **Measure the potentials' own equilibrium lattice constants.** The relaxed
+   in-plane constant came out at 5.5968 Å, which is 73 % of the way from Si
+   (5.431) toward Ge (5.658). Si is the stiffer material, so a naive elastic
+   argument puts the compromise nearer Si, not Ge. Either the reasoning is
+   wrong or `Si(D)`/`Ge` in `SiCGe.tersoff` have equilibrium constants that
+   differ from the experimental values the geometry is built from — in which
+   case part of the "mismatch" being relaxed away is a potential artifact and
+   every strain number downstream inherits it. Two short bulk NPT runs settle
+   it. Cheap, and it calibrates everything after it. **Do this first.**
+2. **Find the equilibration time.** Both runs fail `check_flux_stationarity`
+   (hot/cold drift 19 %/97 % at 60 ps). No convergence rung is worth running
+   until drift is under tolerance, or the whole ladder measures transients.
+   Sweep `steady_steps` upward and watch the drift fall.
+3. **Then the convergence campaign** — cross-section, length, duration, flux.
+   ~100 core-hours total; the container does the lower rungs, the top needs
+   more cores.
+4. **Phase 2 structure module**, which items 1 and 3 feed: the 1.51 GPa Pzz
+   residual cannot be relaxed in-plane and needs per-side out-of-plane
+   constants from Poisson ratios.
 
 ### Open items carried forward
 

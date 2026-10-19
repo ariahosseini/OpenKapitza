@@ -55,8 +55,12 @@ def _num(value):
 
 def _box_in_plane(log_path: Path) -> tuple[float, float] | None:
     """Final lx, ly from any thermo block that reported them."""
+    # Capture the VALUES while the Lx-bearing header is in scope. Keeping the
+    # header and the row separately goes wrong the moment a later thermo block
+    # has no Lx column: the row is stale but the header has moved on, and
+    # header.index("Lx") then raises. (Hit exactly that on the first run.)
     header: list[str] | None = None
-    last: list[str] | None = None
+    found: tuple[float, float] | None = None
     for line in log_path.read_text(errors="replace").splitlines():
         parts = line.split()
         if not parts:
@@ -64,16 +68,15 @@ def _box_in_plane(log_path: Path) -> tuple[float, float] | None:
         if parts[0] == "Step":
             header = parts
             continue
-        if header and "Lx" in header and len(parts) == len(header):
-            try:
-                float(parts[0])
-            except ValueError:
-                header = None
-                continue
-            last = parts
-    if not (header and last):
-        return None
-    return (float(last[header.index("Lx")]), float(last[header.index("Ly")]))
+        if header is None or "Lx" not in header or len(parts) != len(header):
+            continue
+        try:
+            values = [float(p) for p in parts]
+        except ValueError:
+            header = None
+            continue
+        found = (values[header.index("Lx")], values[header.index("Ly")])
+    return found
 
 
 def report(label: str, directory: Path) -> None:

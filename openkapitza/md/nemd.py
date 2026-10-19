@@ -475,7 +475,13 @@ variable        tnow  equal time
 fix             energy all print {profile_every} "${{tnow}} ${{ehot}} ${{ecold}}" \
 file reservoir_energy.dat screen no title "# time[ps] E_hot[eV] E_cold[eV]"
 
-thermo_style    custom step temp f_hot f_cold
+# Pxx/Pyy/Pzz, not just the scalar Press: `Press` is their mean, which
+# averages away the anisotropy that matters. In-plane relaxation drives
+# Pxx and Pyy to ~0 while Pzz keeps a residual, because z is non-periodic
+# and cannot be barostatted -- and z is the transport direction, so Pzz is
+# the component h_K is most sensitive to. Without these columns in the
+# PRODUCTION block the stress check has nothing to test where it counts.
+thermo_style    custom step temp press pxx pyy pzz f_hot f_cold
 run             {production_steps}
 
 print           "OPENKAPITZA_DONE area_m2 {area:.6e} interface_z_ang {interface_ang:.4f}"
@@ -979,6 +985,27 @@ def parse_log_thermo(path: Path | str) -> list[dict[str, float]]:
     return rows
 
 
+def last_thermo_block(rows: list[dict[str, float]]) -> list[dict[str, float]]:
+    """The final thermo block only, split on a non-increasing Step column.
+
+    `parse_log_thermo` flattens every `run` in the log into one list, and
+    averaging across all of them mixes stages that describe different
+    physics. With relaxation enabled the log now holds minimisation rows at
+    6.5 GPa and 540 K alongside production rows at 1.5 GPa and 300 K, so a
+    mean over everything described no state the run was ever in -- it
+    reported 3.64 GPa for a cell sitting at 1.51 GPa.
+
+    `reset_timestep 0` before production makes the boundary unambiguous.
+    """
+    if not rows:
+        return []
+    start = 0
+    for i in range(1, len(rows)):
+        if rows[i].get("Step", 0) <= rows[i - 1].get("Step", 0):
+            start = i
+    return rows[start:]
+
+
 def check_run_health(
     rows: list[dict[str, float]],
     target_temperature: float,
@@ -986,6 +1013,7 @@ def check_run_health(
     *,
     temperature_tolerance: float = 0.08,
     max_pressure_GPa: float = 1.0,
+    use_last_block: bool = True,
 ) -> None:
     """Did the run actually do what the deck asked?
 
@@ -1012,6 +1040,12 @@ def check_run_health(
         )
         return
 
+    # Restrict to the production block: averaging across stages mixes
+    # minimisation, relaxation and production, which describe different
+    # states. See last_thermo_block.
+    if use_last_block:
+        rows = last_thermo_block(rows)
+
     temps = [r["Temp"] for r in rows if "Temp" in r]
     if temps:
         mean_T = sum(temps) / len(temps)
@@ -1032,8 +1066,52 @@ def check_run_health(
                 mean_T=mean_T,
             )
 
+    # Check the stress COMPONENTS, not just the scalar pressure.
+    #
+    # `Press` is (Pxx+Pyy+Pzz)/3, so it averages away exactly the anisotropy
+    # that matters here. Measured on a relaxed Si/Ge cell: Pxx = Pyy = 0.07
+    # GPa but Pzz = 1.51 GPa, giving a mean of 0.55 GPa -- comfortably under a
+    # 1 GPa threshold, no flag, while 1.5 GPa of uniaxial stress sits along
+    # the TRANSPORT direction. In-plane relaxation cannot fix that, because z
+    # is non-periodic and cannot be barostatted; the residual is real and it
+    # is the component h_K is most sensitive to.
+    #
+    # So flag on the worst component when components are reported, and name
+    # it. Fall back to the scalar when the thermo style did not include them.
+    component_means: dict[str, float] = {}
+    for key in ("Pxx", "Pyy", "Pzz"):
+        values = [r[key] for r in rows if key in r]
+        if values:
+            component_means[key] = (sum(values) / len(values)) / 1e4
+
+    if component_means:
+        worst_key = max(component_means, key=lambda k: abs(component_means[k]))
+        worst = component_means[worst_key]
+        if abs(worst) > max_pressure_GPa:
+            detail = ", ".join(f"{k} {v:+.2f}" for k, v in component_means.items())
+            along_transport = (
+                " This is the transport direction, so h_K is directly "
+                "affected." if worst_key == "Pzz" else ""
+            )
+            flags.add(
+                Code.NEMD_CELL_STRESS,
+                Severity.WARNING,
+                f"Residual stress of {worst:+.2f} GPa along {worst_key[1:]} "
+                f"({detail} GPa); a relaxed crystal sits near zero."
+                f"{along_transport}",
+                remedy=(
+                    "In-plane relaxation cannot remove a z component: z is "
+                    "non-periodic (walls) and cannot be barostatted. Build "
+                    "each side with its own out-of-plane constant set by its "
+                    "Poisson ratio -- the pseudomorphic strained-layer "
+                    "structure -- rather than putting both sides on one "
+                    "lattice constant. That is the Phase-2 structure module."
+                ),
+                **{f"stress_{k}": v for k, v in component_means.items()},
+            )
+
     presses = [r["Press"] for r in rows if "Press" in r]
-    if presses:
+    if presses and not component_means:
         mean_P_GPa = (sum(presses) / len(presses)) / 1e4   # bar -> GPa
         if abs(mean_P_GPa) > max_pressure_GPa:
             flags.add(
