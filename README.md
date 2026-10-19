@@ -592,6 +592,46 @@ is not the interface.
 
 Ordered. The agreed sequence is: confirm Phase 0 and Phase 1, **then** Phase 2.
 
+**Items 1 and 2 are now answered; items 1b and 2b replace them.**
+
+**1 — DONE.** The potentials' lattice constants match experiment to 0.02 %, so
+a0 was not the explanation. The *elastic constants* are 8–18 % off and invert
+which of Si/Ge is biaxially stiffer (`scripts/measure_potential_elastic.py`).
+
+**1b — the in-plane constant is converged, and the residual gap has a
+candidate.** A 50,000-step relaxation holds `lx` at 22.39 Å from step 2,500
+onward (a₍∥₎ = 5.5968 Å), with Pxx, Pyy inside ±0.08 GPa. So 73 %-toward-Ge is
+real, not a convergence artifact, against 51 % predicted from the potential's
+own C_ij. **Leading hypothesis:** the prediction assumes a free-standing
+bilayer with σzz = 0, but z is clamped by the walls at Pzz ≈ +1.5 GPa
+compressive, which couples through Poisson's ratio to expand the in-plane
+constant — pushing a₍∥₎ up, toward Ge, in both the right direction and roughly
+the right size. Test by repeating the relaxation with a longer z or a free
+surface and seeing whether a₍∥₎ falls toward 5.55 Å.
+
+**2 — ANSWERED, and it changes the method.** At 294 ps the relaxed cell is
+still "not equilibrated" by the drift test — but the drift does not *decay*:
+across 16 windows it scatters 6.6 %–153 % with a **+3.8 %/window** trend and a
+38 % standard deviation. A decaying transient would trend clearly negative.
+This is noise, not a transient, so no run length will fix it.
+
+**2b — give the stationarity test a noise floor.** With 4,787 atoms and a
+2.2 nm cross-section the reservoir power fluctuates enough that the drift
+metric's own uncertainty exceeds the 15 % tolerance, making the test
+unsatisfiable regardless of physics. Compare drift against its *statistical
+uncertainty* rather than a fixed threshold, and/or widen the cross-section to
+cut the noise. Until that is fixed, `check_flux_stationarity` reports "not
+steady" for every run, which is useless in a different way from reporting
+nothing. Relaxation *did* help the energy balance: imbalance reached 2–6 % in
+several windows against a floor of 21 % unrelaxed.
+
+**3.** Then the convergence campaign (cross-section, length, duration, flux),
+~100 core-hours — but only after 2b, or the campaign measures noise.
+
+**4.** Phase 2 structure module, which 1b feeds directly.
+
+Superseded detail from the original item 1:
+
 1. **Measure the potentials' own equilibrium lattice constants.** The relaxed
    in-plane constant came out at 5.5968 Å, which is 73 % of the way from Si
    (5.431) toward Ge (5.658). Si is the stiffer material, so a naive elastic

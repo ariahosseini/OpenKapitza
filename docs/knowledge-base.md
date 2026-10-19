@@ -554,6 +554,41 @@ any h_K.
 
 ---
 
+### A stationarity test needs a noise floor, or it never passes
+
+**Symptom.** `check_flux_stationarity` reported "not steady" for a 60 ps run,
+and still reported it for a relaxed 294 ps run. Every window, every time.
+
+**The tell.** The drift did not *decay*. Across 16 sliding windows it
+scattered 6.6 %–153 % with a trend of **+3.8 % per window** and a standard
+deviation of 38 %. A decaying transient trends clearly negative; this is flat
+scatter. So the run was not failing to equilibrate — the metric was failing to
+resolve.
+
+**Cause.** The drift metric is a ratio of two fitted slopes, each from half a
+window of reservoir power. With 4,787 atoms and a 2.2 nm cross-section that
+power fluctuates enough that the metric's own statistical uncertainty exceeds
+the 15 % tolerance. The test is then unsatisfiable regardless of physics, and
+no run length fixes it.
+
+**Fix.** Compare the drift against its own uncertainty rather than a fixed
+threshold — bootstrap or block-average the two half-window slopes and ask
+whether their difference is significant — and/or widen the cross-section,
+since the noise falls as the atom count rises. A fixed tolerance is only
+meaningful once the metric's resolution is known to be better than it.
+
+**The general lesson.** A diagnostic that fires on everything is as useless as
+one that fires on nothing, and it is more dangerous because it looks
+conservative. Before trusting a threshold, measure the metric's noise floor on
+data you believe is good. The companion entry below is the opposite failure —
+a flag set that could not distinguish a 13x error — and the two together are
+the same mistake: a threshold chosen without knowing the metric's resolution.
+
+**What it did catch.** Relaxation genuinely improved the energy balance:
+imbalance reached 2–6 % in several windows of the relaxed run, against a floor
+of 21 % unrelaxed. The balance check has a usable noise floor; the drift check
+does not.
+
 ### Identical flags, a 13x different answer
 
 **Symptom.** Two runs of the same cell differing only in duration returned
