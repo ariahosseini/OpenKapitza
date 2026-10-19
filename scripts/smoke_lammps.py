@@ -180,6 +180,9 @@ def main() -> int:
         lattice_a=5.431e-10, lattice_b=5.658e-10,
         temperature=300.0, delta_reservoir=40.0,
         pair_style=pair_style, pair_file=pot.name,
+        # pair_file stays a bare name so LAMMPS resolves it beside the deck;
+        # potential_dir tells the verifier where the real file lives.
+        potential_dir=str(pot.parent),
         pair_elements=pair_elements,
         equilibrate_steps=max(5_000, args.steps // 10),
         steady_steps=max(5_000, args.steps // 10),

@@ -156,6 +156,33 @@ def complete_pairs(
     return found
 
 
+def locate_potential(pair_file: str, potential_dir: str | None) -> Path:
+    """The readable path to `pair_file`, for verification.
+
+    `pair_file` is what goes into the deck, so it must stay resolvable by
+    LAMMPS from ITS working directory -- normally a bare filename next to the
+    deck. Verification runs somewhere else entirely, so it needs the real
+    location. Tries the name as given first, so an absolute or
+    already-correct relative path keeps working.
+
+    Raises
+    ------
+    FileNotFoundError
+        If neither candidate is readable, so callers can distinguish
+        "unverifiable" from "verified and wrong".
+    """
+    candidates = [Path(pair_file)]
+    if potential_dir:
+        candidates.append(Path(potential_dir) / Path(pair_file).name)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(
+        f"could not find {pair_file!r}" +
+        (f" in {potential_dir!r}" if potential_dir else "")
+    )
+
+
 def resolve_pair_elements(
     path: Path | str, symbol_a: str, symbol_b: str
 ) -> tuple[str, str]:
@@ -285,6 +312,14 @@ class NEMDSpec:
     pair_style: str = "tersoff"
     pair_file: str = "SiCGe.tersoff"
     pair_elements: tuple[str, ...] | None = None   # names AS IN the file
+    # Where to LOOK for pair_file when verifying it. Verification only: it is
+    # never written into the deck. `pair_file` has to stay whatever LAMMPS
+    # will resolve from its own working directory -- usually a bare filename,
+    # because the runner copies the potential in beside the deck -- but a bare
+    # filename is not resolvable from wherever check_spec happens to run. Not
+    # separating the two made the first real run emit a spurious
+    # NEMD_POTENTIAL_UNVERIFIED for a potential that was sitting right there.
+    potential_dir: str | None = None
     timestep_fs: float = 1.0
     equilibrate_steps: int = 500_000
     steady_steps: int = 500_000
@@ -519,7 +554,8 @@ def build_input_deck(spec: NEMDSpec) -> str:
     if pair_labels is None:
         try:
             pair_labels = resolve_pair_elements(
-                spec.pair_file, spec.element_a, spec.element_b
+                locate_potential(spec.pair_file, spec.potential_dir),
+                spec.element_a, spec.element_b,
             )
         except (OSError, ValueError):
             # Unreadable (generating decks away from the potentials) or no
@@ -740,7 +776,9 @@ def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:
     # line, which for a deck set up after equilibration is minutes into a
     # run. Checking here costs microseconds.
     try:
-        triples = potential_triples(spec.pair_file)
+        triples = potential_triples(
+            locate_potential(spec.pair_file, spec.potential_dir)
+        )
     except OSError:
         flags.add(
             Code.NEMD_POTENTIAL_UNVERIFIED,

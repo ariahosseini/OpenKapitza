@@ -350,10 +350,47 @@ degrades as the jump shrinks toward the noise floor.
 
 **None of this is physics validation.** A static audit confirms the deck says
 what the spec meant; it cannot confirm the spec is right. Closing that gap
-needs a converged run on a real engine — see *Start here once LAMMPS is
-installed* below. The convergence machinery itself (`check_series`,
-`check_flux_linearity`, `richardson_extrapolate`) is unit-tested against
-synthetic series but has never been run against real MD output.
+needs a converged run — see *Start here once LAMMPS is installed* below. The
+convergence machinery itself (`check_series`, `check_flux_linearity`,
+`richardson_extrapolate`) is unit-tested against synthetic series but has
+never been run against real MD output.
+
+### Reproduced on a second architecture
+
+LAMMPS builds from source in a plain container (`cmake -D BUILD_MPI=no -D
+PKG_MANYBODY=yes`), which is worth knowing because it does not need the
+host's install and sidesteps a package index. Running the shakedown there —
+x86_64 Linux, `stable_30Sep2026`, GCC — reproduced the earlier macOS/arm64
+run on every reported diagnostic:
+
+| | macOS arm64 | container x86_64 |
+|---|---|---|
+| h_K | 1348 | 1348.2 MW/m²·K |
+| ΔT standard error | 37 % | 37 % |
+| fit R² | 0.24 / 0.11 | 0.2383 / 0.1128 |
+| exclusion sensitivity | 28 % | 28.3 % |
+| reservoir flux imbalance | 15 % | 14.9 % |
+| apparent k, A / B | 7 % / 36 % | 7 % / 36 % |
+
+Agreement this close across architecture and compiler is more than a chaotic
+60 ps trajectory would normally give, so read it as "the pipeline is
+deterministic given a fixed seed and the diagnostics are dominated by the
+deterministic setup" rather than as proof of bitwise portability. It does
+confirm the extraction chain is not platform-sensitive, which is what the
+macOS shakedown originally called into question.
+
+That run also caught a false positive in the then-new potential check: the
+runner copies the potential beside the deck and passes a **bare filename**,
+because that is what LAMMPS resolves from its own working directory, but a
+bare name is not resolvable from wherever `check_spec` runs — so it reported
+`NEMD_POTENTIAL_UNVERIFIED` for a file sitting right there. `pair_file` (for
+LAMMPS) and `potential_dir` (for the verifier) are now separate, and
+`potential_dir` never enters the deck.
+
+Throughput, measured: 4,787 atoms for 60 ps took 709 s single-core here. The
+converged target (~112,000 atoms, 500 ps) extrapolates to roughly 38 core-hours,
+so the container is fine for the small convergence rungs and too slow for the
+top of the ladder.
 
 ### What running it actually found
 

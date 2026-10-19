@@ -169,6 +169,47 @@ class TestDeckUsesResolvedLabels(PotentialFixture):
         self.assertIn("pair_coeff", deck)
 
 
+class TestPotentialDirResolution(PotentialFixture):
+    """`pair_file` is for LAMMPS; `potential_dir` is for the verifier.
+
+    The runner copies the potential in beside the deck and passes a BARE
+    filename, because that is what LAMMPS resolves from its own working
+    directory. Verification runs somewhere else, so a bare name is not
+    resolvable there. Conflating the two made the first real shakedown emit
+    a spurious NEMD_POTENTIAL_UNVERIFIED for a file that was present.
+    """
+
+    def test_bare_filename_alone_cannot_be_verified(self):
+        spec = self._spec(Path(self.mixed).name)          # bare name, no dir
+        flags = self._potential_flags(spec)
+        self.assertTrue(flags)
+        self.assertEqual(flags[0].code, Code.NEMD_POTENTIAL_UNVERIFIED)
+
+    def test_potential_dir_makes_a_bare_filename_verifiable(self):
+        spec = self._spec(Path(self.mixed).name)
+        spec.potential_dir = str(Path(self.mixed).parent)
+        self.assertEqual(self._potential_flags(spec), [])
+
+    def test_deck_keeps_the_bare_name_for_lammps(self):
+        """potential_dir must never leak into the deck."""
+        spec = self._spec(Path(self.mixed).name)
+        spec.potential_dir = str(Path(self.mixed).parent)
+        deck = build_input_deck(spec)
+        line = next(l for l in deck.splitlines() if l.startswith("pair_coeff"))
+        self.assertIn("SiCGe.tersoff", line)
+        self.assertNotIn(str(Path(self.mixed).parent), deck)
+        # and it still resolved the right labels through potential_dir
+        self.assertIn("Si(D) Ge", line)
+
+    def test_absolute_pair_file_still_works_without_a_dir(self):
+        self.assertEqual(self._potential_flags(self._spec(self.mixed)), [])
+
+    def test_locate_potential_raises_when_neither_candidate_exists(self):
+        from openkapitza.md.nemd import locate_potential
+        with self.assertRaises(FileNotFoundError):
+            locate_potential("SiCGe.tersoff", "/nonexistent/dir")
+
+
 class TestCheckSpecFlags(PotentialFixture):
     def test_incomplete_requested_pairing_is_critical(self):
         flags = self._potential_flags(self._spec(self.mixed, ("Si(B)", "Ge")))
