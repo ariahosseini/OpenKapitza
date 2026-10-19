@@ -419,6 +419,48 @@ any h_K.
 
 ---
 
+### Identical flags, a 13x different answer
+
+**Symptom.** Two runs of the same cell differing only in duration returned
+h_K = 1348 MW/m²·K (60 ps) and 17453 MW/m²·K (20 ps). Between them they
+raised the **identical set of eleven flags**. Neither the extraction nor
+`check_run_health` distinguished them. Nothing said the second number was
+meaningless.
+
+**Cause.** `NEMD_UNEQUILIBRATED` existed as a flag code and never fired,
+because it compares mean temperature against the setpoint. **Temperature
+equilibrating is not the same as heat flow reaching steady state.** The
+Langevin reservoirs reach their setpoints quickly; the thermal profile between
+them keeps developing for much longer. While it does, the reservoir power is
+still changing, the measured flux is inflated, and ΔT has not opened up — so
+h_K = q/ΔT is wrong in both numerator and denominator, in the same direction.
+
+The 20 ps run reported flux 2.925e10 W/m² against the 60 ps run's
+1.757e10 W/m² for the same thermostats. A flux that depends on how long you
+watch is the tell.
+
+**Fix.** `check_flux_stationarity()` tests the thing that must actually hold
+at steady state: dE/dt constant in each reservoir. Fit the rate over the
+first and second half of the averaging window and compare. Measured drifts:
+
+| run | hot | cold |
+|---|---|---|
+| 60 ps | 19 % | 97 % |
+| 20 ps | 76 % | 169 % |
+
+It flags both, which is right — neither was stationary. The 60 ps number was
+never trustworthy either; it merely had the decency to be the right order of
+magnitude.
+
+**Verify.** A synthetic series with constant dE/dt must pass, including with
+noise; one with an exponentially decaying rate must fail; too few samples must
+flag rather than silently pass. Default tolerance 15 %.
+
+**Generalisation.** A flag set that does not change when the answer changes by
+13x is not measuring the thing that went wrong. When two runs disagree, check
+whether any diagnostic separates them — if none does, that absence is the
+defect, not the disagreement.
+
 ### Mean temperature well below the setpoint
 
 **Symptom.** Thermo shows ~268 K against a 300 K target through the production

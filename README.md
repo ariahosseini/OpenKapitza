@@ -387,6 +387,41 @@ bare name is not resolvable from wherever `check_spec` runs — so it reported
 LAMMPS) and `potential_dir` (for the verifier) are now separate, and
 `potential_dir` never enters the deck.
 
+### A diagnostic that was missing entirely
+
+Having an engine made a second run cheap, and comparing two durations of the
+same cell exposed the most serious Phase-1 gap found so far:
+
+| run | flux (W/m²) | ΔT (K) | h_K (MW/m²·K) |
+|---|---|---|---|
+| 60 ps | 1.757e10 | 13.031 | 1348 |
+| 20 ps | 2.925e10 | 1.676 | **17453** |
+
+A factor of 13 in h_K — and **both runs raised the identical set of eleven
+flags.** Neither the extraction nor `check_run_health` separated them.
+`NEMD_UNEQUILIBRATED` existed as a code and never fired, because it compares
+mean temperature against the setpoint, and temperature equilibrating is not
+the same as heat flow reaching steady state. The reservoirs hit their
+setpoints long before the profile between them stops developing; while it
+does, the flux is inflated and ΔT has not opened up, so h_K is wrong in
+numerator and denominator at once. A flux that depends on how long you watch
+is the tell.
+
+`check_flux_stationarity()` now tests what must actually hold at steady state
+— constant dE/dt in each reservoir — by fitting the rate over each half of the
+averaging window:
+
+| run | hot drift | cold drift |
+|---|---|---|
+| 60 ps | 19 % | 97 % |
+| 20 ps | 76 % | 169 % |
+
+It flags both, which is correct: neither was stationary, and the 60 ps result
+was never trustworthy either — it merely had the decency to be the right order
+of magnitude. The general lesson is in the knowledge base: a flag set that
+does not change when the answer changes by 13× is not measuring the thing that
+went wrong.
+
 Throughput, measured: 4,787 atoms for 60 ps took 709 s single-core here. The
 converged target (~112,000 atoms, 500 ps) extrapolates to roughly 38 core-hours,
 so the container is fine for the small convergence rungs and too slow for the

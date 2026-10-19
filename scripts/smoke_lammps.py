@@ -31,6 +31,7 @@ from openkapitza.md.nemd import (
     NEMDGeometry,
     NEMDSpec,
     build_input_deck,
+    check_flux_stationarity,
     check_run_health,
     check_spec,
     complete_pairs,
@@ -244,6 +245,11 @@ def main() -> int:
         return 1
 
     area = spec.snapped_area
+    # Is the heat flow actually stationary while we measure it? A 20 ps and a
+    # 60 ps run of this same cell differed 13x in h_K while raising identical
+    # flag sets; this is the check that separates them.
+    check_flux_stationarity(wd / "reservoir_energy.dat", flags)
+
     flux = flux_from_reservoirs(e_hot, e_cold, duration, area, flags)
     print(f"  {profile.z.size} bins, flux {flux:.3e} W/m^2 "
           f"over {duration * 1e12:.1f} ps")

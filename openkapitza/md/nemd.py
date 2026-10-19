@@ -1000,6 +1000,121 @@ def check_run_health(
             )
 
 
+def parse_reservoir_series(
+    path: Path | str,
+) -> tuple[list[float], list[float], list[float]]:
+    """The reservoir accumulators as time series: (t s, E_hot J, E_cold J).
+
+    `parse_reservoir_energy` collapses this to last-minus-first, which is the
+    right thing for the flux but throws away the information needed to tell
+    whether the run was at steady state while that flux was measured.
+    """
+    EV_TO_J = 1.602176634e-19
+    PS_TO_S = 1e-12
+    t: list[float] = []
+    hot: list[float] = []
+    cold: list[float] = []
+    with open(Path(path), "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            try:
+                values = [float(p) for p in parts[:3]]
+            except ValueError:
+                continue
+            t.append(values[0] * PS_TO_S)
+            hot.append(values[1] * EV_TO_J)
+            cold.append(values[2] * EV_TO_J)
+    return t, hot, cold
+
+
+def check_flux_stationarity(
+    path: Path | str,
+    flags: FlagSet,
+    *,
+    tolerance: float = 0.15,
+) -> dict[str, float]:
+    """Is the reservoir power actually constant across the averaging window?
+
+    WHY THIS EXISTS. A 20 ps and a 60 ps run of the same cell returned
+    h_K = 17453 and 1348 MW/m^2K -- a factor of 13 -- while raising the
+    IDENTICAL set of eleven flags between them. Nothing in the extraction or
+    the run-health check distinguished them. `NEMD_UNEQUILIBRATED` existed but
+    never fired, because it compares mean temperature against the setpoint,
+    and temperature equilibrating is NOT the same as heat flow reaching steady
+    state: the reservoirs can sit at their setpoints while the thermal profile
+    between them is still developing.
+
+    At steady state dE/dt is constant in each reservoir. So fit the rate over
+    the first and second half of the window separately and compare. On those
+    two runs this cleanly separated them -- hot/cold drift of 19 %/97 % at
+    60 ps against 76 %/169 % at 20 ps -- and correctly called BOTH
+    non-stationary, which they were.
+
+    Returns the measured drifts so a caller can report numbers rather than
+    just a flag.
+    """
+    t, hot, cold = parse_reservoir_series(path)
+    if len(t) < 8:
+        flags.add(
+            Code.NEMD_UNEQUILIBRATED,
+            Severity.WARNING,
+            f"Only {len(t)} reservoir-energy samples, too few to test whether "
+            f"the heat flow was stationary.",
+            remedy=(
+                "Write the reservoir accumulators more often, or lengthen the "
+                "production run. Without this test an unconverged run can "
+                "return a plausible-looking h_K that is wrong by an order of "
+                "magnitude."
+            ),
+            n_samples=len(t),
+        )
+        return {}
+
+    def _rate(ts: list[float], es: list[float]) -> float:
+        n = len(ts)
+        mean_t = sum(ts) / n
+        mean_e = sum(es) / n
+        denom = sum((x - mean_t) ** 2 for x in ts)
+        if denom == 0.0:
+            return 0.0
+        return sum((x - mean_t) * (y - mean_e) for x, y in zip(ts, es)) / denom
+
+    mid = len(t) // 2
+    drifts: dict[str, float] = {}
+    for name, series in (("hot", hot), ("cold", cold)):
+        first = _rate(t[:mid], series[:mid])
+        second = _rate(t[mid:], series[mid:])
+        mean_rate = (first + second) / 2.0
+        if mean_rate == 0.0:
+            continue
+        drifts[name] = abs(second - first) / abs(mean_rate)
+
+    worst = max(drifts.values(), default=0.0)
+    if worst > tolerance:
+        detail = ", ".join(f"{k} {v * 100:.0f} %" for k, v in sorted(drifts.items()))
+        flags.add(
+            Code.NEMD_UNEQUILIBRATED,
+            Severity.WARNING,
+            f"Reservoir power is still drifting across the averaging window "
+            f"({detail}); the run was not at steady state while the flux was "
+            f"measured.",
+            remedy=(
+                "h_K from a non-stationary run is not a measurement -- it can "
+                "be wrong by an order of magnitude while every other "
+                "diagnostic looks unremarkable. Lengthen the steady-state "
+                "stage before production, then re-run. Confirm this drift is "
+                "under the tolerance before quoting any h_K."
+            ),
+            **{f"drift_{k}": v for k, v in drifts.items()},
+        )
+    return drifts
+
+
 def parse_reservoir_energy(path: Path | str) -> tuple[float, float, float]:
     """Read the reservoir accumulators: (E_hot J, E_cold J, duration s).
 
