@@ -282,6 +282,57 @@ def audit_one(spec: NEMDSpec, label: str) -> list[str]:
                f"spec {spec.t_hot}/{spec.t_cold}")
     run(_deck_setpoints, "deck setpoints")
 
+    # --- never barostat a non-periodic dimension --------------------------
+    def _barostat_dims():
+        """`fix npt` on a non-periodic dimension is a hard LAMMPS error.
+
+        z is non-periodic here by construction (walls), so any npt line
+        naming z is fatal. The old spot-pressure block did exactly that and
+        had never been run, because nothing set spot_pressure_GPa -- including
+        every configuration in this audit's own grid until it was widened.
+        """
+        periodic = set()
+        m = re.search(r"^boundary\s+(\S+)\s+(\S+)\s+(\S+)\s*$", deck, re.MULTILINE)
+        _check(m is not None, "no boundary line")
+        for dim, style in zip("xyz", m.groups()):
+            if style == "p":
+                periodic.add(dim)
+
+        for line in re.findall(r"^fix\s+.*?npt.*$", deck, re.MULTILINE):
+            # Strip the temp triple so its numbers are not mistaken for dims.
+            tail = re.sub(r"temp\s+\S+\s+\S+\s+\S+", "", line)
+            for dim in "xyz":
+                if re.search(rf"(?<![a-zA-Z]){dim}\s+-?[\d.]", tail):
+                    _check(dim in periodic,
+                           f"npt barostats non-periodic {dim}",
+                           line.strip())
+            if "couple" in tail:
+                coupled = re.search(r"couple\s+(\S+)", tail).group(1)
+                if coupled != "none":
+                    for dim in coupled:
+                        _check(dim in periodic,
+                               f"npt couples non-periodic {dim}", line.strip())
+    run(_barostat_dims, "barostat dims")
+
+    # --- relaxation is present exactly when asked for ---------------------
+    def _relax():
+        has_minimize = re.search(r"^minimize\s", deck, re.MULTILINE) is not None
+        has_relax_fix = re.search(r"^fix\s+relax\s", deck, re.MULTILINE) is not None
+        want = spec.relax_structure and spec.structure_mode == "build"
+        _check(has_minimize == want,
+               f"minimize {'missing' if want else 'present'} "
+               f"with relax_structure={spec.relax_structure}")
+        _check(has_relax_fix == want, "relax fix presence does not match spec")
+        if want:
+            _check(re.search(r"^unfix\s+relax\s*$", deck, re.MULTILINE) is not None,
+                   "relax fix is never unfixed, so it runs through production")
+            # The relax run must come before the gradient is imposed.
+            i_relax = deck.index("fix             relax")
+            i_lang = deck.index("langevin")
+            _check(i_relax < i_lang,
+                   "relaxation happens after the reservoirs are attached")
+    run(_relax, "relaxation")
+
     # --- unit conversions -------------------------------------------------
     def _units():
         ts = _scalar(deck, r"^timestep\s+([0-9.eE+-]+)", "timestep")
@@ -303,7 +354,7 @@ def main() -> int:
     cases: list[tuple[NEMDSpec, str]] = []
 
     # A grid over the knobs that moved in the defects found so far.
-    for cross_nm, bulk_nm, bin_nm, lat_ang, prod, every, frames in product(
+    for cross_nm, bulk_nm, bin_nm, lat_ang, prod, every, frames, relax in product(
         (3.0, 5.0, 7.3),            # cross-section, incl. non-multiples of a
         (6.0, 20.0, 31.5),          # bulk length each side
         (0.3, 0.5),                 # bin width
@@ -311,6 +362,7 @@ def main() -> int:
         (100_000, 20_000),          # production steps
         (100, 500),                 # profile_every
         (4, 7),                     # profile_frames
+        (True, False),              # relax_structure -- was never covered
     ):
         geom = NEMDGeometry(
             bulk_a_length=bulk_nm * 1e-9,
@@ -328,13 +380,34 @@ def main() -> int:
             production_steps=prod,
             profile_every=every,
             profile_frames=frames,
+            relax_structure=relax,
         )
         label = (f"cross={cross_nm}nm bulk={bulk_nm}nm bin={bin_nm}nm "
-                 f"a={lat_ang}A prod={prod} every={every} frames={frames}")
+                 f"a={lat_ang}A prod={prod} every={every} frames={frames} "
+                 f"relax={relax}")
         cases.append((spec, label))
 
+    # The spot-pressure path must REFUSE, not emit a deck LAMMPS rejects.
+    refusal_ok = False
+    try:
+        build_input_deck(NEMDSpec(
+            geometry=base, element_a="Si", element_b="Ge",
+            lattice_a=5.431e-10, lattice_b=5.658e-10,
+            mass_a=28.0855, mass_b=72.63,
+            pair_style="tersoff", pair_file="SiCGe.tersoff",
+            temperature=300.0, spot_pressure_GPa=6.0,
+        ))
+    except NotImplementedError:
+        refusal_ok = True
+    except Exception:                                         # noqa: BLE001
+        refusal_ok = False
+
     print(f"auditing {len(cases)} deck configurations\n")
-    all_problems: list[str] = []
+    if not refusal_ok:
+        all_problems_pre = ["spot_pressure_GPa did not raise NotImplementedError"]
+    else:
+        all_problems_pre = []
+    all_problems: list[str] = list(all_problems_pre)
     for spec, label in cases:
         all_problems += audit_one(spec, label)
 

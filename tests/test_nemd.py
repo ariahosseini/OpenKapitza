@@ -279,12 +279,41 @@ class TestDeck(unittest.TestCase):
     def test_walls_are_frozen(self):
         self.assertIn("setforce 0.0 0.0 0.0", build_input_deck(self.spec))
 
-    def test_spot_pressure_block_only_when_requested(self):
-        self.assertNotIn("npt", build_input_deck(self.spec))
+    def test_spot_pressure_is_refused_not_silently_broken(self):
+        """This test previously asserted the OLD, broken behaviour.
+
+        It checked that setting `spot_pressure_GPa` put "npt" and the pressure
+        in bar into the deck -- and it passed, for as long as the feature was
+        completely non-functional. The emitted line was
+            fix ... npt temp ... z <P> <P> <Pdamp>
+        which LAMMPS rejects with "Cannot use fix npt on a non-periodic z
+        dimension", plus a literal backslash it read as an npt keyword. A test
+        that asserts deck TEXT can lock in a deck the engine will not accept.
+
+        Proven broken against a real LAMMPS build; `build_input_deck` now
+        refuses, and this test pins the refusal.
+        """
         self.spec.spot_pressure_GPa = 7.6
+        with self.assertRaises(NotImplementedError):
+            build_input_deck(self.spec)
+
+    def test_relaxation_barostats_only_the_periodic_dimensions(self):
+        """Relaxation is default-on, so the default deck DOES contain npt."""
         deck = build_input_deck(self.spec)
-        self.assertIn("npt", deck)
-        self.assertIn("76000.00", deck)       # 7.6 GPa in bar
+        npt_lines = [l for l in deck.splitlines()
+                     if "npt" in l and l.startswith("fix")]
+        self.assertEqual(len(npt_lines), 1)
+        line = npt_lines[0]
+        self.assertIn("couple xy", line)
+        # z is non-periodic; barostatting it is a hard LAMMPS error.
+        tail = line.split("couple", 1)[1]
+        self.assertNotRegex(tail, r"(?<![a-zA-Z])z\s+-?[\d.]")
+
+    def test_relaxation_can_be_disabled(self):
+        self.spec.relax_structure = False
+        deck = build_input_deck(self.spec)
+        self.assertNotIn("npt", deck)
+        self.assertNotRegex(deck, r"(?m)^minimize\s")
 
     def test_profile_binning_matches_geometry(self):
         deck = build_input_deck(self.spec)

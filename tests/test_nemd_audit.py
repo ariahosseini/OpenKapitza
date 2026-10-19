@@ -147,6 +147,67 @@ class TestAuditHasTeeth(unittest.TestCase):
             "velocity create at 1x the setpoint")
 
 
+class TestBarostatAndRelaxChecks(unittest.TestCase):
+    """The spot-pressure block barostatted z, which is non-periodic here.
+
+    LAMMPS rejects that outright ("Cannot use fix npt on a non-periodic z
+    dimension"), and the block had never been run because nothing set
+    `spot_pressure_GPa` -- including every configuration in the audit's own
+    grid until it was widened. Proven against a real LAMMPS build.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.deck = build_input_deck(_spec())
+
+    def assertCaught(self, mutated: str, label: str):
+        self.assertNotEqual(mutated, self.deck, f"mutation {label!r} was a no-op")
+        self.assertTrue(_audit(mutated), f"audit did NOT catch: {label}")
+
+    def test_catches_npt_barostatting_non_periodic_z(self):
+        self.assertCaught(
+            self.deck.replace(
+                "couple xy x 0.0 0.0 1.0000 y 0.0 0.0 1.0000",
+                "z 60000.00 60000.00 1.0000"),
+            "npt barostats non-periodic z")
+
+    def test_catches_npt_coupling_non_periodic_z(self):
+        self.assertCaught(self.deck.replace("couple xy", "couple xyz"),
+                          "npt couples z")
+
+    def test_catches_relax_fix_left_running(self):
+        """An un-unfixed barostat would dilate the box through production."""
+        self.assertCaught(
+            self.deck.replace("unfix           relax", "# unfix relax"),
+            "relax fix never unfixed")
+
+    def test_catches_missing_minimize(self):
+        self.assertCaught(
+            re.sub(r"^minimize\s.*$", "# minimize", self.deck, flags=re.MULTILINE),
+            "minimize removed while relax_structure=True")
+
+    def test_catches_relaxation_after_the_reservoirs(self):
+        """Relaxing with the gradient already imposed measures nothing."""
+        self.assertCaught(
+            self.deck.replace("fix             relax", "fix             zzrelax")
+                     .replace("unfix           relax", "unfix           zzrelax"),
+            "relaxation moved after the reservoirs")
+
+    def test_spot_pressure_refuses_instead_of_emitting_a_bad_deck(self):
+        spec = _spec()
+        spec.spot_pressure_GPa = 6.0
+        with self.assertRaises(NotImplementedError):
+            build_input_deck(spec)
+
+    def test_relax_can_be_turned_off(self):
+        spec = _spec()
+        spec.relax_structure = False
+        deck = build_input_deck(spec)
+        self.assertNotRegex(deck, r"(?m)^minimize\s")
+        self.assertNotRegex(deck, r"(?m)^fix\s+relax\s")
+        self.assertEqual(audit_mod.audit_one(spec, "no-relax"), [])
+
+
 class TestAuditSweepIsClean(unittest.TestCase):
     def test_sweep_of_configurations_passes(self):
         """A smaller version of the script's own grid, kept in the suite."""

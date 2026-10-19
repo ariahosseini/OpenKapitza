@@ -615,6 +615,47 @@ filename, then an element label, then *which* label. Each was fixed as a
 specific instance before the general lesson landed. Read the file and refuse
 combinations that cannot be verified.
 
+### ERROR: Cannot use fix npt on a non-periodic z dimension
+
+**Symptom.** A deck dies immediately at the barostat line. Before that, it may
+die even earlier with `ERROR: Unknown fix npt keyword: \`.
+
+**Cause.** Two independent bugs in the same never-executed block.
+
+1. The template wrote `\\` in a Python string, which renders as a **literal
+   backslash** in the deck. LAMMPS continuation is `&`, not `\`, so the
+   backslash was parsed as an `npt` keyword. The neighbouring block used a
+   single `\` — a Python line-continuation that joins the lines before LAMMPS
+   ever sees them — which is why one worked and the other did not.
+2. `fix npt` requires every barostatted dimension to be **periodic**. In this
+   workflow z is deliberately non-periodic (`boundary p p f`, walls at both
+   ends) so heat cannot short-circuit around the box. Barostatting z is
+   therefore always an error here.
+
+**Fix.** For relaxation, barostat the **in-plane** dimensions only:
+`couple xy x 0 0 Pdamp y 0 0 Pdamp`. That is not a workaround — the lattice
+mismatch strain *is* in-plane, because the cell is built on one shared
+in-plane constant. For a **normal load** (spot pressure) there is no barostat
+answer: leave the bottom wall fixed, make the top wall mobile in z, and apply
+a force per wall atom summing to sigma*A.
+
+**Why it survived.** `spot_pressure_GPa` defaults to None and no fixture ever
+set it, so the block was never rendered, let alone run — including by a
+576-configuration deck audit whose grid left it at the default. **A config
+option nobody exercises is untested code, however many tests surround it.**
+Widen audit grids along the option axes, not just the numeric ones.
+
+### A test that asserts deck text can lock in a broken deck
+
+The spot-pressure block above had a dedicated passing test. It asserted that
+setting `spot_pressure_GPa` put `"npt"` and the pressure in bar into the deck
+— both true — and so it passed for as long as the feature was completely
+non-functional. Deck text is not behaviour. A string assertion proves the
+generator wrote what the author expected; only the engine can say whether what
+the author expected is valid. Where a feature cannot be exercised against the
+engine in CI, say so in the test name and treat the feature as unverified
+rather than tested.
+
 ### A fix that lives in a script is not a fix
 
 `potential_elements`, `potential_triples`, `complete_pairs` and

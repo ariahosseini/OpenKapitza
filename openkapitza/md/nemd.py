@@ -320,6 +320,11 @@ class NEMDSpec:
     # separating the two made the first real run emit a spurious
     # NEMD_POTENTIAL_UNVERIFIED for a potential that was sitting right there.
     potential_dir: str | None = None
+    # Relax the in-plane box before imposing the gradient. Default ON: a cell
+    # built on one lattice constant carries the whole mismatch as in-plane
+    # strain (6.4 GPa for Si/Ge), which changes h_K directly.
+    relax_structure: bool = True
+    relax_steps: int = 50_000
     timestep_fs: float = 1.0
     equilibrate_steps: int = 500_000
     steady_steps: int = 500_000
@@ -421,7 +426,7 @@ group           gmobile  subtract all gwalls
 
 velocity        gwalls set 0.0 0.0 0.0 units box
 fix             freeze gwalls setforce 0.0 0.0 0.0
-
+{relax_block}
 # ---- equilibration --------------------------------------------------------
 velocity        gmobile create {t_init:.2f} {seed} mom yes rot yes dist gaussian
 {pressure_block}
@@ -503,14 +508,43 @@ mass            1 {mass_a:.4f}
 mass            2 {mass_b:.4f}
 """
 
-PRESSURE_BLOCK = """\
-# Spot pressure: the local stress inside a real contact spot is of order the
-# contact microhardness (GPa), NOT the apparent contact pressure (MPa).
-fix             press gmobile npt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f} \\
-                z {pressure_bar:.2f} {pressure_bar:.2f} {pdamp_ps:.4f}
-run             {press_steps}
-unfix           press
+RELAX_BLOCK = """\
+
+# ---- relaxation -----------------------------------------------------------
+# The cell is built on ONE in-plane lattice constant, so the whole lattice
+# mismatch shows up as in-plane strain: 6.4 GPa of internal pressure in the
+# Si/Ge case, against ~0 for a relaxed crystal. That stress shifts phonon
+# frequencies and therefore changes h_K directly, so an unrelaxed cell does
+# not measure the interface it claims to.
+#
+# x and y are PERIODIC and can be barostatted. z cannot -- it is non-periodic
+# (walls), and `fix npt` on a non-periodic dimension is a hard LAMMPS error.
+# That is fine, because the mismatch strain is in-plane by construction.
+# Relaxing x and y at zero pressure lets the shared in-plane constant settle
+# where the net in-plane stress vanishes, splitting the mismatch between the
+# two sides instead of putting all of it on the B side.
+#
+# `couple xy` keeps the cross-section square, which the periodic images
+# require and which the cubic symmetry of both materials justifies.
+minimize        1.0e-6 1.0e-8 10000 100000
+velocity        gmobile create {t_init:.2f} {seed} mom yes rot yes dist gaussian
+fix             relax gmobile npt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f} \
+                couple xy x 0.0 0.0 {pdamp_ps:.4f} y 0.0 0.0 {pdamp_ps:.4f}
+thermo_style    custom step temp press pxx pyy pzz lx ly
+run             {relax_steps}
+unfix           relax
+thermo_style    custom step temp press pe ke etotal
 """
+
+# The spot-pressure template that used to live here is deliberately gone, not
+# commented out, so it cannot be re-enabled by deleting a guard. It emitted
+#     fix ... npt temp ... z <P> <P> <Pdamp>
+# which LAMMPS rejects outright ("Cannot use fix npt on a non-periodic z
+# dimension"), and before that a literal backslash it read as an npt keyword.
+# Correct approach when someone builds it: leave the bottom wall fixed, make
+# the top wall mobile in z, and apply a force per wall atom summing to
+# sigma*A, so the normal stress is imposed rather than barostatted. Until
+# then build_input_deck raises NotImplementedError for spot_pressure_GPa.
 
 
 def build_input_deck(spec: NEMDSpec) -> str:
@@ -518,16 +552,34 @@ def build_input_deck(spec: NEMDSpec) -> str:
     g = spec.geometry
     a = M_TO_ANG
 
-    pressure_block = ""
-    if spec.spot_pressure_GPa:
-        pressure_block = PRESSURE_BLOCK.format(
+    relax_block = ""
+    if spec.relax_structure and spec.structure_mode == "build":
+        relax_block = RELAX_BLOCK.format(
             temperature=spec.temperature,
+            t_init=2.0 * spec.temperature,
+            seed=spec.seed,
             damp_ps=spec.damping_fs * FS_TO_PS,
             pdamp_ps=10 * spec.damping_fs * FS_TO_PS,
-            pressure_bar=spec.spot_pressure_GPa * GPA_TO_BAR,
-            press_steps=max(10_000, spec.equilibrate_steps // 5),
+            relax_steps=spec.relax_steps,
         )
 
+    pressure_block = ""
+    if spec.spot_pressure_GPa:
+        # Verified against LAMMPS: this path emits
+        #   fix ... npt ... z <P> <P> <Pdamp>
+        # and dies with "Cannot use fix npt on a non-periodic z dimension".
+        # It also used to emit a literal backslash, which LAMMPS read as an
+        # npt keyword. Neither had ever been run: spot_pressure_GPa defaults
+        # to None and no fixture set it. Refusing beats emitting a deck that
+        # crashes minutes into a job.
+        raise NotImplementedError(
+            "spot_pressure_GPa is not implemented. Normal load on a slab with "
+            "non-periodic z cannot be applied with `fix npt`, which requires "
+            "the barostatted dimension to be periodic; it needs a force on "
+            "the wall group instead (sigma = F/A, top wall mobile in z, bottom "
+            "wall fixed), which is not built yet. Leave it None and relax the "
+            "in-plane box with relax_structure=True. See README 'Spot pressure'."
+        )
     if spec.structure_mode == "build":
         a_ang = spec.lattice_used * M_TO_ANG
         sa, sb = spec.lattice_strain
@@ -605,6 +657,7 @@ def build_input_deck(spec: NEMDSpec) -> str:
         area=(spec.snapped_area if spec.structure_mode == "build" else g.area),
         interface_ang=g.interface_z * a,
         pressure_block=pressure_block,
+        relax_block=relax_block,
     )
 
 
