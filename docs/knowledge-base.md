@@ -573,6 +573,38 @@ filename, then an element label, then *which* label. Each was fixed as a
 specific instance before the general lesson landed. Read the file and refuse
 combinations that cannot be verified.
 
+### A fix that lives in a script is not a fix
+
+`potential_elements`, `potential_triples`, `complete_pairs` and
+`match_species` were written to close three defects about potential-file
+contents, were unit-tested, and were then called from exactly one place:
+`scripts/smoke_lammps.py`. The library never called them. `build_input_deck`
+fell back to the bare chemical symbols, so anyone driving the library directly
+still got `pair_coeff * * SiCGe.tersoff Si Ge` — the invalid deck the helpers
+existed to prevent — and `check_spec` never looked at the potential file at
+all.
+
+The defect was *recorded as fixed* in this very file while the library could
+still emit it. The shakedown script passed because the script was the thing
+holding the fix.
+
+**How it was found.** Running the helpers against a real LAMMPS potentials
+directory, then grepping for callers. The grep is the step that matters:
+`grep -rn "complete_pairs" openkapitza/` returned nothing.
+
+**Rule.** After fixing a defect, grep for the fix's callers and confirm the
+path a user actually takes goes through it. A helper that only the test and
+the demo call has not changed the product's behaviour. When a verification
+script and the library both need a check, the check belongs in the library and
+the script should call it.
+
+**Also.** `match_species` is a trap for this specific job: it returns the
+*first* label whose stem matches, which for "Si" in `SiCGe.tersoff` is
+`Si(B)` — the parameterisation with **no** Ge cross terms. Use
+`resolve_pair_elements`, which returns only a pairing carrying all eight
+required triples. Measured against the real file: Si(B) 2/8, Si(C) 2/8,
+Si(D) 8/8.
+
 ### Verify on a second platform before trusting a test suite
 
 144 passing tests, an independent numerical audit and synthetic-profile

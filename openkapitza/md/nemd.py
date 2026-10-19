@@ -156,6 +156,47 @@ def complete_pairs(
     return found
 
 
+def resolve_pair_elements(
+    path: Path | str, symbol_a: str, symbol_b: str
+) -> tuple[str, str]:
+    """The label pair to write into `pair_coeff`, verified against the file.
+
+    This is the library-side entry point for the lesson that cost three
+    debugging cycles: a many-body potential file names its parameterisations
+    in the LABEL, and the cross terms may exist for only one of them. For
+    `SiCGe.tersoff` the labels are Si(B), Si(C), C, Si(D), Ge -- and only
+    Si(D) carries the full set of eight Si/Ge triples. Si(B) and Si(C) have
+    two each, so a deck written against either dies on a missing entry
+    minutes into a run.
+
+    `match_species` is NOT a substitute: it returns the first label whose
+    stem matches, which for "Si" in that file is Si(B) -- the wrong one.
+    Prefer this function anywhere a deck is about to be written.
+
+    Raises
+    ------
+    ValueError
+        If no pair of labels carries every required triple. The message lists
+        what the file does contain, because the next question is always
+        "then what can I use?".
+    """
+    triples = potential_triples(path)
+    pairs = complete_pairs(triples, symbol_a, symbol_b)
+    if pairs:
+        # Deterministic: complete_pairs sorts its candidates.
+        return pairs[0]
+
+    labels = sorted({lab for triple in triples for lab in triple})
+    raise ValueError(
+        f"{Path(path).name} has no complete set of triples for "
+        f"{symbol_a}/{symbol_b}. Labels present: {labels}. "
+        f"A two-element many-body system needs all eight ordered triples "
+        f"over the two labels; this file does not provide them for any "
+        f"pairing of those elements. Pick a different potential rather than "
+        f"writing a deck LAMMPS will reject."
+    )
+
+
 def match_species(labels: list[str], symbol: str) -> str | None:
     """Find the label in `labels` denoting the element `symbol`.
 
@@ -468,6 +509,25 @@ def build_input_deck(spec: NEMDSpec) -> str:
     else:
         raise ValueError(f"unknown structure_mode {spec.structure_mode!r}")
 
+    # Resolve the pair_coeff labels against the potential file whenever it is
+    # readable. Falling straight back to the bare chemical symbols is what
+    # produced `pair_coeff * * SiCGe.tersoff Si Ge` -- a deck LAMMPS rejects,
+    # because that file's labels are Si(D) and Ge. The interrogation used to
+    # live only in scripts/smoke_lammps.py, so anyone driving the library
+    # directly got the invalid deck with nothing to warn them.
+    pair_labels = spec.pair_elements
+    if pair_labels is None:
+        try:
+            pair_labels = resolve_pair_elements(
+                spec.pair_file, spec.element_a, spec.element_b
+            )
+        except (OSError, ValueError):
+            # Unreadable (generating decks away from the potentials) or no
+            # complete pair. Fall back to the bare symbols so deck generation
+            # still works offline; check_spec raises the flag that says this
+            # was not verified, and validate_deck cannot know either way.
+            pair_labels = (spec.element_a, spec.element_b)
+
     # Emit several frames rather than one average over everything: the
     # extractor uses the last, and the earlier ones make drift visible if the
     # run had not actually reached steady state.
@@ -484,8 +544,8 @@ def build_input_deck(spec: NEMDSpec) -> str:
         element_b=spec.element_b,
         pair_style=spec.pair_style,
         pair_file=spec.pair_file,
-        pair_a=(spec.pair_elements or (spec.element_a, spec.element_b))[0],
-        pair_b=(spec.pair_elements or (spec.element_a, spec.element_b))[1],
+        pair_a=pair_labels[0],
+        pair_b=pair_labels[1],
         timestep_ps=spec.timestep_fs * FS_TO_PS,
         damp_ps=spec.damping_fs * FS_TO_PS,
         z_wall_lo=g.wall_thickness * a,
@@ -673,6 +733,64 @@ def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:
                     "mismatch matters."
                 ),
                 strain=worst,
+            )
+
+    # --- the potential file must actually support the requested pair -------
+    # LAMMPS reports a missing triple only when it reaches the pair_coeff
+    # line, which for a deck set up after equilibration is minutes into a
+    # run. Checking here costs microseconds.
+    try:
+        triples = potential_triples(spec.pair_file)
+    except OSError:
+        flags.add(
+            Code.NEMD_POTENTIAL_UNVERIFIED,
+            Severity.WARNING,
+            f"Could not read the potential file {spec.pair_file!r}, so the "
+            f"pair_coeff labels were not verified against it.",
+            remedy=(
+                "This is expected when generating decks away from the LAMMPS "
+                "potentials directory. Before submitting, re-run this check "
+                "where the file exists -- a many-body file names its "
+                "parameterisations in the label (Si(D), not Si) and may carry "
+                "cross terms for only one of them."
+            ),
+            pair_file=str(spec.pair_file),
+        )
+    else:
+        pairs = complete_pairs(triples, spec.element_a, spec.element_b)
+        labels = sorted({lab for triple in triples for lab in triple})
+        if not pairs:
+            flags.add(
+                Code.NEMD_POTENTIAL_INCOMPLETE,
+                Severity.CRITICAL,
+                f"{Path(spec.pair_file).name} has no complete set of triples "
+                f"for {spec.element_a}/{spec.element_b}. Labels present: "
+                f"{labels}.",
+                remedy=(
+                    "A two-element many-body system needs all eight ordered "
+                    "triples over the two labels. LAMMPS will reject this "
+                    "deck. Choose a potential that parameterises the pair; do "
+                    "not hand-write a cross term."
+                ),
+                labels=labels,
+            )
+        elif spec.pair_elements is not None and tuple(spec.pair_elements) not in {
+            tuple(p) for p in pairs
+        }:
+            flags.add(
+                Code.NEMD_POTENTIAL_INCOMPLETE,
+                Severity.CRITICAL,
+                f"pair_elements {tuple(spec.pair_elements)} is not a complete "
+                f"pairing in {Path(spec.pair_file).name}. Complete pairings: "
+                f"{[tuple(p) for p in pairs]}.",
+                remedy=(
+                    "The requested labels exist but do not carry every "
+                    "required triple -- this is the Si(B)/Si(D) trap, where "
+                    "the first label matching 'Si' is not the one with the "
+                    "cross terms. Use one of the complete pairings listed."
+                ),
+                requested=list(spec.pair_elements),
+                complete=[list(p) for p in pairs],
             )
 
     if min(g.bulk_a_length, g.bulk_b_length) < 10e-9:

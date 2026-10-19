@@ -572,20 +572,27 @@ class TestSpecChecks(unittest.TestCase):
                             temperature=300.0, delta_reservoir=200.0), f)
         self.assertIn(Code.NEMD_FLUX_NONLINEAR, f.codes())
 
+    # These two specs leave `pair_file` at its default, which is not a readable
+    # file, so NEMD_POTENTIAL_UNVERIFIED is expected: check_spec now verifies
+    # the pair_coeff labels against the potential file and says so when it
+    # cannot. See tests/test_potential_pairs.py for that behaviour itself.
     def test_reasonable_spec_raises_only_the_strain_flag(self):
         """A Si/Ge build cell legitimately carries ~4 % strain and says so."""
         f = FlagSet()
         check_spec(NEMDSpec(geometry=NEMDGeometry(), element_a="Si",
                             element_b="Ge", lattice_a=5.4e-10, lattice_b=5.6e-10,
                             temperature=300.0), f)
-        self.assertEqual(f.codes(), {Code.NEMD_LATTICE_STRAIN})
+        self.assertEqual(
+            f.codes(),
+            {Code.NEMD_LATTICE_STRAIN, Code.NEMD_POTENTIAL_UNVERIFIED},
+        )
 
     def test_lattice_matched_pair_is_entirely_clean(self):
         f = FlagSet()
         check_spec(NEMDSpec(geometry=NEMDGeometry(), element_a="Si",
                             element_b="Si", lattice_a=5.431e-10,
                             lattice_b=5.431e-10, temperature=300.0), f)
-        self.assertEqual(f.codes(), set())
+        self.assertEqual(f.codes(), {Code.NEMD_POTENTIAL_UNVERIFIED})
 
 
 class TestParsers(unittest.TestCase):
