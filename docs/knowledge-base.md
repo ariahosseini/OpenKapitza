@@ -276,6 +276,51 @@ it loudly — do not guess the coefficients.
 
 ---
 
+### LAMMPS already provides facilities this project called "not modelled"
+
+Searching the official examples beyond the thermal path turned up three
+capabilities the project had written off or hand-rolled. Recorded here because
+each changes a plan, not just a detail. All are in `docs/lammps-rag.md`.
+
+**1. Accommodation coefficients — `fix wall/reflect/stochastic`.** Styles
+`diffusive`, `maxwell` and `ccl` (Cercignani–Lampis) take accommodation
+coefficients directly as arguments
+(`pos temp velx vely velz accomx accomy accomz`), with `examples/wall`
+shipping one script per model. Be precise about what this does and does not
+give:
+
+- It is the **forward** model: impose a known α and get the resulting
+  gas–surface energy exchange. That is useful for the gap path directly.
+- It does **not measure** α. The reflection is from an idealised wall, not a
+  real atomistic surface. Measuring α still means firing gas atoms at a real
+  slab and comparing incident with reflected energy against the wall
+  temperature. There is no canned example for that.
+
+So the unbuilt Phase-0 item changes from "no facility exists" to "the forward
+model is built in; the measurement needs a custom script".
+
+**2. Electron–phonon coupling — `fix ttm` / `fix ttm/mod`.** The spec flags
+Si/Al as a metal–semiconductor interface where electron–phonon coupling
+carries part of the heat and states that nothing in the workflow models it.
+LAMMPS implements a two-temperature model, and `examples/ttm` ships an Si
+parameterisation (`Si.ttm_mod`) plus `in.ttm.thermal`. The caveat can become a
+plan rather than a disclaimer.
+
+**3. Elastic constants — `examples/ELASTIC`.** The official method is
+`change_box ... remap units box` followed by `minimize`, applied at plus and
+minus the strain, which is the method used in
+`scripts/measure_potential_elastic.py` — so that measurement was done the
+right way. The official script adds a check this project did not fully meet:
+"it is important to verify that the minimization of energy w.r.t atom
+positions in the deformed cell is fully converged. One indication of this is
+that the elastic constants are insensitive to the choice of `${up}`." Our
+measurement used one strain set with a residual check; repeating at a second
+magnitude would close that. `compute born/matrix` is the modern alternative
+that avoids finite differences entirely.
+
+Also noted: `examples/vashishta` ships a real SiO2 parameterisation and a
+quartz data file, which is the Si/SiO2 amorphous path's starting point.
+
 ### Two differences from the official LAMMPS thermal scripts
 
 `docs/lammps-thermal-rag.md` holds the official `examples/KAPPA` scripts and

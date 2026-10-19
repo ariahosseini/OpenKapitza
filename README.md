@@ -251,7 +251,7 @@ specimens. Si/Ge validates Phase 1, where the atomistic physics arrives.
 |---|---|
 | [`docs/agent-instruction-v2.md`](docs/agent-instruction-v2.md) | **The spec.** What the agent must do at every step, which physics is fixed by rule rather than judgement, and the validation status of each component. Marks **[CORRECTED]** where v1 would have produced a wrong number and **[NEW]** where something was missing, with the rationale for each at the end. |
 | [`docs/knowledge-base.md`](docs/knowledge-base.md) | **The retrieval corpus.** Every defect this project hit, in Symptom / Cause / Fix / Verify form. |
-| [`docs/lammps-thermal-rag.md`](docs/lammps-thermal-rag.md) | **Official LAMMPS thermal reference.** The five `examples/KAPPA` scripts, the kappa-extraction recipes, and command pages for exactly the commands they use — emitted verbatim from a version-pinned LAMMPS source tree by `scripts/build_lammps_thermal_rag.py`. Generated; rebuild rather than edit. |
+| [`docs/lammps-rag.md`](docs/lammps-rag.md) | **Official LAMMPS reference, 8 physics paths.** Thermal transport, elastic constants and relaxation, hardness/indentation, gas–surface accommodation, surface structure, amorphous melt–quench, electron–phonon (TTM), and gas transport. 20 example scripts verbatim plus 38 command pages, emitted from a version-pinned source tree by `scripts/build_lammps_rag.py`. Generated; rebuild rather than edit. |
 | [`tests/benchmarks/SOURCES.md`](tests/benchmarks/SOURCES.md) | **The evidence.** Provenance of every benchmark number, what each dataset does and does not validate, and the digitisation quality audit. |
 
 `docs/agent-instruction-v2.md` is the canonical copy of the instruction; it is
@@ -624,6 +624,12 @@ Ordered. The agreed sequence is: confirm Phase 0 and Phase 1, **then** Phase 2.
    are hard-flagged LOW confidence. Until this lands, the weakest input in
    the model has no route to improvement. Needs MD, so it sits with Phase 1/4
    work rather than blocking Phase 0.
+   **Update:** LAMMPS supplies the *forward* model — `fix wall/reflect/stochastic`
+   with `diffusive`/`maxwell`/`ccl` styles takes accommodation coefficients as
+   arguments, with an example per model in `examples/wall`. It does not
+   *measure* α, which still needs gas atoms fired at a real atomistic surface.
+   So this is now a scripting job against an existing facility rather than
+   something to build from nothing.
 2. **The gap-model continuum deficit.** ~32 % low at M/Y < 0.1, monotone in
    M/Y, cause identified (uniform-gap assumption), opt-in fix implemented,
    default deliberately unchanged, ~25 % of the discrepancy unexplained.

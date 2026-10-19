@@ -291,6 +291,15 @@ Measured values for one gas/solid pair span an order of magnitude with surface
 cleanliness, adsorbed layers and roughness. Defaults are always LOW confidence
 and always flagged. Offer the optional MD gas–surface scattering calculation.
 
+**[NEW] What LAMMPS gives you here.** `fix wall/reflect/stochastic` implements
+the `diffusive`, `maxwell` and Cercignani–Lampis (`ccl`) reflection models and
+takes accommodation coefficients directly as arguments, with one example
+script per model in `examples/wall`. That is the **forward** model — impose a
+known α. It does **not** measure α, because the reflection is from an
+idealised wall rather than a real atomistic surface; measuring α means firing
+gas atoms at a real slab and comparing incident with reflected energy against
+the wall temperature. Say which of the two you are doing.
+
 ### [NEW] Known limitation: the lumped form underpredicts toward continuum
 
 `h_g = k_g/(Y + M)` replaces the distribution of local gap thicknesses with a
@@ -403,9 +412,15 @@ vacuum exercise neither the plastic branch nor the gas model.
 
 **Si/Al needs a caveat, not just a benchmark entry.** It is a
 metal–semiconductor interface, where electron–phonon coupling carries part of
-the heat. Nothing in this workflow models that. Either say so when reporting
-Si/Al, or add the physics — do not quote a phonon-only h_K for a metal
-interface as if it were complete.
+the heat. Nothing in this workflow models that yet. Either say so when
+reporting Si/Al, or add the physics — do not quote a phonon-only h_K for a
+metal interface as if it were complete.
+
+**[NEW] The physics is available.** LAMMPS implements a two-temperature model
+in `fix ttm` and `fix ttm/mod`, and `examples/ttm` ships an Si
+parameterisation (`Si.ttm_mod`) and a thermal-gradient script
+(`in.ttm.thermal`). So this is a buildable path, not an inherent limitation —
+state it as unimplemented rather than impossible.
 
 On agreement: contact correlations are not precision instruments. Within a
 factor of two across a pressure sweep is the realistic standard, and the
