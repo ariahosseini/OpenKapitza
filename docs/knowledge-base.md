@@ -276,6 +276,49 @@ it loudly — do not guess the coefficients.
 
 ---
 
+### Two differences from the official LAMMPS thermal scripts
+
+`docs/lammps-thermal-rag.md` holds the official `examples/KAPPA` scripts and
+command pages. Reading them against our deck turned up two places where we
+differ. Neither is a defect, and both are worth knowing.
+
+**1. Slab thermostatting: static group vs `compute temp/region`.** The manual's
+idiom is to apply `fix langevin` and point it at a region-restricted
+temperature compute:
+
+```lammps
+compute Thot all temp/region hot
+fix     hot all langevin ${thi} ${thi} 1.0 59804 tally yes
+fix_modify hot temp Thot
+```
+
+`fix_langevin.rst` confirms this restricts the thermostat to that region:
+"to apply the thermostat only to atoms within a spatial region ... This is not
+done by default, but only if the fix_modify command is used to assign a
+temperature compute to this fix that includes such a bias term."
+
+We instead use a static group (`group ghot region hot`). For a crystalline
+solid the two are near-equivalent, because atoms vibrate about lattice sites
+and do not migrate between slabs, and a static group has the advantage of a
+**fixed** DOF count — `compute_temp_region.rst` warns that a region
+temperature "should probably not be used with Nose-Hoover style fixes ... if
+the degrees of freedom included in the computed temperature vary with time."
+For a liquid, where atoms cross slab boundaries, the official idiom is the
+correct one and ours would be wrong.
+
+**2. `fix ave/chunk` with `units box` and a changing box.** From
+`fix_ave_chunk.rst`: "If its *units* keyword is set to *box* or *lattice*,
+then the number of bins and size of each bin will be fixed over the Nfreq time
+window, which can affect **which atoms are discarded** if the simulation box
+size changes."
+
+We use `units box`, and we now run an NPT relaxation that changes the box. We
+are safe only because the relaxation finishes before production and the box is
+fixed thereafter. Anything that barostats *during* production would silently
+drop atoms from the profile. This is also the likely companion to the
+`NEMD_FEW_BINS` report of "5 of 53 bins empty" — bins that extend past the
+slab. Worth re-checking if a barostat is ever added to the production stage.
+
 ### A potential can nail the lattice constant and still invert the stiffness
 
 **Symptom.** The relaxed shared in-plane constant of a coherent Si/Ge cell
