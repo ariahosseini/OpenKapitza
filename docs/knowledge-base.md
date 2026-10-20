@@ -276,6 +276,36 @@ it loudly — do not guess the coefficients.
 
 ---
 
+### `fix indent` reports load, not hardness — and the load is not monotonic
+
+**Symptom.** Expecting `examples/indent` to give a hardness, or a load that
+rises steadily with depth.
+
+**Cause.** The fix exposes the force on the indenter (`f_ID[1..3]`) and an
+interaction energy. Nothing in it computes contact area, so nothing in it is a
+hardness. And materials yield: running the official `in.indent.min` with the
+load printed gives 0.049 → 0.150 → 0.135 → 0.185 → 0.128 → 0.136 as the
+indenter goes deeper. The drops are pop-in events.
+
+**Fix.** Compute contact area separately (from indenter radius and depth, or
+from atoms in contact), and report the whole load–depth curve, because a
+single "hardness" depends on where the curve is read. The official example is
+2D Lennard-Jones in reduced units — a mechanics template, not a material.
+
+**Never use the result to fill c₁, c₂.** Those come from Vickers microhardness
+over micron-scale indents; MD indents nanometres of perfect crystal at extreme
+strain rates and typically returns several times the microhardness. Compare
+against nanoindentation instead. See §11 of the agent instruction.
+
+### MD thermal conductivity of a metal is the phonon part only
+
+Classical MD has no electrons. In metals the electrons carry most of the heat:
+a Wiedemann–Franz estimate gives roughly 60 % in SS 304 and roughly 90 % in
+nickel. An MD k for a metal is therefore a lattice-only lower bound and must
+never stand in for the total k in kₛ. (For nickel, WF with the Sommerfeld
+Lorenz number actually overshoots the measured total — nickel's Lorenz number
+is below the ideal value — which is itself a reminder that WF is an estimate.)
+
 ### LAMMPS already provides facilities this project called "not modelled"
 
 Searching the official examples beyond the thermal path turned up three
@@ -397,8 +427,16 @@ converged.)
 
 **Fix.** `scripts/measure_potential_elastic.py` measures a0 and C_ij for a
 potential and flags an inverted ordering explicitly. Run it before trusting
-any strain-dependent result. Build geometry from reference elastic constants
-rather than the potential's, and say which was used.
+any strain-dependent result.
+
+**Correction to the first version of this fix.** It originally said "build
+geometry from reference elastic constants rather than the potential's". That
+cannot work: a relaxed MD cell partitions strain by the *potential's* C_ij no
+matter how the starting geometry was built, and a cell built off the
+potential's own a0 just starts prestrained. Build MD cells on the potential's
+own a0. When its C_ij are known wrong, the honest options are to report that
+strain-dependent results inherit the error, or to change potential. Geometry
+cannot paper over a potential's physics.
 
 **The general lesson.** Checking a0 alone is not validating a potential. A0 is
 the quantity everyone checks and the easiest to fit; this potential reproduces

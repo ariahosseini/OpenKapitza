@@ -149,9 +149,19 @@ two with cell strain. So:
 - **Checking a0 alone is not a validation.** A potential can reproduce the
   one quantity everyone checks to 0.03 % while getting the quantity that
   decides the answer qualitatively wrong.
-- Build geometry from **reference** elastic constants, not the potential's,
-  and say which was used. If a strain-partitioning result must come from the
-  potential, flag that it rests on a property the potential gets backwards.
+- **[CORRECTED] Build MD cells on the potential's own lattice constant.**
+  An earlier version of this rule said to build geometry from reference
+  elastic constants. That was wrong: a relaxed MD cell partitions strain
+  according to the *potential's* C_ij however it was built, so geometry
+  cannot compensate for bad elastic constants — and a cell built off the
+  potential's own a0 simply starts prestrained by the a0 error. What follows
+  instead:
+  - when a potential's C_ij are known to be wrong, **report** that every
+    strain-partitioning result inherits the error, and prefer a potential
+    that gets them right — choosing the potential is the only real fix;
+  - reference values still decide *design* choices made outside MD, such as
+    which Phase-2 supercell orientation to try first;
+  - reference values, not the potential's, feed the continuum model (§11).
 
 **[NEW] Warn specifically, not generically:**
 
@@ -443,6 +453,160 @@ whole model. Name the untested components whenever a total is quoted.
 
 ---
 
+## 11. [NEW] MD-derived inputs: fill, compare, or defer
+
+The continuum model assumes inputs come from experiment. MD can compute some
+of them — but only some, and the rules differ by quantity. The dividing line:
+**properties of the material** can be computed; **properties of the surface
+finish and the test conditions** cannot.
+
+### Three modes
+
+- **Requested** — the user asks for an MD value. Compute it, label it.
+- **Compare** — the user has a measured value and MD runs alongside it. Report
+  both and their ratio. The MD value **never overwrites** the measurement.
+  This is the most valuable mode: MD-vs-experiment is how a potential is
+  validated, and it is what caught `SiCGe.tersoff` inverting the Si/Ge
+  stiffness ordering.
+- **Fill** — an input is missing and MD supplies it. Never silently.
+
+### Rules that apply to every MD-derived number
+
+1. **Provenance travels with it**: computed by MD, which potential, which
+   temperature, which run. A filled value is flagged everywhere it appears.
+2. **Fill priority** for continuum inputs: user measurement → handbook or
+   database → MD → correlation. One exception, below: accommodation
+   coefficients, where an MD value beats the generic default.
+3. **Confidence is capped** for a fill at the level in the table, and the
+   rule from §0 still holds — a derived quantity can never be more confident
+   than its weakest input.
+4. **Two uses, kept apart.** The continuum model wants *real-world* values.
+   The MD model uses the *potential's own* values internally (a cell is built
+   on the potential's a0). An MD-computed property therefore enters the
+   continuum model only as a flagged fill, and a measured property never
+   replaces a potential's internal value inside an MD run. Mixing the two is
+   how a strain result ends up decided by a stiffness ordering the potential
+   gets backwards.
+
+### Per quantity
+
+| quantity | requested | compare | fill | fill confidence | feeds | status |
+|---|---|---|---|---|---|---|
+| Accommodation coefficient α | yes | yes | **yes — preferred over default** | MEDIUM | gap model | not built |
+| h_K | core job | yes | n/a — MD's own output | by convergence | network | built (Phase 1), physics unvalidated |
+| Elastic constants → E, ν | yes | **yes — the potential gate** | yes | MEDIUM if the potential passes the gate, else LOW | ψ, elastic branch, ξ | partly built |
+| Thermal conductivity k | yes | yes | **non-metals only** | LOW | kₛ in h_c | not built |
+| Nanohardness | yes | yes, vs nanoindentation | **never** | — | — | not built; template exists |
+| Roughness σ, slope m | no | no | no | — | — | not computable |
+| P, P_gas, T | no | no | no | — | — | test conditions |
+
+### Accommodation coefficient α
+
+The highest-value target: the spec's weakest input, with measured values
+spanning an order of magnitude for one gas/solid pair.
+
+- **Measure on a real slab, not a stochastic wall.** `fix
+  wall/reflect/stochastic` *imposes* α (diffusive, Maxwell, Cercignani–Lampis
+  styles take it as an argument) — useful for testing gap behaviour with a
+  chosen α, useless for measuring one. A measurement needs an atomistic solid
+  surface thermostatted at T_s, with gas atoms launched from a Maxwellian at a
+  different T_g.
+- **Definition**: α = (E_r − E_i) / (E_s − E_i), where E_i and E_r are the mean
+  incident and reflected energies per molecule and E_s = 2k_B·T_s is the mean
+  energy a flux-weighted Maxwellian at the surface temperature would carry
+  away. Average over enough trajectories that the statistical error is stated.
+- **The gas–solid interaction is the dominant uncertainty.** It is usually a
+  Lennard-Jones cross term from mixing rules, which are not well founded for
+  gas–metal pairs. Report α's sensitivity to that term, not one number.
+- **Clean surface ≠ technical surface.** Real surfaces carry oxides and
+  adsorbed layers, which generally raise α. An MD value on a clean surface is
+  closer to a bound than to the answer for a machined part. Say so.
+
+### h_K
+
+Phase 1's job, governed by §5 and §9. Not a fill — there is no experimental
+input it replaces. Compare against TDTR or other published measurements where
+they exist, after the stationarity check has a working noise floor and the
+convergence ladder has run.
+
+### Elastic constants → E, ν
+
+`scripts/measure_potential_elastic.py` already measures a0, C11 and C12 at
+0 K, using the same `change_box ... remap` plus `minimize` method as the
+official `examples/ELASTIC`. Three gaps before it can fill:
+
+- **C44 is not measured**, and the continuum model wants isotropic E and ν,
+  which need it. Use the Voigt–Reuss–Hill average:
+  ```
+  B   = (C11 + 2 C12) / 3
+  G_V = (C11 − C12 + 3 C44) / 5
+  G_R = 5 (C11 − C12) C44 / (4 C44 + 3 (C11 − C12))
+  G   = (G_V + G_R) / 2
+  E   = 9 B G / (3 B + G)
+  ν   = (3 B − 2 G) / (2 (3 B + G))
+  ```
+- **Strain-magnitude insensitivity is not yet checked**, which the official
+  example names as the test that the minimisation converged. Repeat at a
+  second strain magnitude.
+- **0 K only.** `examples/ELASTIC_T` and `compute born/matrix` cover finite
+  temperature.
+
+Because E' enters the plasticity index ψ, an MD-filled E can move a joint
+across the elastic/plastic threshold. Report that sensitivity when ψ is near
+either threshold.
+
+### Thermal conductivity k
+
+- **Metals: never fill the total.** Classical MD has no electrons, and in
+  metals electrons carry most of the heat — by a Wiedemann–Franz estimate
+  roughly 60 % in SS 304 and roughly 90 % in nickel. (Alloys sit lower because
+  scattering off solute atoms suppresses the electronic part.) An MD k for a metal is the
+  phonon (lattice) part only — a lower bound — and must be labelled that way.
+  The electronic part needs the electrical conductivity and Wiedemann–Franz,
+  which is outside MD.
+- **Non-metals**: bulk k by NEMD on a cell with **no interface** (the
+  `examples/KAPPA` Langevin method), extrapolated in 1/k versus 1/L because
+  crystalline slabs are size-limited; or Green–Kubo via `compute heat/flux`,
+  with `compute centroid/stress/atom` as the manual's own warning requires.
+- **Below θ_D**, classical MD overpopulates high-frequency modes (§9). Report
+  the uncorrected value.
+- **Not the per-side apparent k.** The interface runs already report an
+  apparent k for each side (it drives `NEMD_CONDUCTIVITY_MISMATCH`). Those
+  are size-limited by design and must never be reported as bulk k.
+
+### Nanohardness — compare only
+
+The official template is `examples/indent`: a **2D Lennard-Jones toy in
+reduced units**. Running it shows two things a real implementation must
+handle:
+
+- **`fix indent` reports load, not hardness.** It gives the force on the
+  indenter; contact area must be computed separately — from the indenter
+  radius and depth, or from the atoms in contact.
+- **The load is not monotonic.** In the official minimisation example it goes
+  0.049 → 0.150 → 0.135 → 0.185 → 0.128 → 0.136 as the indenter goes deeper,
+  dropping after the material yields. "The hardness" therefore depends on
+  where the curve is read. Report the full load–depth curve.
+
+Real use needs 3D, a real potential (EAM for metals), indentation along z with
+the load read from the z component of the indenter force, and a stated
+contact-area model.
+
+**It never fills c₁, c₂.** Those are fitted to Vickers *microhardness* over
+indentation diagonals of microns to tens of microns. MD indents nanometres of
+perfect crystal at strain rates many orders of magnitude above experiment, and
+typically returns hardness several times the microhardness. The legitimate
+uses are:
+
+- **comparison with nanoindentation** data (10–100 nm depth), which is the
+  closest experimental scale;
+- **a potential plasticity check** — does it yield at all, at a sane H/E?;
+- **the size-effect direction.** Song–Yovanovich has hardness rising as
+  contacts shrink (c₂ < 0), so MD at nanometres should come out well *above*
+  the microhardness. If it comes out below, suspect the potential.
+
+---
+
 ## Why each correction
 
 | # | v1 said | Consequence | Fix |
@@ -460,3 +624,8 @@ whole model. Name the untested components whenever a total is quoted.
 | 7 | lumped gap form, unqualified | underpredicts ~32 % toward the continuum limit; invites a wrong "fix" via accommodation coefficients | state the trend and its cause; offer the Gaussian gap integral as a bracket |
 | 0 | — | nothing stopped digitised figure data being quoted as measurement | hard rule 6 |
 | — | no ordering | starts expensive MD before knowing if it matters | continuum first, sensitivity gate |
+| 4 | Tier 1 classical potentials ungated | `SiCGe.tersoff` matches a0 to 0.02 % but inverts the Si/Ge stiffness ordering | Tier-1 gate: measure a0 **and** C_ij |
+| 4 | (this file, first revision) "build geometry from reference C_ij" | impossible — a relaxed MD cell follows the potential's C_ij whatever the start | build on the potential's own a0; report or change potential |
+| 11 | "compute the accommodation coefficient with MD", nothing on other inputs | no rule for when an MD number may stand in for a measurement | fill / compare / defer per quantity, with provenance and confidence caps |
+| 11 | — | MD k for a metal would silently drop the electronic part — ~60 % in stainless, ~90 % in nickel | metals: phonon part only, never a fill for total k |
+| 11 | — | MD nanohardness would be mistaken for the microhardness c₁, c₂ need | compare only, never fill |

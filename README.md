@@ -655,6 +655,23 @@ added today catches the 1.51 GPa Pzz. That is the fix working on real data.
 
 **4.** Phase 2 structure module, which 1b feeds directly.
 
+**5. MD-derived inputs** — designed in §11 of the agent instruction: when an
+MD value may *fill* a missing input, only be *compared* with a measurement, or
+must *defer*. Build order, cheapest-first within value:
+
+- **5a. Elastic constants → E, ν.** 80 % built. Add C44 and the Voigt–Reuss–Hill
+  average (the continuum model needs isotropic E, ν), and repeat at a second
+  strain magnitude — the convergence test the official `examples/ELASTIC`
+  names.
+- **5b. Accommodation coefficient α.** The highest-value target and the one
+  unbuilt piece of original Phase-0 scope, so arguably due before Phase 2.
+  Needs a real atomistic slab and launched gas atoms, not
+  `fix wall/reflect/stochastic`, which imposes α rather than measuring it.
+- **5c. Bulk thermal conductivity k** for non-metals, with 1/L extrapolation.
+  For metals MD gives the phonon part only and may never fill the total.
+- **5d. Nanohardness, compare-only.** Template exists (`examples/indent`, 2D LJ);
+  needs 3D, a real potential and a contact-area model. Never fills c₁, c₂.
+
 Superseded detail from the original item 1:
 
 1. **Measure the potentials' own equilibrium lattice constants.** The relaxed

@@ -213,9 +213,10 @@ def measure(lmp: Path, potentials: Path, pair_style: str, potential: str,
             print(f"  Strain partitioning, and therefore the relaxed in-plane")
             print(f"  constant of a coherent interface, is decided by a property")
             print(f"  this potential gets qualitatively wrong. Treat any")
-            print(f"  strain-dependent result from it as suspect, and build")
-            print(f"  geometry from reference elastic constants rather than")
-            print(f"  from the potential's own.")
+            print(f"  strain-dependent result from it as suspect. Building the")
+            print(f"  geometry differently cannot fix this -- a relaxed MD cell")
+            print(f"  partitions strain by the potential's own C_ij whatever")
+            print(f"  the starting structure. Report it, or change potential.")
     return 0
 
 
