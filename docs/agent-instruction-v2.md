@@ -492,11 +492,11 @@ finish and the test conditions** cannot.
 
 | quantity | requested | compare | fill | fill confidence | feeds | status |
 |---|---|---|---|---|---|---|
-| Accommodation coefficient α | yes | yes | **yes — preferred over default** | MEDIUM | gap model | not built |
+| Accommodation coefficient α | yes | yes | **yes — preferred over default** | MEDIUM | gap model | built (5b); pipeline validated against imposed-α walls |
 | h_K | core job | yes | n/a — MD's own output | by convergence | network | built (Phase 1), physics unvalidated |
-| Elastic constants → E, ν | yes | **yes — the potential gate** | yes | MEDIUM if the potential passes the gate, else LOW | ψ, elastic branch, ξ | partly built |
-| Thermal conductivity k | yes | yes | **non-metals only** | LOW | kₛ in h_c | not built |
-| Nanohardness | yes | yes, vs nanoindentation | **never** | — | — | not built; template exists |
+| Elastic constants → E, ν | yes | **yes — the potential gate** | yes | MEDIUM if the potential passes the gate, else LOW | ψ, elastic branch, ξ | built (5a); matches official examples/ELASTIC |
+| Thermal conductivity k | yes | yes | **non-metals only** | LOW | kₛ in h_c | built (5c); SW-Si validation running |
+| Nanohardness | yes | yes, vs nanoindentation | **never** | — | — | built (5d), compare-only |
 | Roughness σ, slope m | no | no | no | — | — | not computable |
 | P, P_gas, T | no | no | no | — | — | test conditions |
 
@@ -521,6 +521,32 @@ spanning an order of magnitude for one gas/solid pair.
 - **Clean surface ≠ technical surface.** Real surfaces carry oxides and
   adsorbed layers, which generally raise α. An MD value on a clean surface is
   closer to a bound than to the answer for a machined part. Say so.
+- **Calibrate the well before running.** Mixing-rule pair wells look modest
+  but SUM, in a surface hollow, to chemisorption strength: Lorentz–Berthelot
+  gives 124 meV for He on Ni(100) and 528 meV for Ar, against physisorption
+  energies of order 6 and 80 meV. Uncalibrated Ar condensed and pulled Ni
+  atoms out of the surface. `calibrate_well_depth` scans one atom over a
+  lateral grid, finds the deepest site, and rescales ε linearly to the
+  target. Then quote α across the literature range of that target
+  (`target_range_scales`), not at one ε.
+- **Pair the events.** Averaging incident and reflected energies separately
+  makes α a small difference of noisy means. Pairing each incidence with the
+  same atom's next reflection measures the same quantity with ~3x less error
+  for He. Report the unpaired value as a cross-check; they must agree.
+- **Measure the surface temperature and the coverage.** The hot gas heats
+  the slab; E_s uses the measured T_s. Coverage above 0.1 per site is flagged:
+  with gas–gas forces off, adsorbed atoms stack and the surface is no longer
+  clean.
+- **He and Ne: classical MD over-estimates α.** Their energy exchange is
+  dominated by elastic and single-phonon scattering. A classical value is an
+  upper estimate for the clean surface (`MD_ACCOMMODATION_QUANTUM_GAS`).
+
+Implemented in `openkapitza/md/accommodation.py` (5b). Known-answer
+validation against walls with imposed α: diffusive 0.9947 ± 0.0046, specular
+0 exactly, Maxwell 0.4 → 0.4015 ± 0.0059, Maxwell 0.8 → 0.8062 ± 0.0056.
+First results, Ni(100) EAM at T_s = 300 K, T_g = 400 K, calibrated:
+**He 0.093 ± 0.014** (upper estimate, see above; Baule–Goodman 0.14) and
+**Ar 0.52 ± 0.12** (short run; Baule–Goodman 0.58).
 
 ### h_K
 
@@ -531,12 +557,13 @@ convergence ladder has run.
 
 ### Elastic constants → E, ν
 
-`scripts/measure_potential_elastic.py` already measures a0, C11 and C12 at
-0 K, using the same `change_box ... remap` plus `minimize` method as the
-official `examples/ELASTIC`. Three gaps before it can fill:
-
-- **C44 is not measured**, and the continuum model wants isotropic E and ν,
-  which need it. Use the Voigt–Reuss–Hill average:
+Implemented in `openkapitza/md/elastic.py` (5a), with
+`scripts/measure_potential_elastic.py` as a thin wrapper. a0, C11, C12 and
+C44 at 0 K by the official `examples/ELASTIC` method (`box/relax`, then
+`change_box ... remap` plus `minimize`), C44 on a triclinic yz shear with
+internal relaxation; central differences at two strain magnitudes (0.002,
+0.005), flagged if they disagree by more than 1 %. Isotropic E and ν by
+Voigt–Reuss–Hill:
   ```
   B   = (C11 + 2 C12) / 3
   G_V = (C11 − C12 + 3 C44) / 5
@@ -545,11 +572,12 @@ official `examples/ELASTIC`. Three gaps before it can fill:
   E   = 9 B G / (3 B + G)
   ν   = (3 B − 2 G) / (2 (3 B + G))
   ```
-- **Strain-magnitude insensitivity is not yet checked**, which the official
-  example names as the test that the minimisation converged. Repeat at a
-  second strain magnitude.
-- **0 K only.** `examples/ELASTIC_T` and `compute born/matrix` cover finite
-  temperature.
+The gate passes a potential when every C_ij is within 10 % of the reference
+single-crystal value. Si.sw reproduces the official example to the last
+printed digit (151.42 / 76.42 / 56.45 GPa).
+
+Still open: **0 K only.** `examples/ELASTIC_T` and `compute born/matrix`
+cover finite temperature.
 
 Because E' enters the plasticity index ψ, an MD-filled E can move a joint
 across the elastic/plastic threshold. Report that sensitivity when ψ is near
@@ -591,6 +619,18 @@ handle:
 Real use needs 3D, a real potential (EAM for metals), indentation along z with
 the load read from the z component of the indenter force, and a stated
 contact-area model.
+
+Implemented in `openkapitza/md/indentation.py` (5d): a 3D slab with a frozen
+base and a rigid spherical `fix indent` lowered in steps, each followed by an
+energy minimisation with `fix_modify energy yes`, as in the official
+minimisation variant. Contact area from the geometric spherical cap,
+a² = 2Rh − h², stated with the result. The first pop-in is the first load drop
+above 2 % (the run is athermal, so any real drop is plastic). Hardness is the
+mean P/(πa²) past pop-in; a Hertz fit before pop-in gives E* as an internal
+check against 5a. First result, Ni(100) with Ni_u3.eam, R = 25 Å, 38,016
+atoms: pop-in at 5.25 Å and 156 nN, **H = 19.4 ± 1.3 GPa**, Hertz E* = 201 GPa
+against an isotropic VRH E/(1−ν²) of 244 GPa. The box is 2.1 contact
+diameters wide at the deepest step, which is flagged.
 
 **It never fills c₁, c₂.** Those are fitted to Vickers *microhardness* over
 indentation diagonals of microns to tens of microns. MD indents nanometres of

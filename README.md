@@ -659,18 +659,22 @@ added today catches the 1.51 GPa Pzz. That is the fix working on real data.
 MD value may *fill* a missing input, only be *compared* with a measurement, or
 must *defer*. Build order, cheapest-first within value:
 
-- **5a. Elastic constants → E, ν.** 80 % built. Add C44 and the Voigt–Reuss–Hill
-  average (the continuum model needs isotropic E, ν), and repeat at a second
-  strain magnitude — the convergence test the official `examples/ELASTIC`
-  names.
-- **5b. Accommodation coefficient α.** The highest-value target and the one
-  unbuilt piece of original Phase-0 scope, so arguably due before Phase 2.
-  Needs a real atomistic slab and launched gas atoms, not
-  `fix wall/reflect/stochastic`, which imposes α rather than measuring it.
-- **5c. Bulk thermal conductivity k** for non-metals, with 1/L extrapolation.
-  For metals MD gives the phonon part only and may never fill the total.
-- **5d. Nanohardness, compare-only.** Template exists (`examples/indent`, 2D LJ);
-  needs 3D, a real potential and a contact-area model. Never fills c₁, c₂.
+- **5a. Elastic constants → E, ν.** Built (`md/elastic.py`): a0, C11, C12,
+  C44, two strain magnitudes, Voigt–Reuss–Hill E and ν, the 10 % potential
+  gate. Reproduces the official `examples/ELASTIC` on Si.sw exactly.
+- **5b. Accommodation coefficient α.** Built (`md/accommodation.py`): real
+  Ni(100) slab, calibrated gas–solid well, paired-collision estimator,
+  measured surface temperature and coverage. Validated against walls with
+  imposed α (`scripts/validate_accommodation.py`). He/Ni 0.093 ± 0.014
+  (classical, so an upper estimate), Ar/Ni 0.52 ± 0.12.
+- **5c. Bulk thermal conductivity k.** Built (`md/conductivity.py`):
+  periodic Langevin NEMD after `examples/KAPPA`, 1/k vs 1/L extrapolation.
+  Metals return the lattice part only. SW-Si validation at 500 K running.
+- **5d. Nanohardness, compare-only.** Built (`md/indentation.py`): 3D
+  quasi-static sphere indentation, cap-model area, full P(h), pop-in,
+  Hertz E*. Ni(100): H = 19.4 ± 1.3 GPa. Never fills c₁, c₂.
+
+Run any of them with `scripts/run_md_inputs.py {accommodation,kappa,indent}`.
 
 Superseded detail from the original item 1:
 
