@@ -175,7 +175,7 @@ class IndentResult:
 
 
 def analyse_curve(rows: np.ndarray, radius: float, lateral: float,
-                  flags: FlagSet, *, drop_fraction: float = 0.05,
+                  flags: FlagSet, *, drop_fraction: float = 0.02,
                   label: str = "") -> IndentResult:
     depth = rows[:, 0]
     # The force ON the indenter from the atoms points up (+z) when pushing in.
@@ -186,6 +186,10 @@ def analyse_curve(rows: np.ndarray, radius: float, lateral: float,
             * EV_PER_A3_TO_GPA
 
     # First pop-in: the first step where load falls by more than drop_fraction.
+    # The run is quasi-static at 0 K, so there is no thermal noise and any real
+    # drop is a plastic event; the threshold only guards against minimiser
+    # tolerance. (5 % was the first choice and skipped a clear 4.2 % pop-in in
+    # the Ni R = 25 A run, reading yield 1.75 A too deep.)
     popin = None
     for i in range(1, load.size):
         if load[i - 1] > 0 and (load[i - 1] - load[i]) / load[i - 1] > drop_fraction:

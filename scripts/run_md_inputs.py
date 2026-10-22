@@ -34,7 +34,8 @@ def cmd_accommodation(a, flags):
     cal, scan = acc.calibrate_well_depth(a.lmp, spec, a.potentials, flags)
     print(f"calibration: LB well {scan.eps_pair * 1e3:.2f} meV sums to "
           f"{scan.e_ads * 1e3:.1f} meV; calibrated pair well {cal.eps_gs * 1e3:.3f} meV")
-    scales = acc.target_range_scales(a.gas) if a.sensitivity else (1.0,)
+    scales = (tuple(a.scales) if a.scales else
+              acc.target_range_scales(a.gas) if a.sensitivity else (1.0,))
     for s in scales:
         sub = acc.AccommodationSpec(**{**cal.__dict__, "eps_scale": s})
         r = acc.run_accommodation(a.lmp, sub, a.potentials, flags)
@@ -74,7 +75,8 @@ def cmd_indent(a, flags):
     print(f"pop-in {r.popin_depth} A at {r.popin_load} nN; H {r.hardness:.1f} +/- "
           f"{r.hardness_spread:.1f} GPa; Hertz E* {r.reduced_modulus:.0f} GPa; "
           f"box/contact {r.lateral_ratio:.1f}; atoms {r.meta['atoms']}")
-    ind.compare_with_microhardness(r, flags, microhardness_GPa=a.microhardness)
+    ind.compare_with_microhardness(r, flags, microhardness_GPa=a.microhardness,
+                                   label=f"Ni R={a.radius:.0f} A")
 
 
 def main(argv=None):
@@ -90,6 +92,8 @@ def main(argv=None):
     p.add_argument("--t-surface", type=float, default=300.0)
     p.add_argument("--t-gas", type=float, default=400.0)
     p.add_argument("--sensitivity", action="store_true")
+    p.add_argument("--scales", type=float, nargs="+", default=None,
+                   help="well-depth scales on the calibrated well (overrides --sensitivity)")
     p = sub.add_parser("kappa", parents=[common])
     p.add_argument("--temperature", type=float, default=500.0)
     p.add_argument("--lengths", type=int, nargs="+", default=[16, 32, 64])
