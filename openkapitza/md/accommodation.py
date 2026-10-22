@@ -111,6 +111,11 @@ PHYSISORPTION_MEV: dict[str, dict] = {
 }
 
 
+# Light gases whose energy exchange with a surface is dominated by elastic and
+# single-phonon scattering, which classical MD does not capture.
+QUANTUM_GASES = frozenset({"He", "Ne"})
+
+
 def lorentz_berthelot(gas: str, metal: str) -> tuple[float, float]:
     """(eps_gs in eV, sigma_gs in Angstrom) by Lorentz-Berthelot mixing."""
     g, m = GAS_LJ[gas], METAL_LJ[metal]
@@ -825,6 +830,16 @@ def run_accommodation(lmp: Path, spec: AccommodationSpec, potential_dir: Path,
             remedy=("Run calibrate_well_depth first. Mixing-rule wells summed over "
                     "the surface can reach chemisorption strength: uncalibrated "
                     "Ar on Ni condensed onto the surface and lifted Ni atoms out."),
+        )
+    if spec.gas in QUANTUM_GASES:
+        flags.add(
+            Code.MD_ACCOMMODATION_QUANTUM_GAS, Severity.CAUTION,
+            f"{spec.gas}: classical scattering over-estimates alpha for light gases. "
+            f"He and Ne exchange energy mainly through elastic and single-phonon "
+            f"events, which classical dynamics does not reproduce.",
+            remedy=("Read the MD value as an UPPER estimate for the clean surface "
+                    "(Fan & Manson, arXiv:0804.2269, report classical values 'much "
+                    "too large for He and Ne'). Technical surfaces still sit higher."),
         )
     if coverage > 0.1:
         flags.add(

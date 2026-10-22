@@ -757,6 +757,63 @@ intercept near zero. Extract correctly rather than relying on this to notice.
 
 ---
 
+### Mixing-rule gas–metal wells reach chemisorption strength
+
+**Symptom.** The first accommodation run, Ar on a Ni(100) EAM slab with a
+Lorentz–Berthelot gas–solid Lennard-Jones term, condensed: coverage climbed
+from 66 to 202 atoms on 72 surface sites, and Ni atoms were lifted out of the
+surface as adatoms.
+
+**Cause.** The pair well looks modest (73 meV for Ar–Ni, 21 meV for He–Ni),
+but a gas atom in a surface hollow feels many metal atoms at once. A static
+scan over a lateral grid of sites gives SUMMED adsorption energies of
+**528 meV for Ar and 124 meV for He**, against physisorption energies of
+order 80 meV and 6 meV. That is chemisorption strength, from a mixing rule
+whose metal LJ parameters were fitted to cohesion, not to physisorption.
+
+**Fix.** `calibrate_well_depth`: one static scan of a single atom over a grid
+of lateral sites finds the deepest site, and because LJ energy is linear in ε
+at fixed σ, ε_cal = ε_scan × E_target / E_ads. Calibrated wells: 1.04 meV
+(He), 11.1 meV (Ar). An uncalibrated run is flagged
+`MD_ACCOMMODATION_UNCALIBRATED`; coverage above 0.1 per site is flagged
+`MD_ACCOMMODATION_COVERAGE`.
+
+**The general lesson.** A pair parameter is not a binding energy. Check the
+summed quantity the physics depends on before trusting a mixing rule.
+
+### A small difference of noisy means: pair the events
+
+**Symptom.** Calibrated He on Ni gave α = 0.076 ± 0.144 from 750 events —
+an error twice the value.
+
+**Cause.** α = (E_r − E_i)/(E_s − E_i). For a gas that barely accommodates,
+E_r − E_i is a few meV while each energy scatters by ~50 meV. Averaging the
+incident and reflected streams separately throws away the fact that each
+reflection is strongly correlated with that same atom's incidence.
+
+**Fix.** Pair each incident segment with the same atom's next reflected one
+and average E_out − E_in per collision. Same estimand, much less noise: the
+same trajectory gave **0.045 ± 0.048**, a 3x smaller error (≈10x fewer
+events for a given precision). Incidents that start in the last 10 % of the
+run are not counted, and the fraction of the rest left unpaired (trapped
+atoms, the well-accommodated ones) is flagged above 1 %. The unpaired
+estimate is kept as a cross-check and a >3σ disagreement is a WARNING.
+
+**Validated** against `fix wall/reflect/stochastic` walls with imposed α:
+diffusive 0.9947 ± 0.0046, specular exactly 0 (each atom returns its own
+energy), Maxwell 0.4 → 0.4015 ± 0.0059, Maxwell 0.8 → 0.8062 ± 0.0056.
+
+### Classical MD over-estimates helium accommodation
+
+Helium (and neon) exchange energy with a surface mainly through elastic and
+single-phonon scattering, which classical dynamics does not reproduce;
+classical calculations are known to give α "much too large for He and Ne"
+(Fan & Manson, arXiv:0804.2269). A classical He value is therefore an UPPER
+estimate for the clean surface, flagged `MD_ACCOMMODATION_QUANTUM_GAS`.
+Technical surfaces (oxides, adsorbates) sit higher still: uncleaned W and Pt
+filaments give roughly 0.15–0.2 for He and 0.5–0.7 for Ar (Caltech thesis,
+thesis.caltech.edu/578).
+
 ## 5. Environment facts
 
 ### What LAMMPS actually ships
@@ -979,6 +1036,12 @@ monotonically from 1.05 (rarefied) to 0.68 (continuum), and that shape — not
 the aggregate number — is what identified a real modelling deficiency. Use
 figure extraction to find structure, then demand exact numbers before changing
 a default.
+
+### `pgrep -f` in a wait loop matches the loop itself
+
+`until ! pgrep -f job.py; do sleep 5; done` never exits: the loop's own
+command line contains "job.py". Wait on an artefact the job writes on exit
+(`echo done >> job.log`) instead.
 
 ### Do not change a specified default to chase a residual
 
