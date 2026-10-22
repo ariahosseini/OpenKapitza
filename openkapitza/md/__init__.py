@@ -74,4 +74,4 @@ __all__ = [
 
 # Section 11: MD-derived inputs. Imported as submodules rather than flattened,
 # so call sites read `elastic.run_elastic(...)` and the policy stays visible.
-from . import accommodation, conductivity, elastic, fill_policy  # noqa: E402,F401
+from . import accommodation, conductivity, elastic, fill_policy, indentation  # noqa: E402,F401
