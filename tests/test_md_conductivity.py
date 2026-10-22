@@ -114,6 +114,16 @@ class Extrapolation(unittest.TestCase):
         self.assertTrue(any("falls with length" in f.message for f in flags))
 
 
+    def test_undetermined_extrapolation_is_critical(self):
+        # The real SW-Si 500 K pair (17.4 and 34.8 nm): k_inf 545 +/- 3500.
+        pts = [KappaPoint(174.1, 46.53, 14.40, (0, 0), 0, 0, 0, 0),
+               KappaPoint(348.3, 85.74, 36.21, (0, 0), 0, 0, 0, 0)]
+        flags = FlagSet()
+        extrapolate(pts, flags)
+        self.assertEqual(flags.worst, Severity.CRITICAL)
+        self.assertTrue(any("undetermined" in f.message for f in flags))
+
+
 class Policy(unittest.TestCase):
     def _result(self, metal):
         p = KappaPoint(400.0, 90.0, 3.0, (0, 0), 0, 0, 0, 0)

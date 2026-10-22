@@ -495,7 +495,7 @@ finish and the test conditions** cannot.
 | Accommodation coefficient α | yes | yes | **yes — preferred over default** | MEDIUM | gap model | built (5b); pipeline validated against imposed-α walls |
 | h_K | core job | yes | n/a — MD's own output | by convergence | network | built (Phase 1), physics unvalidated |
 | Elastic constants → E, ν | yes | **yes — the potential gate** | yes | MEDIUM if the potential passes the gate, else LOW | ψ, elastic branch, ξ | built (5a); matches official examples/ELASTIC |
-| Thermal conductivity k | yes | yes | **non-metals only** | LOW | kₛ in h_c | built (5c); SW-Si validation running |
+| Thermal conductivity k | yes | yes | **non-metals only** | LOW | kₛ in h_c | built (5c); **not validated** — SW-Si 500 K extrapolation undetermined at desktop budget |
 | Nanohardness | yes | yes, vs nanoindentation | **never** | — | — | built (5d), compare-only |
 | Roughness σ, slope m | no | no | no | — | — | not computable |
 | P, P_gas, T | no | no | no | — | — | test conditions |
@@ -546,7 +546,9 @@ validation against walls with imposed α: diffusive 0.9947 ± 0.0046, specular
 0 exactly, Maxwell 0.4 → 0.4015 ± 0.0059, Maxwell 0.8 → 0.8062 ± 0.0056.
 First results, Ni(100) EAM at T_s = 300 K, T_g = 400 K, calibrated:
 **He 0.093 ± 0.014** (upper estimate, see above; Baule–Goodman 0.14) and
-**Ar 0.52 ± 0.12** (short run; Baule–Goodman 0.58).
+**Ar 0.52 ± 0.12** (short run; Baule–Goodman 0.58). Across the He
+adsorption-energy range 3 / 6 / 10 meV: 0.100 ± 0.013 / 0.093 ± 0.014 /
+0.118 ± 0.014, so quote **He/Ni ≈ 0.09–0.12** (classical upper estimate).
 
 ### h_K
 
@@ -598,6 +600,15 @@ either threshold.
   with `compute centroid/stress/atom` as the manual's own warning requires.
 - **Below θ_D**, classical MD overpopulates high-frequency modes (§9). Report
   the uncorrected value.
+- **Implemented, not validated** (`openkapitza/md/conductivity.py`, 5c).
+  Stillinger–Weber Si at 500 K, 4×4-cell cross-section, 400 ps production:
+  k = 13.7 ± 3.2 (8.7 nm), 46.5 ± 14.4 (17.4 nm), 85.7 ± 36.2 W/mK (34.8 nm;
+  the two halves gave 49.5 and 122). All three do not fit 1/L (negative
+  intercept); the longest two give k_inf = 545 ± 3500, flagged CRITICAL as
+  undetermined. Target: 93 ± 18 W/mK (Sellan et al. 2010, same method).
+  The longest cell is noise-limited, not mis-specified: its gradient is small
+  and 400 ps does not resolve it. Validation needs ns-scale production and a
+  wider cross-section, i.e. an HPC run, or a Green–Kubo cross-check.
 - **Not the per-side apparent k.** The interface runs already report an
   apparent k for each side (it drives `NEMD_CONDUCTIVITY_MISMATCH`). Those
   are size-limited by design and must never be reported as bulk k.

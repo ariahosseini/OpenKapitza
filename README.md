@@ -665,11 +665,14 @@ must *defer*. Build order, cheapest-first within value:
 - **5b. Accommodation coefficient α.** Built (`md/accommodation.py`): real
   Ni(100) slab, calibrated gas–solid well, paired-collision estimator,
   measured surface temperature and coverage. Validated against walls with
-  imposed α (`scripts/validate_accommodation.py`). He/Ni 0.093 ± 0.014
-  (classical, so an upper estimate), Ar/Ni 0.52 ± 0.12.
+  imposed α (`scripts/validate_accommodation.py`). He/Ni 0.09–0.12 across
+  the adsorption-energy range (classical, so an upper estimate), Ar/Ni
+  0.52 ± 0.12.
 - **5c. Bulk thermal conductivity k.** Built (`md/conductivity.py`):
   periodic Langevin NEMD after `examples/KAPPA`, 1/k vs 1/L extrapolation.
-  Metals return the lattice part only. SW-Si validation at 500 K running.
+  Metals return the lattice part only. **Not yet validated**: SW-Si at 500 K
+  over 8.7–34.8 nm is noise-limited at 400 ps and the extrapolation is
+  undetermined (flagged CRITICAL). Needs ns-scale runs on HPC.
 - **5d. Nanohardness, compare-only.** Built (`md/indentation.py`): 3D
   quasi-static sphere indentation, cap-model area, full P(h), pop-in,
   Hertz E*. Ni(100): H = 19.4 ± 1.3 GPa. Never fills c₁, c₂.

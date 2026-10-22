@@ -814,6 +814,24 @@ Technical surfaces (oxides, adsorbates) sit higher still: uncleaned W and Pt
 filaments give roughly 0.15–0.2 for He and 0.5–0.7 for Ar (Caltech thesis,
 thesis.caltech.edu/578).
 
+### Bulk k from short NEMD cells: noise, not physics, sets the limit
+
+**Symptom.** SW-Si at 500 K, 400 ps production: k = 13.7, 46.5, 85.7 W/mK at
+8.7, 17.4, 34.8 nm. 1/k is far from linear in 1/L; three points give a
+negative intercept and the longest two give k_inf = 545 ± 3500.
+
+**Cause.** In the 34.8 nm cell the two halves of the periodic box gave 49.5
+and 122 W/mK from the same run. A long cell with a fixed reservoir split has
+a shallow gradient, and 400 ps of a 4×4-cell cross-section does not resolve
+it. The extrapolation amplifies that noise: 1/k at the longest length is the
+point the intercept leans on.
+
+**Fix.** Two guards now in code: an intercept ≤ 0 raises, and an
+extrapolated error above half the value is CRITICAL ("undetermined"). The
+physics fix is compute: ns-scale production and a wider cross-section for
+the long cells, or Green–Kubo. Check the two-halves agreement before
+trusting any length; it is the cheapest convergence test the layout gives.
+
 ## 5. Environment facts
 
 ### What LAMMPS actually ships

@@ -369,6 +369,10 @@ def extrapolate(points: list[KappaPoint], flags: FlagSet, *,
         sev = Severity.WARNING
         reasons.append("k falls with length, which boundary scattering cannot "
                        "produce: the runs are unconverged or the cells too short")
+    if stderr > 0.5 * k_inf:
+        sev = Severity.CRITICAL
+        reasons.append(f"the error ({stderr:.0f}) is more than half the value, so "
+                       f"k_inf is undetermined; do not use it")
     if dof > 0 and chi2 / dof > 4.0:
         sev = Severity.WARNING
         reasons.append(f"1/k is not linear in 1/L (chi2/dof {chi2 / dof:.1f})")
