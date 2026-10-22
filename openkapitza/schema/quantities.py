@@ -32,6 +32,20 @@ class Provenance(enum.Enum):
     LITERATURE = "literature"
     """Tabulated value from a cited source."""
 
+    MD_COMPUTED = "md_computed"
+    """Computed by molecular dynamics with a stated interatomic potential.
+
+    Sits between literature and correlation in trust, matching the fill
+    priority of section 11 of the agent instruction: measurement, then
+    database, then MD, then correlation. It is a property of the POTENTIAL as
+    much as of the material -- a value that reproduces the potential
+    faithfully can still be wrong about the material, as SiCGe.tersoff's
+    elastic constants are -- so the default confidence is LOW and the fill
+    policy may raise it only for quantities where MD is known to do well.
+    The `citation` field should name the potential file and the `note` the
+    temperature and run.
+    """
+
     CORRELATION_DEFAULT = "correlation_default"
     """Filled in from an empirical correlation because nothing better exists."""
 
@@ -60,6 +74,7 @@ _DEFAULT_CONFIDENCE = {
     Provenance.USER_MEASURED: Confidence.HIGH,
     Provenance.COMPUTED: Confidence.HIGH,
     Provenance.LITERATURE: Confidence.MEDIUM,
+    Provenance.MD_COMPUTED: Confidence.LOW,
     Provenance.CORRELATION_DEFAULT: Confidence.LOW,
     Provenance.USER_ESTIMATED: Confidence.LOW,
     Provenance.PLACEHOLDER: Confidence.UNRELIABLE,

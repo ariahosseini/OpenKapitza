@@ -71,3 +71,7 @@ __all__ = [
     "KapitzaExtraction", "SideFit", "TemperatureProfile", "extract_kapitza",
     "flux_from_reservoirs", "naive_adjacent_bin_delta_T",
 ]
+
+# Section 11: MD-derived inputs. Imported as submodules rather than flattened,
+# so call sites read `elastic.run_elastic(...)` and the policy stays visible.
+from . import elastic, fill_policy  # noqa: E402,F401
