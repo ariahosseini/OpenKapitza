@@ -110,6 +110,35 @@ class Bicrystal(unittest.TestCase):
         self.assertEqual(b.type_species, {1: "Si", 2: "C", 3: "Ga", 4: "N"})
 
 
+class Registry(unittest.TestCase):
+    def test_shift_translates_b_only(self):
+        from openkapitza.structure.crystalline import join_bicrystal
+        kw = dict(length_a=10.0, length_b=10.0, max_strain=0.01)
+        b0 = join_bicrystal(L["Si"], (1, 0, 0), L["Al"], (1, 0, 0), **kw)
+        b1 = join_bicrystal(L["Si"], (1, 0, 0), L["Al"], (1, 0, 0), shift=(1.0, 0.5), **kw)
+        ia = b0.cell.types == 1
+        np.testing.assert_allclose(b0.cell.pos[ia], b1.cell.pos[ia])
+        W = b0.cell.hi[:2]
+        d = (b1.cell.pos[~ia][:, :2] - b0.cell.pos[~ia][:, :2]) % W
+        np.testing.assert_allclose(d, np.tile([1.0, 0.5], (d.shape[0], 1)), atol=1e-9)
+
+    def test_scan_picks_the_minimum_of_any_scorer(self):
+        from openkapitza.structure.crystalline import scan_registry
+        target = (4.294, 2.147)
+        def fake(bc):            # energy minimum at a known shift
+            s = bc.report["shift"]; return (s[0] - target[0]) ** 2 + (s[1] - target[1]) ** 2
+        r = scan_registry(L["Si"], (1, 0, 0), L["Al"], (1, 0, 0), n=4, max_strain=0.01, score=fake)
+        self.assertEqual(len(r.points), 16)
+        np.testing.assert_allclose(r.best.shift, target, atol=1e-2)
+
+    def test_registry_averages_out_on_a_large_matched_cell(self):
+        from openkapitza.structure.crystalline import scan_registry
+        big = scan_registry(L["Si"], (1, 1, 1), L["Al"], (1, 1, 1), n=4, max_strain=0.01)
+        small = scan_registry(L["Si"], (1, 0, 0), L["Al"], (1, 0, 0), n=4, max_strain=0.01)
+        self.assertLess(big.spread, 1e-3)
+        self.assertGreater(small.spread, 0.1)
+
+
 class NEMDLayout(unittest.TestCase):
     def test_sides_sit_where_the_geometry_puts_them(self):
         from openkapitza.md.nemd import NEMDGeometry

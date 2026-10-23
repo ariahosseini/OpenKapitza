@@ -1631,6 +1631,17 @@ only an abstract was reachable, it says so.
   enumerated (`termination_ftol`), default gap 2.0 Å. Our matcher deliberately
   differs: rectangular only (the NEMD box stays orthogonal, and `fix ttm`
   requires orthogonal), mismatch split between the sides, registry-based gap.
+- **Registry, measured here (23 Oct 2026).** `scan_registry` on Si(100)/Al(100)
+  (8.59 Å matched cell, MEAM, 4×4 shifts, thin slabs, box-fixed minimisation):
+  relaxed interface energies span 8.6 meV/Å² (~0.14 J/m²); minimum at
+  (0, 2.15) Å. Unrelaxed (`run 0`) energies correlate only weakly with the
+  relaxed ones (r = 0.37), and the geometric hollow score (mean lateral
+  clearance) anti-correlates (r = −0.38) — geometry is not a proxy for
+  bonding here. On Si(111)/Al(111) (11.5 × 20 Å cell) the clearance is the
+  same at every shift: many atoms per plane average the registry out, as for
+  an incommensurate interface. Rule: choose registry by relaxed energy with
+  the production potential; use clearance spread only to ask whether it can
+  matter.
 - **Registry is a separate search.** Tang & Butler (arXiv:2608.19933,
   RegFGW): after ZSL, an optimal-transport score plus Bayesian optimisation
   over the in-plane shift; ZSL "considers only geometric commensurability".

@@ -341,8 +341,12 @@ class Bicrystal:
 def join_bicrystal(a: Crystal, hkl_a, b: Crystal, hkl_b, *, length_a: float,
                    length_b: float, z_start: float = 0.0, headroom: float = 10.0,
                    max_strain: float = 0.02, repeat: tuple[int, int] = (1, 1),
-                   z_offset_a: float = 0.0, z_offset_b: float = 0.0) -> Bicrystal:
+                   z_offset_a: float = 0.0, z_offset_b: float = 0.0,
+                   shift: tuple[float, float] = (0.0, 0.0)) -> Bicrystal:
     """A slab of `a` below a slab of `b`, laterally strained to a common cell.
+
+    `shift` (A) translates B in-plane relative to A: the interface registry,
+    which lattice matching alone does not fix (`scan_registry` chooses it).
 
     `repeat` tiles the matched cell laterally (the match is the smallest
     commensurate cell, often too narrow for NEMD). The gap is set from
@@ -364,6 +368,8 @@ def join_bicrystal(a: Crystal, hkl_a, b: Crystal, hkl_b, *, length_a: float,
 
     pa = place(sa, m.cell_a.lengths)
     pb = place(sb, m.cell_b.lengths)
+    pb[:, 0] = (pb[:, 0] + shift[0]) % W[0]
+    pb[:, 1] = (pb[:, 1] + shift[1]) % W[1]
     spa = sa.species * (repeat[0] * repeat[1])
     spb = sb.species * (repeat[0] * repeat[1])
     top_a = pa[:, 2].max()
@@ -373,8 +379,13 @@ def join_bicrystal(a: Crystal, hkl_a, b: Crystal, hkl_b, *, length_a: float,
     def wrap(d, L):
         return (d + L / 2) % L - L / 2
 
-    dpar2 = min(wrap(xa - xb, W[0]) ** 2 + wrap(ya - yb, W[1]) ** 2
-                for xa, ya, _ in ta for xb, yb, _ in bb)
+    d2 = (wrap(ta[:, None, 0] - bb[None, :, 0], W[0]) ** 2
+          + wrap(ta[:, None, 1] - bb[None, :, 1], W[1]) ** 2)       # (n_top_a, n_bottom_b)
+    dpar2 = float(d2.min())
+    # Mean over B's interface atoms of the nearest in-plane A neighbour: the
+    # registry score. The minimum alone is zero for every shift once the
+    # matched cell holds many atoms per plane.
+    mean_clearance = float(np.sqrt(d2.min(axis=0)).mean())
     r0 = INTERFACE_CONTACT * 0.5 * (a.nearest_neighbour() + b.nearest_neighbour())
     dz_b = bb[:, 2].mean() - pb[:, 2].min()
     gap = math.sqrt(max(r0 * r0 - dpar2, (0.5 * r0) ** 2))
@@ -398,6 +409,8 @@ def join_bicrystal(a: Crystal, hkl_a, b: Crystal, hkl_b, *, length_a: float,
         "atoms": len(types), "termination_a_top": sorted(sa.top_species()),
         "termination_b_bottom": sorted(sb.bottom_species()),
         "closest_ab": math.sqrt(dpar2 + gap * gap), "r0": r0,
+        "shift": tuple(float(x) for x in shift), "lateral_clearance": math.sqrt(dpar2),
+        "mean_clearance": mean_clearance,
     }
     return Bicrystal(cell, tuple(tmap_a.values()), tuple(tmap_b.values()),
                      {**{t: s for s, t in tmap_a.items()}, **{t: s for s, t in tmap_b.items()}},
@@ -407,7 +420,8 @@ def join_bicrystal(a: Crystal, hkl_a, b: Crystal, hkl_b, *, length_a: float,
 def bicrystal_for_nemd(a: Crystal, hkl_a, b: Crystal, hkl_b, geometry, *,
                        max_strain: float = 0.02, min_width: float = 20.0,
                        headroom: float = 10.0, z_offset_a: float = 0.0,
-                       z_offset_b: float = 0.0) -> Bicrystal:
+                       z_offset_b: float = 0.0,
+                       shift: tuple[float, float] = (0.0, 0.0)) -> Bicrystal:
     """A bicrystal laid out on an NEMDGeometry, for the read-in NEMD deck.
 
     Side A fills z in [0, interface_z), side B [interface_z, total_length):
@@ -420,7 +434,7 @@ def bicrystal_for_nemd(a: Crystal, hkl_a, b: Crystal, hkl_b, geometry, *,
     iz = geometry.interface_z * 1e10
     total = geometry.total_length * 1e10
     kw = dict(headroom=headroom, max_strain=max_strain, repeat=repeat,
-              z_offset_a=z_offset_a, z_offset_b=z_offset_b)
+              z_offset_a=z_offset_a, z_offset_b=z_offset_b, shift=shift)
     bc = join_bicrystal(a, hkl_a, b, hkl_b, length_a=iz, length_b=total - iz, **kw)
     # B starts a gap above A's top plane, not at iz: trim it so it ends at total.
     b_start = bc.cell.pos[np.isin(bc.cell.types, bc.types_b), 2].min()
@@ -429,3 +443,104 @@ def bicrystal_for_nemd(a: Crystal, hkl_a, b: Crystal, hkl_b, geometry, *,
     bc.report["geometry_interface_z"] = iz
     bc.report["interface_offset"] = bc.interface_z - iz    # A: built plane vs geometry
     return bc
+
+
+# --------------------------------------------------------------------------
+# Registry: the in-plane shift of B relative to A
+# --------------------------------------------------------------------------
+
+@dataclass
+class RegistryPoint:
+    shift: tuple[float, float]
+    gap: float
+    lateral_clearance: float     # closest in-plane distance between facing planes, A
+    mean_clearance: float        # mean over B's interface atoms of the nearest A, A
+    score: float                 # lower is better
+
+
+@dataclass
+class RegistryScan:
+    points: list[RegistryPoint]
+    best: RegistryPoint
+    method: str
+    spread: float                # max - min score, same units as score
+
+
+def scan_registry(a: Crystal, hkl_a, b: Crystal, hkl_b, *, n: int = 6,
+                  score="hollow", max_strain: float = 0.02,
+                  z_offset_a: float = 0.0, z_offset_b: float = 0.0,
+                  thickness_a: float | None = None,
+                  thickness_b: float | None = None) -> RegistryScan:
+    """Score an n x n grid of in-plane shifts over one matched cell.
+
+    Lattice matching (Zur-McGill, ZSL) fixes the cells, not where B sits on
+    A (Tang & Butler, arXiv:2608.19933). `score`:
+      "hollow"  -- geometric, no potential: the MEAN lateral clearance of B's
+                   interface atoms from A's top plane (score = -clearance).
+                   A DIAGNOSTIC of whether registry can matter (its spread is
+                   ~0 for large incommensurate-like cells: Si(111)/Al(111)),
+                   NOT a selector: on Si(100)/Al(100) with MEAM it
+                   anti-correlates with the relaxed energy (r = -0.38).
+      callable  -- f(Bicrystal) -> energy (lower is better), e.g.
+                   `lammps_static_energy(...)`: the real criterion.
+    Thin slabs (a few periods) are enough: only the facing planes differ.
+    """
+    m = match(a, hkl_a, b, hkl_b, max_strain=max_strain)
+    ta = thickness_a or 2.0 * max(np.linalg.norm(a.lattice, axis=1))
+    tb = thickness_b or 2.0 * max(np.linalg.norm(b.lattice, axis=1))
+    method = score if isinstance(score, str) else getattr(score, "__name__", "energy")
+    if isinstance(score, str) and score != "hollow":
+        raise ValueError("score must be 'hollow' or a callable")
+    points = []
+    for i in range(n):
+        for j in range(n):
+            sh = (m.width[0] * i / n, m.width[1] * j / n)
+            bc = join_bicrystal(a, hkl_a, b, hkl_b, length_a=ta, length_b=tb,
+                                max_strain=max_strain, z_offset_a=z_offset_a,
+                                z_offset_b=z_offset_b, shift=sh)
+            clr = bc.report["lateral_clearance"]
+            mcl = bc.report["mean_clearance"]
+            val = -mcl if score == "hollow" else float(score(bc))
+            points.append(RegistryPoint((float(sh[0]), float(sh[1])), bc.gap, clr, mcl, val))
+    best = min(points, key=lambda p: p.score)
+    vals = [p.score for p in points]
+    return RegistryScan(points, best, method, max(vals) - min(vals))
+
+
+def lammps_static_energy(lmp: str, pair_style: str, pair_coeff: str, *,
+                         potential_dir=None, files: tuple[str, ...] = (),
+                         workdir=None, minimize: bool = False):
+    """Energy scorer for `scan_registry`: LAMMPS `run 0` (or a short minimize).
+
+    Returns f(Bicrystal) -> total energy per area, eV/A^2. Unrelaxed by
+    default: a screen of registries at the registry-set gap; `minimize=True`
+    relaxes positions (box fixed) for a fairer, slower comparison.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    from .analysis import write_lammps_data
+
+    def energy(bc: Bicrystal) -> float:
+        wd = Path(workdir or tempfile.mkdtemp(prefix="registry_"))
+        wd.mkdir(parents=True, exist_ok=True)
+        for f in files:
+            shutil.copy(Path(potential_dir) / f, wd / f)
+        write_lammps_data(bc.cell, wd / "cell.data")
+        # Shrink-wrapped z: free surfaces on both slabs, and atoms that start
+        # on the data file's box face are not lost when minimisation moves them.
+        body = ("units metal\nboundary p p m\natom_style atomic\nread_data cell.data\n"
+                f"pair_style {pair_style}\npair_coeff * * {pair_coeff}\n"
+                + ("minimize 1e-8 1e-10 2000 20000\n" if minimize else "run 0\n")
+                + 'print "OPENKAPITZA_PE $(pe:%.8f) $(lx*ly:%.6f)"\n')
+        (wd / "in.e").write_text(body)
+        res = subprocess.run([lmp, "-in", "in.e", "-log", "none"], cwd=wd,
+                             capture_output=True, text=True)
+        for ln in res.stdout.splitlines():
+            if ln.startswith("OPENKAPITZA_PE"):
+                _, pe, area = ln.split()
+                return float(pe) / float(area)
+        raise RuntimeError(f"LAMMPS energy failed in {wd}: {res.stdout[-400:]}{res.stderr[-400:]}")
+    energy.__name__ = "lammps_static_energy" + ("_minimized" if minimize else "")
+    return energy

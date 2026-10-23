@@ -54,6 +54,12 @@ def main(argv=None) -> int:
                     help="A: shift the cut through A to choose its top termination")
     ap.add_argument("--z-offset-b", type=float, default=0.0,
                     help="A: shift the cut through B to choose its bottom termination")
+    ap.add_argument("--registry", choices=["none", "energy", "hollow"], default="none",
+                    help="choose the in-plane shift of B on A: 'energy' = relaxed LAMMPS "
+                         "energy scan with the given potential (needs --lmp); 'hollow' = "
+                         "geometric diagnostic only, NOT a reliable selector")
+    ap.add_argument("--registry-grid", type=int, default=4)
+    ap.add_argument("--lmp", help="LAMMPS binary, for --registry energy")
     ap.add_argument("--bulk-nm", type=float, default=4.0)
     ap.add_argument("--temperature", type=float, default=300.0)
     ap.add_argument("--timestep-fs", type=float, default=1.0)
@@ -73,9 +79,29 @@ def main(argv=None) -> int:
     g = NEMDGeometry(wall_thickness=0.8e-9, reservoir_thickness=1.0e-9,
                      bulk_a_length=a.bulk_nm * 1e-9, bulk_b_length=a.bulk_nm * 1e-9,
                      bin_width=0.4e-9)
+    shift = (0.0, 0.0)
+    if a.registry != "none":
+        from openkapitza.structure.crystalline import lammps_static_energy, scan_registry
+        if a.registry == "energy":
+            if not (a.lmp and a.potentials):
+                ap.error("--registry energy needs --lmp and --potentials")
+            coeff = a.coeff_args or f"{a.pair_file} {A.species[0]} {B.species[0]}"
+            score = lammps_static_energy(a.lmp, a.pair_style, coeff, potential_dir=a.potentials,
+                                         files=tuple([a.pair_file, *a.extra_files]),
+                                         workdir=a.out / "registry", minimize=True)
+        else:
+            score = "hollow"
+            print("  WARNING: 'hollow' registry is a geometric diagnostic, not an energy; "
+                  "it anti-correlates with the relaxed energy on Si(100)/Al(100).")
+        scan = scan_registry(A, tuple(a.hkl_a), B, tuple(a.hkl_b), n=a.registry_grid,
+                             score=score, max_strain=a.max_strain,
+                             z_offset_a=a.z_offset_a, z_offset_b=a.z_offset_b)
+        shift = scan.best.shift
+        print(f"  registry ({scan.method}, {a.registry_grid}x{a.registry_grid}): best shift "
+              f"({shift[0]:.3f}, {shift[1]:.3f}) A; score spread {scan.spread:.4g}")
     bc = bicrystal_for_nemd(A, tuple(a.hkl_a), B, tuple(a.hkl_b), g,
                             max_strain=a.max_strain, min_width=a.min_width,
-                            z_offset_a=a.z_offset_a, z_offset_b=a.z_offset_b)
+                            z_offset_a=a.z_offset_a, z_offset_b=a.z_offset_b, shift=shift)
     r = bc.report
     multi = len(bc.types_a) > 1 or len(bc.types_b) > 1
     if multi and not a.coeff_args:
