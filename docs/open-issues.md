@@ -65,7 +65,7 @@ heterostructures (fcc on diamond) live in `md/nemd.py`. Script:
 
 | ID | Item | Status | Closes when |
 |---|---|---|---|
-| P2-2 | **a-SiO₂ at 10¹³ K/s passes the gate.** 10¹⁴ K/s smoke: local geometry right, but 73 % fourfold Si and 2.33 g/cm³ — rejected. | in progress (local 10¹³ K/s quenches running) | Gate passes, or the failing metrics are stated and a slower rate is queued for the cluster. |
+| P2-2 | **a-SiO₂ coordination defects.** Munetoh Tersoff, melt 6000 K, 1536 atoms. 10¹⁴ K/s: 73 % fourfold Si, 2.33 g/cm³. **10¹³ K/s: 80 % fourfold (14 % five-, 7 % threefold), 2.31 g/cm³, O–O 2.71 Å — fails the gate.** The first Si–O shell is fully separated (zero density 1.8–2.4 Å), so the counts do not depend on the cutoff: the defects are real. Testing a 2000 K re-anneal; then 10¹² K/s on the cluster. | in progress | Gate passes, or the defect content is stated with every Si/SiO₂ h_K. |
 | P2-3 | **Si/a-SiO₂ h_K.** Targets (300 K): Lampin et al. 2012, same potential and rate — strong bonding 0.83 ± 0.25 × 10⁻⁹ m²K/W (≈1.2 GW/m²K), weak 4.27 ± 1.78 × 10⁻⁹ (≈0.23 GW/m²K); experiment > 0.6 GW/m²K (Kimling et al., TR-MOKE). | open | Converged h_K with bonding descriptors stated, inside the bracket for its bonding class. |
 | P2-4 | **Si in `SiO.tersoff` fails the elastic gate** (−14/+18/−13 %): same Tersoff Si(D) as `SiCGe.tersoff`. | open | Reported with every Si/SiO₂ h_K; or a gated Si–O potential. |
 | P2-5 | **Quench-rate sensitivity.** One rate is one sample of the rate-dependent glass. | **cluster** | h_K at two rates (10¹³ and 10¹² K/s). |
