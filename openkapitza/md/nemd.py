@@ -22,6 +22,8 @@ guess that silently biases the jump low (see md.profile).
 
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -349,7 +351,30 @@ class NEMDSpec:
     common_lattice: float | None = None  # m; defaults to lattice_a in build mode
     mass_a: float = 28.0855             # amu
     mass_b: float = 72.630
+    # Heterostructures (e.g. fcc Al on diamond Si). When the two sides differ
+    # in structure, or `supercell` is given, each side is built on its OWN
+    # lattice in a shared lateral supercell of n_a and n_b cells (see
+    # `lateral_cells`), instead of both on one diamond lattice.
+    lattice_style_a: str = "diamond"    # "diamond" | "fcc"
+    lattice_style_b: str = "diamond"
+    supercell: tuple[int, int] | None = None
+    # Potentials that are not `* * file label_a label_b` (MEAM: a library
+    # file, its element list, a parameter file, then the type map). Give the
+    # full argument list after "* *", and every extra file to stage.
+    coeff_args: str | None = None
+    extra_files: tuple[str, ...] = ()
     extra: dict = field(default_factory=dict)
+
+    @property
+    def heterostructure(self) -> bool:
+        return self.lattice_style_a != self.lattice_style_b or self.supercell is not None
+
+    @property
+    def lateral_cells(self) -> tuple[int, int]:
+        """(n_a, n_b) unit cells across the cross-section on each side."""
+        if self.supercell is not None:
+            return self.supercell
+        return match_lateral(self.lattice_a, self.lattice_b, self.geometry.cross_section)
 
     @property
     def lattice_used(self) -> float:
@@ -362,6 +387,12 @@ class NEMDSpec:
         """
         return self.common_lattice or self.lattice_a
 
+    def _hetero_width(self) -> float:
+        na, nb = self.lateral_cells
+        # The mismatch is split evenly to start; the in-plane barostat then
+        # moves it to where the potential's own stiffnesses put it.
+        return 0.5 * (na * self.lattice_a + nb * self.lattice_b)
+
     @property
     def snapped_cross_section(self) -> float:
         """Cross-section rounded to a whole number of unit cells, in metres.
@@ -370,6 +401,8 @@ class NEMDSpec:
         leaves a seam where the images meet. The flux uses THIS area, not the
         requested one, or h_K is wrong by the ratio.
         """
+        if self.heterostructure:
+            return self._hetero_width()
         a = self.lattice_used
         n = max(1, round(self.geometry.cross_section / a))
         return n * a
@@ -381,6 +414,10 @@ class NEMDSpec:
     @property
     def lattice_strain(self) -> tuple[float, float]:
         """Fractional in-plane strain carried by each side."""
+        if self.heterostructure:
+            w = self._hetero_width()
+            na, nb = self.lateral_cells
+            return (w / (na * self.lattice_a) - 1.0, w / (nb * self.lattice_b) - 1.0)
         a = self.lattice_used
         return (a / self.lattice_a - 1.0, a / self.lattice_b - 1.0)
 
@@ -419,7 +456,7 @@ timestep        {timestep_ps:.6f}
 
 {structure_block}
 pair_style      {pair_style}
-pair_coeff      * * {pair_file} {pair_a} {pair_b}
+{pair_coeff_line}
 
 # ---- regions, in Angstrom -------------------------------------------------
 region          wall_lo  block INF INF INF INF INF {z_wall_lo:.4f} units box
@@ -534,6 +571,123 @@ mass            1 {mass_a:.4f}
 mass            2 {mass_b:.4f}
 """
 
+# Heterostructure: each side on its own lattice. Laterally each is scaled to
+# the shared supercell width (n_a and n_b cells); along z each keeps its own
+# constant, and the piston relaxation finishes the job. The first B plane
+# sits half a layer spacing from each side above the last A plane.
+HETERO_BLOCK = """\
+# Heterostructure: {style_a} side A ({na} cells, {strain_a:+.2%} in-plane) and
+# {style_b} side B ({nb} cells, {strain_b:+.2%}) in a {cross_ang:.4f} A square
+# supercell. The box extends {headroom_ang:.2f} A above the built cell for the
+# piston (that space starts empty).
+region          simbox block 0.0 {cross_ang:.4f} 0.0 {cross_ang:.4f} \
+                0.0 {box_z_ang:.4f} units box
+create_box      2 simbox
+lattice         custom 1.0 a1 {sxa:.6f} 0.0 0.0 a2 0.0 {sxa:.6f} 0.0 a3 0.0 0.0 {aza:.6f} &
+{basis_a}
+region          side_a block INF INF INF INF INF {cut_a:.4f} units box
+create_atoms    1 region side_a
+lattice         custom 1.0 a1 {sxb:.6f} 0.0 0.0 a2 0.0 {sxb:.6f} 0.0 a3 0.0 0.0 {azb:.6f} &
+                origin 0.0 0.0 {origin_b:.6f} &
+{basis_b}
+region          side_b block INF INF INF INF {start_b:.4f} {nz_ang:.4f} units box
+create_atoms    2 region side_b
+mass            1 {mass_a:.4f}
+mass            2 {mass_b:.4f}
+"""
+
+BASIS = {
+    "diamond": [(0, 0, 0), (0, .5, .5), (.5, 0, .5), (.5, .5, 0),
+                (.25, .25, .25), (.25, .75, .75), (.75, .25, .75), (.75, .75, .25)],
+    "fcc": [(0, 0, 0), (0, .5, .5), (.5, 0, .5), (.5, .5, 0)],
+}
+# (100) layer spacing as a fraction of the cubic constant.
+LAYER = {"diamond": 0.25, "fcc": 0.5}
+ATOMS_PER_CELL = {"diamond": 8, "fcc": 4}
+
+
+def match_lateral(a_a: float, a_b: float, target: float, *,
+                  max_mismatch: float = 0.01, max_cells: int = 60) -> tuple[int, int]:
+    """Integer cell counts (n_a, n_b) for a coherent lateral supercell.
+
+    Among pairs whose mismatch |n_a a_a - n_b a_b| / mean is within
+    `max_mismatch`, take the width closest to `target`; if none qualifies,
+    the smallest mismatch. Si/Al: 3:4 at 0.56 %.
+    """
+    cands = []
+    for na in range(1, max_cells + 1):
+        nb = max(1, round(na * a_a / a_b))
+        w_a, w_b = na * a_a, nb * a_b
+        mis = abs(w_a - w_b) / (0.5 * (w_a + w_b))
+        cands.append((mis, abs(0.5 * (w_a + w_b) - target), na, nb))
+    ok = [c for c in cands if c[0] <= max_mismatch]
+    if ok:
+        best = min(ok, key=lambda c: (c[1], c[0]))
+    else:
+        best = min(cands, key=lambda c: (c[0], c[1]))
+    return best[2], best[3]
+
+
+def _basis_lines(style: str) -> str:
+    # LAMMPS continues a line with "&". A backslash here reached LAMMPS
+    # literally ("Unknown lattice keyword: \\"): the backslashes elsewhere in
+    # these templates are swallowed by Python's string literal, not LAMMPS.
+    return " &\n".join(
+        "                basis {:.4f} {:.4f} {:.4f}".format(*b) for b in BASIS[style])
+
+
+NN_FRACTION = {"diamond": math.sqrt(3.0) / 4.0, "fcc": 1.0 / math.sqrt(2.0)}
+# Closest A-B approach at the built interface, as a fraction of the mean of
+# the two nearest-neighbour distances. Minimisation then settles it.
+INTERFACE_CONTACT = 0.95
+
+
+def _plane_xy(style: str, z_frac: float, cells: int, width: float) -> list[tuple[float, float]]:
+    """In-plane positions of the atoms in one (100) plane of a scaled cell."""
+    s = width / cells
+    pts = []
+    for bx, by, bz in BASIS[style]:
+        if abs((bz - z_frac + 0.5) % 1.0 - 0.5) < 1e-6:
+            for i in range(cells):
+                for j in range(cells):
+                    pts.append(((bx + i) * s, (by + j) * s))
+    return pts
+
+
+def hetero_layout(spec: "NEMDSpec") -> dict:
+    """Plane positions for the heterostructure build, in Angstrom.
+
+    The gap between the last A plane and the first B plane is set from the
+    lateral registry, not from layer spacings: with half a spacing from each
+    side (1.69 A for Si/Al) some Al atoms sat almost on top of Si atoms, under
+    2.0 A apart. The gap now makes the closest A-B distance INTERFACE_CONTACT
+    times the mean nearest-neighbour distance.
+    """
+    g = spec.geometry
+    a_a, a_b = spec.lattice_a * M_TO_ANG, spec.lattice_b * M_TO_ANG
+    d_a, d_b = LAYER[spec.lattice_style_a] * a_a, LAYER[spec.lattice_style_b] * a_b
+    iz = g.interface_z * M_TO_ANG
+    top_a = math.floor((iz - 1e-6) / d_a) * d_a
+    w = spec.snapped_cross_section * M_TO_ANG
+    na, nb = spec.lateral_cells
+    pa = _plane_xy(spec.lattice_style_a, (top_a / a_a) % 1.0, na, w)
+    # B planes start at its origin; the bottom B plane is the basis plane
+    # with z fraction 0 (origin is chosen to put it at first_b).
+    pb = _plane_xy(spec.lattice_style_b, 0.0, nb, w)
+    def wrap(d: float) -> float:          # minimum image across the periodic width
+        return (d + w / 2) % w - w / 2
+
+    dmin2 = min(wrap(xa - xb) ** 2 + wrap(ya - yb) ** 2 for xa, ya in pa for xb, yb in pb)
+    r0 = INTERFACE_CONTACT * 0.5 * (NN_FRACTION[spec.lattice_style_a] * a_a
+                                    + NN_FRACTION[spec.lattice_style_b] * a_b)
+    gap = math.sqrt(max(r0 * r0 - dmin2, (0.5 * (d_a + d_b)) ** 2))
+    first_b = top_a + gap
+    return {"d_a": d_a, "d_b": d_b, "top_a": top_a, "first_b": first_b, "gap": gap,
+            "closest_ab": math.sqrt(dmin2 + gap * gap), "r0": r0,
+            "cut_a": top_a + 0.5 * d_a, "start_b": first_b - 0.5 * d_b,
+            "origin_b": (first_b % a_b) / a_b}
+
+
 RELAX_BLOCK = """\
 
 # ---- relaxation -----------------------------------------------------------
@@ -639,8 +793,12 @@ def headroom(spec: NEMDSpec) -> float:
     if not spec.relax_z:
         return 0.0
     g = spec.geometry
-    strain = abs(spec.lattice_b / spec.lattice_used - 1.0) + abs(
-        spec.lattice_a / spec.lattice_used - 1.0)
+    if spec.heterostructure:
+        sa, sb = spec.lattice_strain
+        strain = abs(sa) + abs(sb) + 0.02      # plus z mismatch at the interface
+    else:
+        strain = abs(spec.lattice_b / spec.lattice_used - 1.0) + abs(
+            spec.lattice_a / spec.lattice_used - 1.0)
     return max(0.5e-9, 2.0 * strain * (g.bulk_a_length + g.bulk_b_length))
 
 
@@ -716,7 +874,25 @@ def build_input_deck(spec: NEMDSpec) -> str:
             "spot_pressure_GPa needs relax_structure=True, relax_z=True and "
             "structure_mode='build': the load is the force on the piston wall."
         )
-    if spec.structure_mode == "build":
+    if spec.structure_mode == "build" and spec.heterostructure:
+        na, nb = spec.lateral_cells
+        w = spec.snapped_cross_section * M_TO_ANG
+        sa, sb = spec.lattice_strain
+        lay = hetero_layout(spec)
+        structure_block = HETERO_BLOCK.format(
+            style_a=spec.lattice_style_a, style_b=spec.lattice_style_b,
+            na=na, nb=nb, strain_a=sa, strain_b=sb, cross_ang=w,
+            headroom_ang=headroom(spec) * M_TO_ANG,
+            box_z_ang=(g.total_length + headroom(spec)) * M_TO_ANG,
+            sxa=w / na, sxb=w / nb,
+            aza=spec.lattice_a * M_TO_ANG, azb=spec.lattice_b * M_TO_ANG,
+            basis_a=_basis_lines(spec.lattice_style_a),
+            basis_b=_basis_lines(spec.lattice_style_b),
+            cut_a=lay["cut_a"], start_b=lay["start_b"], origin_b=lay["origin_b"],
+            nz_ang=g.total_length * M_TO_ANG,
+            mass_a=spec.mass_a, mass_b=spec.mass_b,
+        )
+    elif spec.structure_mode == "build":
         a_ang = spec.lattice_used * M_TO_ANG
         sa, sb = spec.lattice_strain
         structure_block = BUILD_BLOCK.format(
@@ -770,8 +946,9 @@ def build_input_deck(spec: NEMDSpec) -> str:
         element_b=spec.element_b,
         pair_style=spec.pair_style,
         pair_file=spec.pair_file,
-        pair_a=pair_labels[0],
-        pair_b=pair_labels[1],
+        pair_coeff_line=(f"pair_coeff      * * {spec.coeff_args}" if spec.coeff_args
+                         else f"pair_coeff      * * {spec.pair_file} "
+                              f"{pair_labels[0]} {pair_labels[1]}"),
         timestep_ps=spec.timestep_fs * FS_TO_PS,
         damp_ps=spec.damping_fs * FS_TO_PS,
         z_wall_lo=g.wall_thickness * a,
@@ -981,6 +1158,18 @@ def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:
     # LAMMPS reports a missing triple only when it reaches the pair_coeff
     # line, which for a deck set up after equilibration is minutes into a
     # run. Checking here costs microseconds.
+    if spec.coeff_args or spec.pair_style not in ("tersoff", "sw", "tersoff/mod",
+                                                   "tersoff/mod/c", "tersoff/zbl"):
+        # Triple verification parses three-body parameter files only. Other
+        # styles (MEAM, EAM) are gated by measuring a0 and C_ij instead.
+        flags.add(
+            Code.NEMD_POTENTIAL_UNVERIFIED,
+            Severity.INFO,
+            f"pair_style {spec.pair_style}: element labels are not parsed from "
+            f"the file; the potential is checked by the elastic gate instead.",
+            remedy="Run scripts/measure_potential_elastic.py on each side first.",
+        )
+        return
     try:
         triples = potential_triples(
             locate_potential(spec.pair_file, spec.potential_dir)

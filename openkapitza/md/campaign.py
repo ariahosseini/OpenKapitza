@@ -101,9 +101,9 @@ def plan_campaign(base: NEMDSpec, *, cross_sections_nm=(), lengths_nm=(),
 
 
 def _atoms(spec: NEMDSpec) -> int:
-    # Diamond: 8 atoms per cubic cell.
-    na = 8.0 / spec.lattice_a ** 3
-    nb = 8.0 / spec.lattice_b ** 3
+    from .nemd import ATOMS_PER_CELL
+    na = ATOMS_PER_CELL[spec.lattice_style_a] / spec.lattice_a ** 3
+    nb = ATOMS_PER_CELL[spec.lattice_style_b] / spec.lattice_b ** 3
     return spec.geometry.estimate_atoms(na, nb)
 
 
@@ -149,6 +149,8 @@ def write_campaign(root: Path | str, rungs: list[Rung], potential: Path | str, *
         wd.mkdir(exist_ok=True)
         (wd / "nemd.in").write_text(build_input_deck(r.spec), encoding="utf-8")
         shutil.copy(potential, wd / potential.name)
+        for extra in r.spec.extra_files:           # e.g. a MEAM parameter file
+            shutil.copy(potential.parent / extra, wd / extra)
         n_atoms = _atoms(r.spec)
         rung_cores = cores_for(n_atoms, cores)
         est = estimate_cost(n_atoms, _steps(r.spec), r.spec.pair_style,
@@ -194,7 +196,10 @@ def _spec_record(spec: NEMDSpec) -> dict:
             "relax_steps", "timestep_fs", "equilibrate_steps", "steady_steps",
             "production_steps", "profile_every", "profile_frames", "damping_fs",
             "seed", "mass_a", "mass_b", "spot_pressure_GPa", "common_lattice",
-            "structure_mode", "data_file")},
+            "structure_mode", "data_file", "lattice_style_a", "lattice_style_b",
+            "coeff_args", "relax_z", "piston_damp_ps")},
+        "supercell": list(spec.supercell) if spec.supercell else None,
+        "extra_files": list(spec.extra_files),
         "pair_elements": list(spec.pair_elements) if spec.pair_elements else None,
     }
 
@@ -204,7 +209,10 @@ def spec_from_record(rec: dict) -> NEMDSpec:
     rec = dict(rec)
     g = NEMDGeometry(**rec.pop("geometry"))
     pe = rec.pop("pair_elements")
-    return NEMDSpec(geometry=g, pair_elements=tuple(pe) if pe else None, **rec)
+    sc = rec.pop("supercell", None)
+    ef = rec.pop("extra_files", [])
+    return NEMDSpec(geometry=g, pair_elements=tuple(pe) if pe else None,
+                    supercell=tuple(sc) if sc else None, extra_files=tuple(ef), **rec)
 
 
 @dataclass
