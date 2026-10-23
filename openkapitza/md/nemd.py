@@ -325,6 +325,16 @@ class NEMDSpec:
     # strain (6.4 GPa for Si/Ge), which changes h_K directly.
     relax_structure: bool = True
     relax_steps: int = 50_000
+    # Let the top wall move as a rigid piston along z during relaxation, so the
+    # cell relaxes to sigma_zz = 0 as the in-plane barostat relaxes sigma_xx,
+    # sigma_yy. Default ON (open issues P1-2, P1-7): with both walls frozen the
+    # cell is clamped at its built length, and because it is built on ONE
+    # lattice constant the Ge half is compressed along z with nowhere to go.
+    # Measured: the clamp alone reproduces the 1.5 GPa Pzz of the production
+    # cell and moves the shared in-plane constant from 56 % to 67 % of the way
+    # toward Ge (scripts/test_inplane_relaxation.py, 0 K).
+    relax_z: bool = True
+    piston_damp_ps: float = 0.5
     timestep_fs: float = 1.0
     equilibrate_steps: int = 500_000
     steady_steps: int = 500_000
@@ -502,12 +512,14 @@ BUILD_BLOCK = """\
 lattice         diamond {lattice_ang:.6f}
 # x and y are PERIODIC, so they must be whole numbers of unit cells or the
 # images do not match across the boundary. z is non-periodic (walls), so a
-# partial cell at the end is harmless and the box matches the geometry exactly.
+# partial cell at the end is harmless. The box extends {headroom_ang:.2f} A
+# above the built cell so a piston-relaxed top wall cannot leave a fixed box
+# (atoms outside an `f` boundary are lost); that space starts empty.
 region          simbox block 0.0 {cross_ang:.4f} 0.0 {cross_ang:.4f} \
-                0.0 {nz_ang:.4f} units box
+                0.0 {box_z_ang:.4f} units box
 create_box      2 simbox
 region          side_a block INF INF INF INF INF {interface_ang:.4f} units box
-region          side_b block INF INF INF INF {interface_ang:.4f} INF units box
+region          side_b block INF INF INF INF {interface_ang:.4f} {nz_ang:.4f} units box
 create_atoms    1 region side_a
 create_atoms    2 region side_b
 mass            1 {mass_a:.4f}
@@ -533,6 +545,9 @@ RELAX_BLOCK = """\
 # `couple xy` keeps the cross-section square, which the periodic images
 # require and which the cubic symmetry of both materials justifies.
 minimize        1.0e-6 1.0e-8 10000 100000
+# minimize advances the step counter by its iteration count. Reset it, or any
+# fix ave/time window below never lands on an output step and reads as zero.
+reset_timestep  0
 velocity        gmobile create {t_init:.2f} {seed} mom yes rot yes dist gaussian
 fix             relax gmobile npt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f} \
                 couple xy x 0.0 0.0 {pdamp_ps:.4f} y 0.0 0.0 {pdamp_ps:.4f}
@@ -542,9 +557,44 @@ fix             relax gmobile npt temp {temperature:.2f} {temperature:.2f} {damp
 # in-plane constant is the number everything downstream inherits.
 thermo          {relax_thermo}
 thermo_style    custom step temp press pxx pyy pzz lx ly
-run             {relax_steps}
+{piston_on}run             {relax_steps}
 unfix           relax
-thermo_style    custom step temp press pe ke etotal
+{piston_off}thermo_style    custom step temp press pe ke etotal
+"""
+
+# The top wall as a rigid piston along z, so the cell relaxes to sigma_zz = 0.
+# setforce zeroes x and y and leaves z alone (NULL); aveforce then gives every
+# wall atom the group's MEAN z-force, so the wall translates as one body and
+# stops when the net force on it vanishes. Viscous damping kills the
+# oscillation (time constant {damp_ps} ps). Defined in this order on purpose:
+# setforce runs first, aveforce averages what it leaves.
+PISTON_ON = """\
+unfix           freeze
+fix             freeze_lo gwall_lo setforce 0.0 0.0 0.0
+fix             freeze_hi gwall_hi setforce 0.0 0.0 NULL
+fix             piston gwall_hi aveforce NULL NULL 0.0
+fix             piston_nve gwall_hi nve
+fix             piston_damp gwall_hi viscous {gamma:.6e}
+variable        zwall equal bound(gwall_hi,zmin)
+# The cell breathes along z (period ~10 ps for a 20 nm Si/Ge slab), so the
+# wall is frozen at its MEAN position over the second half, not wherever the
+# oscillation leaves it -- the latter left up to +/-0.3 GPa in the first test.
+fix             zav all ave/time 10 {nrep} {relax_steps} v_zwall
+thermo_style    custom step temp press pxx pyy pzz lx ly v_zwall
+"""
+
+PISTON_OFF = """\
+displace_atoms  gwall_hi move 0.0 0.0 $(f_zav-v_zwall) units box
+unfix           zav
+unfix           piston_damp
+unfix           piston_nve
+unfix           piston
+unfix           freeze_hi
+velocity        gwall_hi set 0.0 0.0 0.0 units box
+fix             freeze_hi gwall_hi setforce 0.0 0.0 0.0
+group           gside_a type 1
+group           gside_b type 2
+print           "OPENKAPITZA_RELAXED wall_hi_zmin $(bound(gwall_hi,zmin):%.4f) top_a $(bound(gside_a,zmax):%.4f) bottom_b $(bound(gside_b,zmin):%.4f)"
 """
 
 # The spot-pressure template that used to live here is deliberately gone, not
@@ -556,6 +606,37 @@ thermo_style    custom step temp press pe ke etotal
 # the top wall mobile in z, and apply a force per wall atom summing to
 # sigma*A, so the normal stress is imposed rather than barostatted. Until
 # then build_input_deck raises NotImplementedError for spot_pressure_GPa.
+
+
+# amu * A/ps^2 in eV/A: the mass-acceleration unit of LAMMPS `metal` units.
+AMU_A_PS2_IN_EV_A = 1.0364269e-4
+
+
+def headroom(spec: NEMDSpec) -> float:
+    """Empty space above the built cell, in metres, for the piston to move into.
+
+    The largest plausible expansion is the B side relaxing from the shared
+    lattice constant to its own: |a_b/a_used - 1| of its length. Twice that,
+    and never less than 0.5 nm.
+    """
+    if not spec.relax_z:
+        return 0.0
+    g = spec.geometry
+    strain = abs(spec.lattice_b / spec.lattice_used - 1.0) + abs(
+        spec.lattice_a / spec.lattice_used - 1.0)
+    return max(0.5e-9, 2.0 * strain * (g.bulk_a_length + g.bulk_b_length))
+
+
+def _relax_steps(spec: NEMDSpec) -> int:
+    """Relaxation length rounded up to a multiple of 20, so the averaging
+    windows (every 10 steps, over the second half) tile it exactly."""
+    return max(20, -(-spec.relax_steps // 20) * 20)
+
+
+def _piston_gamma(spec: NEMDSpec) -> float:
+    """Per-atom viscous coefficient giving a damping time of piston_damp_ps."""
+    mass = spec.mass_b          # the top wall sits on side B
+    return mass * AMU_A_PS2_IN_EV_A / spec.piston_damp_ps
 
 
 def build_input_deck(spec: NEMDSpec) -> str:
@@ -571,9 +652,15 @@ def build_input_deck(spec: NEMDSpec) -> str:
             seed=spec.seed,
             damp_ps=spec.damping_fs * FS_TO_PS,
             pdamp_ps=10 * spec.damping_fs * FS_TO_PS,
-            relax_steps=spec.relax_steps,
+            relax_steps=_relax_steps(spec),
             # At least 20 samples, so a drifting box is visible.
-            relax_thermo=max(1, spec.relax_steps // 20),
+            relax_thermo=max(1, _relax_steps(spec) // 20),
+            piston_on=(PISTON_ON.format(damp_ps=spec.piston_damp_ps,
+                                        gamma=_piston_gamma(spec),
+                                        relax_steps=_relax_steps(spec),
+                                        nrep=_relax_steps(spec) // 20)
+                       if spec.relax_z else ""),
+            piston_off=PISTON_OFF if spec.relax_z else "",
         )
 
     pressure_block = ""
@@ -600,6 +687,8 @@ def build_input_deck(spec: NEMDSpec) -> str:
             lattice_ang=a_ang,
             cross_ang=spec.snapped_cross_section * M_TO_ANG,
             nz_ang=g.total_length * M_TO_ANG,
+            box_z_ang=(g.total_length + headroom(spec)) * M_TO_ANG,
+            headroom_ang=headroom(spec) * M_TO_ANG,
             interface_ang=g.interface_z * M_TO_ANG,
             mass_a=spec.mass_a, mass_b=spec.mass_b,
             strain_a=sa, strain_b=sb,
@@ -1008,6 +1097,25 @@ def parse_profile(
         temp = np.where(total > 0, (stack[:, :, 2] * counts).sum(axis=0) / total, 0.0)
     rows = np.column_stack([stack[:, :, 0].mean(axis=0), total / len(raw), temp])
     return _profile_from_rows(rows, geometry, flags)
+
+
+def parse_relaxed_positions(path: Path | str) -> dict[str, float] | None:
+    """The piston relaxation's printed positions (Angstrom), or None.
+
+    Keys: wall_hi_zmin, top_a, bottom_b. Present only when relax_z ran.
+    """
+    import re
+    pat = re.compile(r"^OPENKAPITZA_RELAXED wall_hi_zmin (\S+) top_a (\S+) bottom_b (\S+)")
+    try:
+        with open(Path(path), "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = pat.match(line.strip())
+                if m:
+                    return {"wall_hi_zmin": float(m.group(1)), "top_a": float(m.group(2)),
+                            "bottom_b": float(m.group(3))}
+    except OSError:
+        return None
+    return None
 
 
 def parse_log_thermo(path: Path | str) -> list[dict[str, float]]:

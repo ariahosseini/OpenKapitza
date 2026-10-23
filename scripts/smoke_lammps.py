@@ -234,7 +234,7 @@ def main() -> int:
         print(f"  measurement failed: {exc}")
         return 1
     r = m.extraction
-    print(f"  {len(m.per_frame_h_K)} profile frames, flux {m.flux:.3e} W/m^2")
+    print(f"  {len(m.per_frame_delta_T)} profile frames, flux {m.flux:.3e} W/m^2")
     if m.block_se is not None:
         print(f"  h_K error: fit {m.fit_se / m.h_K * 100:.1f} %, "
               f"block {m.block_se / m.h_K * 100:.1f} % -> reported "

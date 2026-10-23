@@ -21,7 +21,7 @@ optimistic.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -30,10 +30,11 @@ from ..schema.flags import Code, FlagSet, Severity
 from ..schema.quantities import Quantity
 from .nemd import (
     FS_TO_PS, NEMDSpec, check_flux_stationarity, check_run_health,
-    parse_log_thermo, parse_profile, parse_profile_frames,
-    parse_reservoir_energy, parse_reservoir_series,
+    M_TO_ANG, parse_log_thermo, parse_profile, parse_profile_frames,
+    parse_relaxed_positions, parse_reservoir_energy, parse_reservoir_series,
 )
-from .profile import KapitzaExtraction, extract_kapitza, flux_from_reservoirs
+from .profile import (KapitzaExtraction, extract_kapitza, flux_from_reservoirs,
+                      raw_delta_T)
 
 # Block error this many times the fit error, or more, is worth saying.
 UNDERSTATED_RATIO = 2.0
@@ -45,8 +46,9 @@ class KapitzaMeasurement:
     h_K: float                          # W/(m^2 K)
     uncertainty: float                  # W/(m^2 K), max(fit, block)
     fit_se: float
-    block_se: float | None              # None with fewer than 3 frames
-    per_frame_h_K: list[float]
+    block_se: float | None              # None with fewer than 3 usable frames
+    per_frame_delta_T: list[float]      # K, unguarded (may be <= 0 in noise)
+    per_frame_flux: list[float]         # W/m^2, each frame's own window
     flux: float                         # W/m^2
     drifts: dict = field(default_factory=dict)
 
@@ -59,7 +61,7 @@ class KapitzaMeasurement:
         return Quantity(si=self.h_K, unit=q.unit, uncertainty=self.uncertainty,
                         provenance=q.provenance, confidence=q.confidence,
                         name="h_K", note=(q.note or "") +
-                        f"; error = max(fit, {len(self.per_frame_h_K)}-frame block)")
+                        f"; error = max(fit, {len(self.per_frame_delta_T)}-frame jackknife)")
 
 
 def frame_fluxes(reservoir_path: Path, frame_ends_steps: list[int], window_steps: int,
@@ -84,6 +86,13 @@ def frame_fluxes(reservoir_path: Path, frame_ends_steps: list[int], window_steps
         steps = np.concatenate([[0.0], steps])
         hot = np.concatenate([[0.0], hot])
         cold = np.concatenate([[0.0], cold])
+    # The direction of each reservoir's transfer comes from the WHOLE run. Over
+    # a short window the net transfer can be smaller than the thermal noise in
+    # the tally, and taking each window's magnitude then inflates the flux --
+    # by 2.6x on a 16 ps test run with 2 ps frames. With a fixed sign the
+    # frame fluxes average exactly to the full-window flux.
+    sign_hot = 1.0 if hot[-1] - hot[0] >= 0 else -1.0
+    sign_cold = 1.0 if cold[-1] - cold[0] >= 0 else -1.0
     out = []
     for end in frame_ends_steps:
         s0, s1 = end - window_steps, end
@@ -91,7 +100,7 @@ def frame_fluxes(reservoir_path: Path, frame_ends_steps: list[int], window_steps
             raise ValueError("profile frame lies outside the reservoir series")
         dh = np.interp(s1, steps, hot) - np.interp(s0, steps, hot)
         dc = np.interp(s1, steps, cold) - np.interp(s0, steps, cold)
-        out.append(0.5 * (abs(dh) + abs(dc)) / ((s1 - s0) * dt_s * area))
+        out.append(0.5 * (sign_hot * dh + sign_cold * dc) / ((s1 - s0) * dt_s * area))
     return out
 
 
@@ -110,32 +119,69 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
     profile_path = wd / "temperature_profile.dat"
     drifts = check_flux_stationarity(energy, flags)
     profile = parse_profile(profile_path, g, flags, frames="all")
+
+    # After a piston relaxation the interface and the cold reservoir are no
+    # longer where the geometry put them (Si/Ge: interface 2.1 A lower, top
+    # wall 3.1 A higher). Bins are assigned to a side by z < interface_z, so
+    # the measured plane is used, and side B's range follows the wall.
+    interface_z, bulk_a, bulk_b = g.interface_z, g.bulk_a, g.bulk_b
+    relaxed = parse_relaxed_positions(log)
+    if relaxed:
+        interface_z = 0.5 * (relaxed["top_a"] + relaxed["bottom_b"]) / M_TO_ANG
+        wall_shift = relaxed["wall_hi_zmin"] / M_TO_ANG - g.z_cold_end
+        bulk_a = (g.bulk_a[0], interface_z)
+        bulk_b = (interface_z, g.bulk_b[1] + wall_shift)
+        profile = replace(profile, interface_z=interface_z)
+    frames_interface = interface_z
+
     e_hot, e_cold, duration = parse_reservoir_energy(energy)
     flux = flux_from_reservoirs(e_hot, e_cold, duration, area, flags)
-    extraction = extract_kapitza(profile, flux, flags, bulk_a=g.bulk_a, bulk_b=g.bulk_b,
+    extraction = extract_kapitza(profile, flux, flags, bulk_a=bulk_a, bulk_b=bulk_b,
                                  k_expected_a=k_expected_a, k_expected_b=k_expected_b)
     h = extraction.h_K.si
     fit_se = extraction.h_K.uncertainty or 0.0
 
-    # Block estimates: one h_K per frame, each with its own window's flux.
+    # Block estimates: the jump and the flux per frame, each frame with its own
+    # flux window. Per-frame JUMPS, not per-frame h_K: a short slice can give a
+    # negative jump in noise, which is fine to average but has no h_K, and
+    # averaging reciprocals would bias the mean anyway.
     frames = parse_profile_frames(profile_path, g, FlagSet())
     window = max(spec.profile_every,
                  (spec.production_steps // spec.profile_frames // spec.profile_every)
                  * spec.profile_every)
-    per_frame: list[float] = []
+    per_dT: list[float] = []
+    per_q: list[float] = []
+    block_failure = None
     try:
         fluxes = frame_fluxes(energy, [s for s, _ in frames], window,
                               spec.timestep_fs, area, spec.profile_every,
                               spec.production_steps)
         for (_, prof), q in zip(frames, fluxes):
-            r = extract_kapitza(prof, q, FlagSet(), bulk_a=g.bulk_a, bulk_b=g.bulk_b)
-            per_frame.append(r.h_K.si)
-    except ValueError:
-        per_frame = []
+            prof = replace(prof, interface_z=frames_interface)
+            per_dT.append(raw_delta_T(prof, bulk_a=bulk_a, bulk_b=bulk_b))
+            per_q.append(q)
+    except ValueError as exc:
+        # Say so: a block error that silently vanishes leaves the optimistic
+        # fit error standing as if it were the whole story.
+        block_failure = str(exc)
+        per_dT, per_q = [], []
 
     block_se = None
-    if len(per_frame) >= 3:
-        block_se = float(np.std(per_frame, ddof=1) / math.sqrt(len(per_frame)))
+    n = len(per_dT)
+    if n >= 3:
+        # Leave-one-out jackknife on h = mean(q) / mean(dT).
+        dT_arr, q_arr = np.asarray(per_dT), np.asarray(per_q)
+        loo = []
+        for k in range(n):
+            keep = np.arange(n) != k
+            d = dT_arr[keep].mean()
+            loo.append(q_arr[keep].mean() / d if d > 0 else math.inf)
+        loo = np.asarray(loo)
+        if np.all(np.isfinite(loo)):
+            block_se = float(math.sqrt((n - 1) / n * np.sum((loo - loo.mean()) ** 2)))
+        else:
+            block_failure = ("leaving out one frame drives the mean jump to zero or "
+                             "below; the run is too noisy for a block error")
     uncertainty = max(fit_se, block_se or 0.0)
     if block_se is not None and fit_se > 0 and block_se > UNDERSTATED_RATIO * fit_se:
         flags.add(
@@ -150,12 +196,14 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
             ratio=block_se / fit_se,
         )
     elif block_se is None:
+        reason = block_failure or f"only {n} profile frames"
         flags.add(
             Code.NEMD_ERROR_UNDERSTATED,
-            Severity.INFO,
-            f"Only {len(per_frame)} usable profile frames; the error on h_K is the "
-            f"fit error alone, which treats bins and time as independent.",
-            remedy="Write at least 4 profile frames (spec.profile_frames).",
+            Severity.CAUTION if block_failure else Severity.INFO,
+            f"No block error on h_K ({reason}); the stated error is the fit "
+            f"error alone, which treats bins and time as independent.",
+            remedy="Write at least 4 profile frames and run long enough that each "
+                   "frame's jump is well above its noise.",
         )
     return KapitzaMeasurement(extraction, h, uncertainty, fit_se, block_se,
-                              per_frame, flux, drifts)
+                              per_dT, per_q, flux, drifts)

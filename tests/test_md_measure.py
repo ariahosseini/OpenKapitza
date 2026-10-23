@@ -35,7 +35,8 @@ def _spec(frames=8):
 
 
 def _write_run(wd: Path, spec: NEMDSpec, *, dT=5.0, k_a=50.0, k_b=30.0,
-               frame_noise=0.0, bin_noise=0.0, seed=1, step_zero=False, ramp=0.0):
+               frame_noise=0.0, bin_noise=0.0, seed=1, step_zero=False, ramp=0.0,
+               tally_noise=0.0):
     """Planted-jump profile per frame plus linear, balanced reservoir tallies."""
     rng = np.random.default_rng(seed)
     g = spec.geometry
@@ -62,16 +63,32 @@ def _write_run(wd: Path, spec: NEMDSpec, *, dT=5.0, k_a=50.0, k_b=30.0,
         fh.write("# time[ps] E_hot[eV] E_cold[eV]\n")
         first = 0 if step_zero else spec.profile_every
         P = spec.production_steps
+        wh = wc = 0.0
         for step in range(first, P + 1, spec.profile_every):
             # Offset `time`: alignment must not depend on it.
             t_ps = 5000.0 + step * spec.timestep_fs * 1e-3
             # Integral of rate*(1 + ramp*(s/P - 0.5)) ds from 0 to step.
             e = rate_eV_per_step * (step + ramp * (step * step / (2 * P) - 0.5 * step))
-            fh.write(f"{t_ps} {-e} {e}\n")
+            # Random walk on each tally, zero at step 0 (as the deck's are).
+            if step == 0:
+                wh = wc = 0.0
+            elif tally_noise:
+                wh += tally_noise * rate_eV_per_step * rng.standard_normal()
+                wc += tally_noise * rate_eV_per_step * rng.standard_normal()
+            fh.write(f"{t_ps} {-e + wh} {e + wc}\n")
     return q
 
 
 class Measurement(unittest.TestCase):
+    def test_negative_frame_jump_is_averaged_not_fatal(self):
+        """A noisy slice can give dT < 0; the block error must survive it."""
+        spec = _spec()
+        _write_run(self.wd, spec, dT=1.0, frame_noise=1.2, seed=7)
+        flags = FlagSet()
+        m = measure_kapitza(self.wd, spec, flags)
+        self.assertTrue(any(d <= 0 for d in m.per_frame_delta_T), m.per_frame_delta_T)
+        self.assertEqual(len(m.per_frame_delta_T), 8)
+
     def setUp(self):
         self.wd = Path(tempfile.mkdtemp())
 
@@ -83,9 +100,10 @@ class Measurement(unittest.TestCase):
         q = _write_run(self.wd, spec, dT=5.0)
         m = measure_kapitza(self.wd, spec, FlagSet())
         self.assertAlmostEqual(m.h_K / (q / 5.0), 1.0, places=4)
-        self.assertEqual(len(m.per_frame_h_K), 8)
-        for h in m.per_frame_h_K:
-            self.assertAlmostEqual(h / (q / 5.0), 1.0, places=4)
+        self.assertEqual(len(m.per_frame_delta_T), 8)
+        for dT, qk in zip(m.per_frame_delta_T, m.per_frame_flux):
+            self.assertAlmostEqual(dT, 5.0, places=3)
+            self.assertAlmostEqual(qk / q, 1.0, places=6)
 
     def test_frame_flux_alignment_ignores_absolute_time(self):
         spec = _spec()
@@ -107,6 +125,21 @@ class Measurement(unittest.TestCase):
                           spec.timestep_fs, spec.snapped_area, spec.profile_every,
                           spec.production_steps)
         np.testing.assert_allclose(fl, q, rtol=1e-6)
+
+    def test_noisy_tally_frames_average_to_the_full_window_flux(self):
+        """Per-window magnitudes inflate a noisy flux; fixed signs do not."""
+        spec = _spec()
+        q = _write_run(self.wd, spec, step_zero=True, tally_noise=4000.0, seed=5)
+        window = spec.production_steps // spec.profile_frames
+        ends = [(k + 1) * window for k in range(spec.profile_frames)]
+        fl = frame_fluxes(self.wd / "reservoir_energy.dat", ends, window,
+                          spec.timestep_fs, spec.snapped_area, spec.profile_every,
+                          spec.production_steps)
+        from openkapitza.md.nemd import parse_reservoir_energy
+        from openkapitza.md.profile import flux_from_reservoirs
+        eh, ec, dur = parse_reservoir_energy(self.wd / "reservoir_energy.dat")
+        total = flux_from_reservoirs(eh, ec, dur, spec.snapped_area, FlagSet())
+        self.assertAlmostEqual(float(np.mean(fl)) / total, 1.0, places=6)
 
     def test_ramping_power_is_attributed_to_the_right_frame(self):
         """Power rising in time: frame k must get the mean power of ITS window."""

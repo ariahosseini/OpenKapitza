@@ -238,6 +238,29 @@ def naive_adjacent_bin_delta_T(profile: TemperatureProfile) -> float:
     return float(a[-1] - b[0])
 
 
+def raw_delta_T(
+    profile: TemperatureProfile,
+    *,
+    reservoir_exclusion: float = DEFAULT_RESERVOIR_EXCLUSION,
+    interface_exclusion: float = DEFAULT_INTERFACE_EXCLUSION,
+    bulk_a: tuple[float, float] | None = None,
+    bulk_b: tuple[float, float] | None = None,
+) -> float:
+    """The extrapolated jump from the same fits as `extract_kapitza`, unguarded.
+
+    For block estimates only. A short slice of a noisy run can return a
+    negative jump; that is noise, and averaging it is correct, whereas
+    `extract_kapitza` rightly refuses it as a final answer. Raises only when
+    a side has too few bins to fit.
+    """
+    za, Ta = _select(profile, "a", reservoir_exclusion, interface_exclusion, bulk_a)
+    zb, Tb = _select(profile, "b", reservoir_exclusion, interface_exclusion, bulk_b)
+    if za.size < MIN_FIT_BINS or zb.size < MIN_FIT_BINS:
+        raise ValueError("too few bins to fit")
+    return (_fit(za, Ta, profile.interface_z).T_at_interface
+            - _fit(zb, Tb, profile.interface_z).T_at_interface)
+
+
 def extract_kapitza(
     profile: TemperatureProfile,
     flux: float,
