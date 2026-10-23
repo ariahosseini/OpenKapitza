@@ -387,26 +387,19 @@ def main() -> int:
                  f"relax={relax}")
         cases.append((spec, label))
 
-    # The spot-pressure path must REFUSE, not emit a deck LAMMPS rejects.
-    refusal_ok = False
-    try:
-        build_input_deck(NEMDSpec(
-            geometry=base, element_a="Si", element_b="Ge",
-            lattice_a=5.431e-10, lattice_b=5.658e-10,
-            mass_a=28.0855, mass_b=72.63,
-            pair_style="tersoff", pair_file="SiCGe.tersoff",
-            temperature=300.0, spot_pressure_GPa=6.0,
-        ))
-    except NotImplementedError:
-        refusal_ok = True
-    except Exception:                                         # noqa: BLE001
-        refusal_ok = False
+    # The spot-pressure path is a loaded piston now; audit that deck too, so
+    # the configuration that once crashed LAMMPS stays in the grid.
+    spot = NEMDSpec(
+        geometry=base, element_a="Si", element_b="Ge",
+        lattice_a=5.431e-10, lattice_b=5.658e-10,
+        mass_a=28.0855, mass_b=72.63,
+        pair_style="tersoff", pair_file="SiCGe.tersoff",
+        temperature=300.0, spot_pressure_GPa=6.0,
+    )
+    cases.append((spot, "spot-pressure 6 GPa"))
 
     print(f"auditing {len(cases)} deck configurations\n")
-    if not refusal_ok:
-        all_problems_pre = ["spot_pressure_GPa did not raise NotImplementedError"]
-    else:
-        all_problems_pre = []
+    all_problems_pre: list[str] = []
     all_problems: list[str] = list(all_problems_pre)
     for spec, label in cases:
         all_problems += audit_one(spec, label)

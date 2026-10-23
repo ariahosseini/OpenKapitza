@@ -11,6 +11,8 @@ Run with:  python3 -m unittest discover -s tests -v
 
 from __future__ import annotations
 
+import re
+
 import os
 import shutil
 import tempfile
@@ -279,23 +281,32 @@ class TestDeck(unittest.TestCase):
     def test_walls_are_frozen(self):
         self.assertIn("setforce 0.0 0.0 0.0", build_input_deck(self.spec))
 
-    def test_spot_pressure_is_refused_not_silently_broken(self):
-        """This test previously asserted the OLD, broken behaviour.
-
-        It checked that setting `spot_pressure_GPa` put "npt" and the pressure
-        in bar into the deck -- and it passed, for as long as the feature was
-        completely non-functional. The emitted line was
-            fix ... npt temp ... z <P> <P> <Pdamp>
-        which LAMMPS rejects with "Cannot use fix npt on a non-periodic z
-        dimension", plus a literal backslash it read as an npt keyword. A test
-        that asserts deck TEXT can lock in a deck the engine will not accept.
-
-        Proven broken against a real LAMMPS build; `build_input_deck` now
-        refuses, and this test pins the refusal.
-        """
+    def test_spot_pressure_is_a_loaded_piston_not_an_npt_on_z(self):
+        """History: the first version emitted `fix npt ... z P P`, which LAMMPS
+        rejects on a non-periodic z (and a test asserting that deck TEXT passed
+        for as long as the feature was broken). It was then refused outright.
+        Now the load is a force on the piston wall."""
         self.spec.spot_pressure_GPa = 7.6
-        with self.assertRaises(NotImplementedError):
+        deck = build_input_deck(self.spec)
+        self.assertIn("aveforce NULL NULL v_pfz", deck)
+        self.assertRegex(deck, r"variable\s+pfz equal -[0-9.e+-]+\*lx\*ly/count\(gwall_hi\)")
+        p_ev = float(re.search(r"pfz equal -([0-9.e+-]+)\*", deck).group(1))
+        self.assertAlmostEqual(p_ev * 160.21766208, 7.6, places=6)
+        for line in deck.splitlines():
+            if line.startswith("fix") and "npt" in line:
+                self.assertNotRegex(line, r"\bz\s")
+
+    def test_spot_pressure_needs_the_piston(self):
+        self.spec.spot_pressure_GPa = 7.6
+        self.spec.relax_z = False
+        with self.assertRaises(ValueError):
             build_input_deck(self.spec)
+
+    def test_spot_pressure_states_its_lateral_model(self):
+        self.spec.spot_pressure_GPa = 2.0
+        f = FlagSet()
+        check_spec(self.spec, f)
+        self.assertIn(Code.NEMD_SPOT_PRESSURE_MODEL, f.codes())
 
     def test_relaxation_barostats_only_the_periodic_dimensions(self):
         """Relaxation is default-on, so the default deck DOES contain npt."""

@@ -113,7 +113,8 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
     area = spec.snapped_area if spec.structure_mode == "build" else g.area
     log = wd / "log.lammps"
     if log.exists():
-        check_run_health(parse_log_thermo(log), spec.temperature, flags)
+        check_run_health(parse_log_thermo(log), spec.temperature, flags,
+                         expected_pzz_GPa=spec.spot_pressure_GPa or 0.0)
 
     energy = wd / "reservoir_energy.dat"
     profile_path = wd / "temperature_profile.dat"

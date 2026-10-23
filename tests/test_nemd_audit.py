@@ -193,11 +193,11 @@ class TestBarostatAndRelaxChecks(unittest.TestCase):
                      .replace("unfix           relax", "unfix           zzrelax"),
             "relaxation moved after the reservoirs")
 
-    def test_spot_pressure_refuses_instead_of_emitting_a_bad_deck(self):
+    def test_spot_pressure_deck_passes_the_audit(self):
+        """Now a loaded piston; it must never barostat the non-periodic z."""
         spec = _spec()
         spec.spot_pressure_GPa = 6.0
-        with self.assertRaises(NotImplementedError):
-            build_input_deck(spec)
+        self.assertEqual(audit_mod.audit_one(spec, "spot-pressure"), [])
 
     def test_relax_can_be_turned_off(self):
         spec = _spec()

@@ -10,7 +10,7 @@ Status: **open** · **in progress** · **blocked** (by another item) ·
 **cluster** (needs long runs; deferred until cluster access) · **parked**
 (out of current scope).
 
-Last updated: 22 Oct 2026.
+Last updated: 22 Oct 2026 (Phase 1 session).
 
 ---
 
@@ -18,15 +18,16 @@ Last updated: 22 Oct 2026.
 
 | ID | Item | Status | Closes when |
 |---|---|---|---|
-| P1-1 | **Stationarity check has no noise floor.** `check_flux_stationarity` uses a fixed 15 % drift tolerance; on the 400 ps Si/Ge run the metric's own scatter is 36 % (mean 46 %), so it reports "not steady" for every run. | in progress | Drift is judged against its own statistical uncertainty; a known-stationary synthetic series passes and a decaying one fails. |
-| P1-2 | **In-plane constant 73 % toward Ge vs 51 % predicted.** Hypothesis: walls clamp z (Pzz ≈ +1.5 GPa), which expands a∥ through Poisson coupling. | open | Relaxation with longer z or a free surface moves a∥ toward ~5.55 Å (hypothesis holds) or does not (find the real cause). |
-| P1-3 | **Convergence campaign** over cross-section, length, duration and flux. ~100 core-hours; converged target ~112k atoms, 500 ps. | blocked by P1-1; then **cluster** | Each ladder stays within tolerance over its last two rungs; h_K quoted with the convergence uncertainty. Local pilot first. |
-| P1-4 | **Si/Ge h_K = 428 MW/m²K vs published 266–368.** `NEMD_UNEQUILIBRATED`, `NEMD_CONDUCTIVITY_MISMATCH` still raised. | blocked by P1-1, P1-3 | A converged h_K with no WARNING-or-worse flags, compared against the published range. |
+| P1-3 | **Convergence campaign** over cross-section, length, duration, flux. Tooling built (`md/campaign.py`, `scripts/plan_campaign.py`): Si/Ge preset, 12 rungs, ~350 core-hours, every walltime ≤ 2.5 h. | **cluster** | Each axis converged (or extrapolated) with error-aware verdicts; h_K quoted with the convergence uncertainty. |
+| P1-4 | **Si/Ge h_K vs published 266–368 MW/m²K.** Last value 428 (clamped cell, last-frame profile, fit error only: all three since fixed). | blocked by P1-3 | Converged h_K from the piston-relaxed cell with no WARNING-or-worse flags. |
 | P1-5 | **`SiCGe.tersoff` fails the elastic gate** and inverts the Si/Ge biaxial-stiffness ordering. | open | A gated alternative potential is found, or the result is reported with the inversion stated (current behaviour). |
-| P1-6 | **Die-relevant validation pairs.** Phase 1 is validated only on Si/Ge. Needed: Si/Al, Si/SiO₂, Si/Cu; GaN/SiC if a gated potential exists. | open | For each pair: potential gated (a0, C_ij), published h_K located, pilot run within its flags. |
-| P1-7 | **Cell stress.** 1.51 GPa Pzz cannot be relaxed in-plane (z non-periodic). Needs per-side out-of-plane constants from Poisson ratios. | open (needs Phase 2 builder) | Structure built with per-side out-of-plane constants; Pzz under the `NEMD_CELL_STRESS` threshold. |
+| P1-6 | **Die-relevant validation pairs.** Si/Al and Si/Cu need `AlSiMgCuFe.meam` (Jelinek 2012, ships with LAMMPS) and a LAMMPS build with the MEAM package (this build has MANYBODY, EXTRA-FIX, EXTRA-COMPUTE only). Si/SiO₂ needs `SiO.tersoff` and an amorphous structure (Phase 2). GaN/SiC: no shipped cross potential. | open | Per pair: MEAM build, potential gated (a0, C_ij), published h_K located, pilot run within its flags. |
 | P1-8 | **Equilibrium cross-check** (temperature-fluctuation method, not Green–Kubo). | open (Phase 4 scope) | Implemented and agrees with NEMD within the joint uncertainty on one pair. |
-| P1-9 | **Spot-pressure MD.** §5 says to run at H_c, not the apparent pressure; the deck supports `spot_pressure_GPa`, never exercised on a real run. | open | One run at spot pressure with its effect on h_K reported. |
+| P1-9 | **Spot-pressure MD.** Implemented as a loaded piston (−P·A/N per wall atom), uniaxial stress, flagged `NEMD_SPOT_PRESSURE_MODEL`. Real 2 GPa test (4,960-atom Si/Ge, 20 ps relax): production raw Pzz 1.68 GPa, in-plane −0.08; 6 % of the shortfall is the box-volume artefact now corrected by slab-volume stress columns. | in progress | One h_K at spot pressure reported against P = 0 on a converged cell. |
+| P1-13 | **~0.2 GPa uniform offset between relaxation and production stress.** Seen loaded and unloaded (production stresses −0.2 GPa in all components after a stress-free relaxation). Cause not identified: candidates are the velocity re-creation at equilibration and the different temperature computes of the barostat and thermo. | open | Offset explained, or shown to vanish with the campaign's 100 ps equilibration. |
+| P1-10 | **Spot-pressure lateral condition.** Uniaxial stress only; the real asperity sits between uniaxial stress and uniaxial strain. | open | Uniaxial-strain option added; both reported when h_K is pressure-sensitive. |
+| P1-11 | **Throughput on the cluster.** Cost model now uses measured 4.5e5 (Tersoff) / 5.0e5 (SW) atom-steps per core-second from this container and a laptop. | **cluster** | One short run on the cluster; update `compute/resources.py`. |
+| P1-12 | **Equilibration time for the campaign.** `plan_campaign.py` uses a 100 ps placeholder for `steady_steps`. | blocked by local 400 ps run; then **cluster** | `find_equilibration_time.py` on the 400 ps Si/Ge run, then on the campaign base rung. |
 
 ## Phase 0 — continuum core
 
@@ -72,10 +73,11 @@ after Phase 1.
 
 Collected here so the cluster session starts from one list.
 
-1. P1-3 convergence campaign (~100 core-hours; Slurm runner already in `openkapitza/compute`).
-2. P1-4 converged Si/Ge h_K (part of 1).
-3. P1-6 die-relevant pairs at converged size.
-4. P5-1 SW-Si bulk k at ns scale (only if bulk k becomes needed).
+1. P1-11 throughput check (one short run), then P1-12 equilibration time on the base rung.
+2. P1-3 convergence campaign: `python3 scripts/plan_campaign.py write <dir> --potential SiCGe.tersoff --partition ... --account ...` (~350 core-hours), then `... collect <dir>`.
+3. P1-4 converged Si/Ge h_K (part of 2).
+4. P1-6 die-relevant pairs at converged size (needs a MEAM-enabled LAMMPS build).
+5. P5-1 SW-Si bulk k at ns scale (only if bulk k becomes needed).
 
 ---
 
@@ -87,3 +89,8 @@ Collected here so the cluster session starts from one list.
 | — | 5a elastic constants with C44, VRH, two strain magnitudes | `35fb50a` |
 | — | 5b accommodation coefficient, calibrated and validated (He/Ni 0.09–0.12) | `04f8e57`, `846e8da`, `698bfa4` |
 | — | 5d nanoindentation, compare-only | `3c05731`, `2473d90` |
+| P1-1 | Stationarity check judged against its own noise (three verdicts, Monte Carlo calibrated) | `d03114b` |
+| P1-2 | In-plane constant 73 % vs 51 %: the clamped cell (+13 points), temperature (+5), nonlinearity (+4); measured at 0 K and 300 K | `ebdd7f5`, `5b1e0c1` |
+| P1-7 | Cell stress: piston z-relaxation, no Phase 2 builder needed; production Pzz ≈ Pxx ≈ Pyy | `5b1e0c1` |
+| — | Profile used only the last of 4 frames; flux unit; frame/flux alignment; per-window flux inflation; silent block-error loss | `442e4a1`, `ebdd7f5`, `5b1e0c1` |
+| — | Cost model 3-4x optimistic for three-body potentials | `7e0c89f` |

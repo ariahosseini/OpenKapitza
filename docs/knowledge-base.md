@@ -745,6 +745,86 @@ interface, and it yields an honest uncertainty on h_K instead of a pass/fail.
 
 ---
 
+### The stationarity test, fixed: judge drift against its own noise
+
+The entry above found the fixed 15 % drift tolerance unreachable (metric
+noise 36 %). Fixed in `md/stationarity.py` (open issue P1-1): window powers by
+least squares in 20 windows, a linear trend whose error comes from successive
+differences of the window powers, and three verdicts — drifting (significant
+AND above tolerance), stationary (drift + 2σ inside tolerance), unresolved
+(new `NEMD_STATIONARITY_UNRESOLVED`: a statistics limit, fixed by a longer
+production window or a wider cross-section, not by equilibrating longer).
+
+**A second trap, inside the fix.** The first replacement took the noise from
+residuals about the fitted line. A decaying transient is curved; its
+curvature landed in the residuals, inflated the noise, and hid the transient
+itself — an exponential decay was caught only 30 % of the time. Successive
+differences of a smooth trend are small whatever its shape, so the
+von Neumann estimate stays honest: 100 % at moderate noise. Monte Carlo
+calibration is pinned in `tests/test_stationarity_stats.py`.
+
+### Profile frames are independent windows, not running averages
+
+`parse_profile` kept only the last of four `fix ave/chunk` frames, on the
+stated belief that earlier frames were running averages carrying the
+transient. Without `ave running` they are not: each frame averages its own
+slice of the production window. Keeping one threw away 75 % of the profile
+and measured the jump over a quarter of the window the flux came from. The
+default is now the count-weighted mean of all frames; whether the window
+holds a transient is the stationarity test's question, asked of the same
+window. A test had pinned the wrong belief ("only the last frame is used").
+
+The frames are also the cheapest honest error bar: `measure_kapitza` extracts
+the jump per frame and reports a jackknife error on mean(q)/mean(ΔT). On a
+real short run it was 2.8x the fit error, which treats bins and time as
+independent.
+
+### Two ways a block estimate goes wrong on real data
+
+Both found on the first real run through `measure_kapitza`, both invisible on
+clean synthetic data:
+
+- **A short frame can have a negative jump.** `extract_kapitza` rightly
+  refuses ΔT ≤ 0 as a final answer, and the per-frame loop caught that
+  ValueError and dropped the whole block error *silently*, leaving the
+  optimistic fit error as if it were complete. Per-frame jumps are now taken
+  unguarded (`raw_delta_T`), averaged, and any failure is flagged with its
+  reason.
+- **Per-window |ΔE| inflates a noisy flux.** Over a short window the net
+  reservoir transfer can be smaller than the tally's noise; taking each
+  window's magnitude made the frame fluxes average 2.6x the full-window flux.
+  The sign comes from the whole run now, and frame fluxes average exactly to
+  the total. The test was rewritten until it failed on the old code (the
+  first version's noise was too small to discriminate).
+
+### The clamped cell: frozen walls at the built length put Pzz into the cell
+
+Open issue P1-2: the relaxed in-plane constant sat 73 % of the way from Si to
+Ge where the potential's own C_ij predicted 51 %, with Pzz = +1.51 GPa.
+
+**Cause.** The cell is built on one lattice constant (Si's) in all three
+directions and both walls are frozen, so its total length is clamped. The Ge
+half is compressed along z with nowhere to go, and Poisson coupling pushes the
+shared in-plane constant toward Ge. Linear elasticity with the potential's
+own constants predicts σzz = −1.63 GPa for the clamp. Measured
+(`scripts/test_inplane_relaxation.py`, periodic bilayer):
+
+| | 0 K | 300 K | NEMD cell, 300 K |
+|---|---|---|---|
+| z clamped | 66.8 %, Pzz 1.46 GPa | 74.0 %, Pzz 1.61 GPa | 73.3 %, Pzz 1.51 GPa |
+| z free | 55.9 % | 61.0 % | 62 % with the piston |
+
+The rest of the gap to 51.8 % is temperature (+5 points) and nonlinear
+elasticity (+4).
+
+**Fix.** `relax_z` (default on): during relaxation the top wall is a rigid
+piston (`setforce 0 0 NULL` + `aveforce NULL NULL 0` + `nve` + viscous
+damping), frozen afterwards at its *mean* position over the second half —
+the cell breathes with a ~10 ps period, and freezing it mid-swing left up to
+±0.3 GPa. Production then has Pzz ≈ Pxx ≈ Pyy. The same piston, loaded with
+−P·A/N per wall atom, is how `spot_pressure_GPa` now works; the earlier
+`fix npt ... z` version could never run on a non-periodic z.
+
 ### Flux linearity is a validity test, not a convergence test
 
 **Cause.** `h_K = q/ΔT` only means something if ΔT is proportional to q
@@ -833,6 +913,29 @@ the long cells, or Green–Kubo. Check the two-halves agreement before
 trusting any length; it is the cheapest convergence test the layout gives.
 
 ## 5. Environment facts
+
+### `minimize` advances the timestep counter
+
+A `fix ave/time` with Nfreq = N defined after a `minimize` never outputs if
+the following run ends on minimize_iterations + N rather than a multiple of
+N; reading it then returns 0 with no error. Hit twice in one day. Put
+`reset_timestep 0` after `minimize` whenever a later fix keys off step
+multiples.
+
+### `fix print` writes a step-0 line
+
+At the start of a run, `fix print` writes the current values (here
+`0 0 0` for freshly created tallies after `reset_timestep 0`). Code that
+assumed the first sample was at step N was off by one sample. Align series
+from the LAST sample, which is always the final step of the run.
+
+### Three-body throughput is ~3-4x lower than first assumed
+
+Measured: Tersoff 4.1e5 (macOS arm64) and 5.6e5 (cloud x86) atom-steps per
+core-second; Stillinger–Weber 5.0e5. The cost model had 1.5e6 and 2.0e6 —
+more than its 2x walltime safety factor, so cluster jobs would have hit the
+wall and lost everything. Corrected in `compute/resources.py`; re-measure
+with one short run on any new machine.
 
 ### What LAMMPS actually ships
 

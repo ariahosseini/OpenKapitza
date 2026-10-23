@@ -491,7 +491,15 @@ file reservoir_energy.dat screen no title "# time[ps] E_hot[eV] E_cold[eV]"
 # and cannot be barostatted -- and z is the transport direction, so Pzz is
 # the component h_K is most sensitive to. Without these columns in the
 # PRODUCTION block the stress check has nothing to test where it counts.
-thermo_style    custom step temp press pxx pyy pzz f_hot f_cold
+# Stress over the SLAB's own extent. LAMMPS divides the virial by the box
+# volume, and with relax_z the box includes empty headroom above the wall, so
+# raw pxx/pyy/pzz read low by slab/box (6 % on a 21 nm Si/Ge cell). The
+# health check prefers these columns.
+variable        slabf equal lz/(bound(all,zmax)-bound(all,zmin))
+variable        sxx equal pxx*v_slabf
+variable        syy equal pyy*v_slabf
+variable        szz equal pzz*v_slabf
+thermo_style    custom step temp press pxx pyy pzz f_hot f_cold v_sxx v_syy v_szz
 run             {production_steps}
 
 print           "OPENKAPITZA_DONE area_m2 {area:.6e} interface_z_ang {interface_ang:.4f}"
@@ -572,7 +580,7 @@ PISTON_ON = """\
 unfix           freeze
 fix             freeze_lo gwall_lo setforce 0.0 0.0 0.0
 fix             freeze_hi gwall_hi setforce 0.0 0.0 NULL
-fix             piston gwall_hi aveforce NULL NULL 0.0
+{piston_force}fix             piston gwall_hi aveforce NULL NULL {piston_fz}
 fix             piston_nve gwall_hi nve
 fix             piston_damp gwall_hi viscous {gamma:.6e}
 variable        zwall equal bound(gwall_hi,zmin)
@@ -633,6 +641,30 @@ def _relax_steps(spec: NEMDSpec) -> int:
     return max(20, -(-spec.relax_steps // 20) * 20)
 
 
+GPA_TO_EV_A3 = 1.0 / 160.21766208
+
+
+def _piston_load(spec: NEMDSpec) -> dict[str, str]:
+    """The piston's per-atom z-force: zero, or the spot pressure.
+
+    fix aveforce adds its value to EVERY wall atom after averaging, so the
+    total load is that value times the wall atom count. For a compressive
+    stress P on area lx*ly, each atom gets -P*lx*ly/N (downward: the wall
+    pushes on the slab). Written as an equal-style variable so it follows the
+    in-plane box as it relaxes.
+    """
+    if not spec.spot_pressure_GPa:
+        return {"piston_force": "", "piston_fz": "0.0"}
+    p = spec.spot_pressure_GPa * GPA_TO_EV_A3
+    return {
+        "piston_force": (
+            f"# Spot pressure {spec.spot_pressure_GPa:g} GPa as a load on the piston\n"
+            f"# (uniaxial stress: in-plane barostat stays at zero).\n"
+            f"variable        pfz equal -{p:.8e}*lx*ly/count(gwall_hi)\n"),
+        "piston_fz": "v_pfz",
+    }
+
+
 def _piston_gamma(spec: NEMDSpec) -> float:
     """Per-atom viscous coefficient giving a damping time of piston_damp_ps."""
     mass = spec.mass_b          # the top wall sits on side B
@@ -658,27 +690,21 @@ def build_input_deck(spec: NEMDSpec) -> str:
             piston_on=(PISTON_ON.format(damp_ps=spec.piston_damp_ps,
                                         gamma=_piston_gamma(spec),
                                         relax_steps=_relax_steps(spec),
-                                        nrep=_relax_steps(spec) // 20)
+                                        nrep=_relax_steps(spec) // 20,
+                                        **_piston_load(spec))
                        if spec.relax_z else ""),
             piston_off=PISTON_OFF if spec.relax_z else "",
         )
 
     pressure_block = ""
-    if spec.spot_pressure_GPa:
-        # Verified against LAMMPS: this path emits
-        #   fix ... npt ... z <P> <P> <Pdamp>
-        # and dies with "Cannot use fix npt on a non-periodic z dimension".
-        # It also used to emit a literal backslash, which LAMMPS read as an
-        # npt keyword. Neither had ever been run: spot_pressure_GPa defaults
-        # to None and no fixture set it. Refusing beats emitting a deck that
-        # crashes minutes into a job.
-        raise NotImplementedError(
-            "spot_pressure_GPa is not implemented. Normal load on a slab with "
-            "non-periodic z cannot be applied with `fix npt`, which requires "
-            "the barostatted dimension to be periodic; it needs a force on "
-            "the wall group instead (sigma = F/A, top wall mobile in z, bottom "
-            "wall fixed), which is not built yet. Leave it None and relax the "
-            "in-plane box with relax_structure=True. See README 'Spot pressure'."
+    if spec.spot_pressure_GPa and not (spec.relax_structure and spec.relax_z
+                                       and spec.structure_mode == "build"):
+        # The load is applied by the piston, so it needs the piston. (The
+        # first implementation barostatted z with `fix npt`, which LAMMPS
+        # rejects on a non-periodic dimension; it had never been run.)
+        raise ValueError(
+            "spot_pressure_GPa needs relax_structure=True, relax_z=True and "
+            "structure_mode='build': the load is the force on the piston wall."
         )
     if spec.structure_mode == "build":
         a_ang = spec.lattice_used * M_TO_ANG
@@ -865,6 +891,21 @@ def validate_deck(deck: str) -> list[str]:
 def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:
     """Pre-flight checks that catch the usual ways a NEMD run is wasted."""
     g = spec.geometry
+
+    if spec.spot_pressure_GPa:
+        flags.add(
+            Code.NEMD_SPOT_PRESSURE_MODEL,
+            Severity.CAUTION,
+            f"Spot pressure {spec.spot_pressure_GPa:g} GPa is applied as UNIAXIAL "
+            f"STRESS: sigma_zz = -P with the in-plane stress held at zero.",
+            remedy=(
+                "Under a real asperity the material is partly constrained "
+                "laterally by its surroundings, which lies between uniaxial "
+                "stress and uniaxial strain. The two bracket the answer; "
+                "report the bracket if h_K turns out pressure-sensitive."
+            ),
+            spot_pressure_GPa=spec.spot_pressure_GPa,
+        )
 
     bins_per_side = min(g.bulk_a_length, g.bulk_b_length) / g.bin_width
     if bins_per_side < 20:
@@ -1173,6 +1214,7 @@ def check_run_health(
     temperature_tolerance: float = 0.08,
     max_pressure_GPa: float = 1.0,
     use_last_block: bool = True,
+    expected_pzz_GPa: float = 0.0,
 ) -> None:
     """Did the run actually do what the deck asked?
 
@@ -1238,10 +1280,15 @@ def check_run_health(
     # So flag on the worst component when components are reported, and name
     # it. Fall back to the scalar when the thermo style did not include them.
     component_means: dict[str, float] = {}
-    for key in ("Pxx", "Pyy", "Pzz"):
-        values = [r[key] for r in rows if key in r]
+    for key, slab in (("Pxx", "v_sxx"), ("Pyy", "v_syy"), ("Pzz", "v_szz")):
+        # Prefer the slab-volume stress when the deck logged it (see deck).
+        values = [r[slab] for r in rows if slab in r] or [r[key] for r in rows if key in r]
         if values:
             component_means[key] = (sum(values) / len(values)) / 1e4
+    # Under an applied spot pressure Pzz is SUPPOSED to sit at the load
+    # (LAMMPS: positive = compressive). Judge the residual about it.
+    if "Pzz" in component_means and expected_pzz_GPa:
+        component_means["Pzz"] -= expected_pzz_GPa
 
     if component_means:
         worst_key = max(component_means, key=lambda k: abs(component_means[k]))
@@ -1256,15 +1303,17 @@ def check_run_health(
                 Code.NEMD_CELL_STRESS,
                 Severity.WARNING,
                 f"Residual stress of {worst:+.2f} GPa along {worst_key[1:]} "
-                f"({detail} GPa); a relaxed crystal sits near zero."
+                f"({detail} GPa"
+                + (f", Pzz relative to the applied {expected_pzz_GPa:.2f}"
+                   if expected_pzz_GPa else "")
+                + "); a relaxed crystal sits near zero."
                 f"{along_transport}",
                 remedy=(
-                    "In-plane relaxation cannot remove a z component: z is "
-                    "non-periodic (walls) and cannot be barostatted. Build "
-                    "each side with its own out-of-plane constant set by its "
-                    "Poisson ratio -- the pseudomorphic strained-layer "
-                    "structure -- rather than putting both sides on one "
-                    "lattice constant. That is the Phase-2 structure module."
+                    "z is non-periodic and cannot be barostatted, but the "
+                    "piston relaxation (relax_z=True, the default) removes a z "
+                    "residual by letting the top wall find sigma_zz = 0. A "
+                    "residual with relax_z on means the relaxation was too "
+                    "short or the cell was not built by this package."
                 ),
                 **{f"stress_{k}": v for k, v in component_means.items()},
             )

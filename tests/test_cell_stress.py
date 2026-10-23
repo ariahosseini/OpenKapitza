@@ -64,7 +64,20 @@ class TestAnisotropicStress(unittest.TestCase):
         flag = next(f for f in flags.flags if f.code == Code.NEMD_CELL_STRESS)
         self.assertIn("zz", flag.message)
         self.assertIn("transport direction", flag.message)
-        self.assertIn("Phase-2", flag.remedy)
+        # The remedy used to point at the Phase-2 builder; the piston
+        # relaxation (relax_z) now removes the z residual without it.
+        self.assertIn("relax_z", flag.remedy)
+
+    def test_applied_spot_pressure_is_not_residual_stress(self):
+        """Under a 6 GPa load, Pzz = 6 GPa is the point, not a defect."""
+        flags = FlagSet()
+        check_run_health(_rows(10, pxx=0.0, pyy=0.0, pzz=6.0), 300.0, flags,
+                         expected_pzz_GPa=6.0)
+        self.assertNotIn(Code.NEMD_CELL_STRESS, flags.codes())
+        flags = FlagSet()
+        check_run_health(_rows(10, pxx=0.0, pyy=0.0, pzz=7.5), 300.0, flags,
+                         expected_pzz_GPa=6.0)
+        self.assertIn(Code.NEMD_CELL_STRESS, flags.codes())
 
     def test_in_plane_residual_is_also_caught(self):
         """Not only z: a failed in-plane relaxation must flag too."""
