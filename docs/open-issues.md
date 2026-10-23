@@ -65,7 +65,7 @@ heterostructures (fcc on diamond) live in `md/nemd.py`. Script:
 
 | ID | Item | Status | Closes when |
 |---|---|---|---|
-| P2-2 | **a-SiO₂ coordination defects.** Munetoh Tersoff, melt 6000 K, 1536 atoms. 10¹⁴ K/s: 73 % fourfold Si, 2.33 g/cm³. **10¹³ K/s: 80 % fourfold (14 % five-, 7 % threefold), 2.31 g/cm³, O–O 2.71 Å — fails the gate.** The first Si–O shell is fully separated (zero density 1.8–2.4 Å), so the counts do not depend on the cutoff: the defects are real. Testing a 2000 K re-anneal; then 10¹² K/s on the cluster. | in progress | Gate passes, or the defect content is stated with every Si/SiO₂ h_K. |
+| P2-2 | **a-SiO₂ coordination defects (Munetoh Tersoff).** 1536 atoms, melt 6000 K. 10¹⁴ K/s: 73 % fourfold Si, 2.33 g/cm³. 10¹³ K/s: 80 % fourfold (14 % five-, 7 % threefold), 2.31 g/cm³. 10¹³ K/s + 100 ps at 2000 K + re-cool: 81 % fourfold (14 % fivefold), 2.35 g/cm³. Geometry passes throughout; coordination and density fail. The first Si–O shell is fully separated, so the counts are cutoff-independent. **Hypothesis: the potential over-coordinates Si** (defects barely move with rate or anneal). | open; 10¹² K/s **cluster** | 10¹² K/s settles rate vs potential. If the potential: state the defect content with every Si/SiO₂ h_K, and consider a charge-transfer (COMB) or Tier-2 potential (needs the KSPACE package). |
 | P2-3 | **Si/a-SiO₂ h_K.** Targets (300 K): Lampin et al. 2012, same potential and rate — strong bonding 0.83 ± 0.25 × 10⁻⁹ m²K/W (≈1.2 GW/m²K), weak 4.27 ± 1.78 × 10⁻⁹ (≈0.23 GW/m²K); experiment > 0.6 GW/m²K (Kimling et al., TR-MOKE). | open | Converged h_K with bonding descriptors stated, inside the bracket for its bonding class. |
 | P2-4 | **Si in `SiO.tersoff` fails the elastic gate** (−14/+18/−13 %): same Tersoff Si(D) as `SiCGe.tersoff`. | open | Reported with every Si/SiO₂ h_K; or a gated Si–O potential. |
 | P2-5 | **Quench-rate sensitivity.** One rate is one sample of the rate-dependent glass. | **cluster** | h_K at two rates (10¹³ and 10¹² K/s). |
@@ -95,7 +95,8 @@ commands: [`cluster-runbook.md`](cluster-runbook.md).
 2. P1-3 convergence campaign: `python3 scripts/plan_campaign.py write <dir> --potential SiCGe.tersoff --partition ... --account ...` (~350 core-hours), then `... collect <dir>`.
 3. P1-4 converged Si/Ge h_K (part of 2).
 4. P1-6 die-relevant pairs at converged size (needs a MEAM-enabled LAMMPS build).
-5. P5-1 SW-Si bulk k at ns scale (only if bulk k becomes needed).
+5. P2-2/P2-5 a-SiO₂ at 10¹² K/s (`build_si_sio2.py --quench-rate 1e12`), then Si/SiO₂ h_K for strong and weak bonding (P2-3, P2-6).
+6. P5-1 SW-Si bulk k at ns scale (only if bulk k becomes needed).
 
 ---
 

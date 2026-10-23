@@ -933,6 +933,15 @@ yet only 73 % of Si is fourfold (15 % fivefold, 11 % threefold) and the
 density is 6 % high. Bond lengths and angles alone would have passed this
 glass; coordination and density are what reject it. Check all of them.
 
+### Munetoh Tersoff a-SiO₂ keeps ~14 % fivefold Si
+
+At 10¹³ K/s the glass has 80 % fourfold Si (14 % five-, 7 % threefold) and
+2.31 g/cm³; a further 100 ps at 2000 K and re-cooling gives 81 % and 2.35.
+A tenfold change in quench rate and an anneal near Tg barely move the
+defect fraction, which points at the potential rather than the protocol.
+Unconfirmed until a 10¹² K/s run. Every Si/SiO₂ h_K on this potential
+carries the defect content in its flags until then.
+
 ### Interface bonding: an anneal can leave the interface weakly coupled
 
 Si(100)/a-SiO₂ joined with a 1.6 Å gap and annealed at 1200 K for 20 ps
