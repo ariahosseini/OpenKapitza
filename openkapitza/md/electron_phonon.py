@@ -49,6 +49,100 @@ COUPLING: dict[str, dict] = {
 }
 
 
+# Metal LATTICE thermal conductivity near 300 K, W/mK: the k_p the estimate
+# needs. Classical MD has no electrons, so an MD k_p lacks phonon-electron
+# scattering and sits above the real value (Al: MEAM 17.0 against 8.1);
+# the default is therefore first principles WITH phonon-electron scattering.
+# Band: phonon-phonon-only first principles is an upper bound (adding p-e
+# scattering can only lower it); the lowest value quoted in the same paper's
+# literature table is the lower end. Knowledge base section 7.
+LATTICE_K: dict[str, dict] = {
+    "Al": {"value": 8.14, "low": 5.8, "high": 10.67,
+           "citation": "Tong, Li, Ruan & Bao, arXiv:1907.01364 (first principles, "
+                       "p-p + p-e; high = p-p only; low = lowest literature value quoted there)"},
+    "Cu": {"value": 17.61, "low": 16.9, "high": 19.64,
+           "citation": "Tong, Li, Ruan & Bao, arXiv:1907.01364 (first principles, "
+                       "p-p + p-e; high = p-p only; low = lowest literature value quoted there)"},
+}
+
+# Spread of g where more than one sourced value exists (W/m^3K).
+COUPLING_RANGE: dict[str, tuple[float, float]] = {
+    # Lin et al. 2008 (ab initio) to Eesley 1986 as quoted by Wang et al. 2012
+    "Cu": (5.5e16, 2.6e17),
+}
+
+# Wang, Ruan & Roy, PRB 85, 205311 (2012): adding R_ep in series to R_pp
+# over-predicts the full TTM-MD interface resistance by 6 % and 15 % (two g).
+SERIES_OVERPREDICTS = (0.06, 0.15)
+
+
+@dataclass(frozen=True)
+class SeriesBand:
+    """h_K with the electron-phonon resistance in series, as a band."""
+    h_pp: float                                 # phonon-only NEMD, W/m^2K
+    h_ep: tuple[float, float, float]            # low, central, high
+    h_total: tuple[float, float, float]         # low, central, high
+    g: tuple[float, float, float]
+    k_phonon: tuple[float, float, float]
+
+    @property
+    def reduction(self) -> tuple[float, float, float]:
+        return tuple(1.0 - h / self.h_pp for h in self.h_total)
+
+
+def series_band(h_pp: float, metal: str, flags: FlagSet, *,
+                k_phonon: float | None = None) -> SeriesBand | None:
+    """The series estimate over the sourced spread of g and lattice k_p.
+
+    Low end = low g with low k_p (largest e-ph resistance). Returns None, with
+    a WARNING, if g or k_p is not sourced for the metal. `k_phonon` overrides
+    the lattice value (all three points); give the REAL lattice value, not an
+    MD one, which lacks phonon-electron scattering.
+    """
+    if metal not in COUPLING or (k_phonon is None and metal not in LATTICE_K):
+        missing = "g" if metal not in COUPLING else "lattice k_p"
+        flags.add(
+            Code.NEMD_PHONON_ONLY_METAL, Severity.WARNING,
+            f"{metal}: no sourced {missing}; h_K is the phonon-only value and "
+            f"over-estimates the real conductance.",
+            remedy="Add the value with a citation (electron_phonon.COUPLING / LATTICE_K).",
+        )
+        return None
+    g0 = COUPLING[metal]["g"]
+    g_lo, g_hi = COUPLING_RANGE.get(metal, (g0, g0))
+    if k_phonon is not None:
+        kp = (k_phonon, k_phonon, k_phonon)
+    else:
+        rec = LATTICE_K[metal]
+        kp = (rec["low"], rec["value"], rec["high"])
+    gs = (g_lo, g0, g_hi)
+    h_ep = tuple(ep_conductance(g, k) for g, k in zip(gs, kp))
+    h_tot = tuple(1.0 / (1.0 / h_pp + 1.0 / h) for h in h_ep)
+    band = SeriesBand(h_pp, h_ep, h_tot, gs, kp)
+    red = band.reduction
+    single_g = g_lo == g_hi
+    flags.add(
+        Code.NEMD_PHONON_ONLY_METAL, Severity.CAUTION,
+        f"{metal}: electron-phonon resistance added in series as an ESTIMATE: h_K "
+        f"{h_pp / 1e6:.0f} -> {h_tot[1] / 1e6:.0f} MW/m^2K "
+        f"(band {h_tot[0] / 1e6:.0f}-{h_tot[2] / 1e6:.0f}; {red[1] * 100:.0f} % lower, "
+        f"{red[2] * 100:.0f}-{red[0] * 100:.0f} %). g {g_lo:.2g}-{g_hi:.2g} W/m^3K"
+        + (" (ONE sourced value: the band is k_p only)" if single_g else "")
+        + f", k_p {kp[0]:.3g}-{kp[2]:.3g} W/mK.",
+        remedy=(
+            "Majumdar & Reddy series model, not a coupled calculation. Against full "
+            "TTM-MD it over-predicts the interface resistance by "
+            f"{SERIES_OVERPREDICTS[0] * 100:.0f}-{SERIES_OVERPREDICTS[1] * 100:.0f} % "
+            "(Wang et al. 2012), and it omits direct coupling of metal electrons to "
+            "the non-metal's phonons, which adds a parallel channel (Lu et al. 2016: "
+            "-18 % TBR on Cu/Si, with an assumed coupling). Both make the estimate "
+            "a LOWER bound on h_K for the given inputs."
+        ),
+        h_total_low=h_tot[0], h_total=h_tot[1], h_total_high=h_tot[2],
+    )
+    return band
+
+
 @dataclass(frozen=True)
 class SeriesEstimate:
     h_pp: float        # phonon-only interface conductance, W/m^2K (NEMD)
