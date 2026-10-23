@@ -128,6 +128,30 @@ class TestBenchmarks(unittest.TestCase):
                     f"ratio {ratio:5.2f}"
                 )
 
+    def test_light_load_flag_marks_the_under_predicted_points(self):
+        """P0-7: the CMY_LIGHT_LOAD flag must sit where CMY reads low."""
+        from openkapitza.contact import light_load_check
+        from openkapitza.schema.flags import Code
+        flagged, clear = [], []
+        for row, ratio in zip(self.cases, self.ratios):
+            flags = FlagSet()
+            mat_a = load_material(row["material_a"]); mat_b = load_material(row["material_b"])
+            for mat in (mat_a, mat_b):
+                mat.c1 = Quantity.parse(_f(row, "c1_GPa"), "GPa", provenance=Provenance.LITERATURE)
+                mat.c2 = Quantity.parse(_f(row, "c2"), "-", provenance=Provenance.LITERATURE)
+            hard = contact_hardness(
+                mat_a, mat_b,
+                Quantity.parse(_f(row, "pressure_MPa"), "MPa", provenance=Provenance.USER_MEASURED),
+                Quantity.parse(_f(row, "sigma_eff_um"), "um", provenance=Provenance.USER_MEASURED),
+                Quantity.parse(_f(row, "slope_eff"), "-", provenance=Provenance.USER_MEASURED),
+                FlagSet())
+            light_load_check(hard.P_over_Hc, flags)
+            (flagged if Code.CMY_LIGHT_LOAD in flags.codes() else clear).append(1 / ratio)
+        gm = lambda v: math.exp(statistics.fmean(math.log(x) for x in v))
+        self.assertGreater(len(flagged), 20)
+        self.assertGreater(gm(flagged), 1.05)      # measured above predicted
+        self.assertLess(gm(clear), 1.0)
+
     @classmethod
     def tearDownClass(cls):
         logs = math.log

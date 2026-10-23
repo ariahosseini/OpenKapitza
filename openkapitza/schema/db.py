@@ -173,6 +173,13 @@ def load_gas(
     )
 
 
+def accommodation_band(gas_key: str) -> dict | None:
+    """Sourced (low, high) accommodation band for a gas, or None if unsourced."""
+    bands = _load_yaml("gases.yaml").get("accommodation_bands", {})
+    rec = bands.get(gas_key)
+    return dict(rec) if rec else None
+
+
 def default_accommodation(
     gas_key: str, solid_key: str, flags: FlagSet | None = None
 ) -> Quantity:

@@ -193,6 +193,44 @@ def contact_conductance_elastic(
     )
 
 
+# Light-load truncation (open issue P0-7, knowledge base 8.1). The Gaussian
+# model lets the tallest asperities make the first contacts; real surfaces
+# lack that tail (fitted truncation 3.5-4.2 sigma: Milanez, Yovanovich &
+# Mantelli, AIAA 2003), so at light load the real separation is smaller and
+# the conductance higher than CMY predicts. Thresholds are in Y/sigma from the
+# Yovanovich separation correlation, set from this package's own benchmark
+# (207 Ni 200 / SS 304 vacuum points, measured/predicted geometric mean):
+#     Y/sigma < 3.2: 0.90-0.93    3.2-3.4: 1.05    > 3.4: 1.23
+# Milanez, Culham & Yovanovich (AIAA 2002-0787) report 40-70 % under-prediction
+# at their lightest loads (16 kPa, bead-blasted SS 304).
+LIGHT_LOAD_CAUTION_Y = 3.2
+LIGHT_LOAD_WARNING_Y = 3.5
+
+
+def light_load_check(p_over_hc: Quantity, flags: FlagSet) -> float:
+    """Flag CMY as a likely UNDER-estimate at light load; returns Y/sigma."""
+    y_over_sigma = 1.53 * max(p_over_hc.si, 1e-12) ** -0.097
+    if y_over_sigma <= LIGHT_LOAD_CAUTION_Y:
+        return y_over_sigma
+    severe = y_over_sigma > LIGHT_LOAD_WARNING_Y
+    flags.add(
+        Code.CMY_LIGHT_LOAD,
+        Severity.WARNING if severe else Severity.CAUTION,
+        f"Light load: Y/sigma = {y_over_sigma:.2f} (P/H_c = {p_over_hc.si:.2g}), so the "
+        f"first contacts come from the Gaussian tail, which real surfaces lack. CMY "
+        f"under-predicts here: measured/predicted 1.05 at Y/sigma 3.2-3.4 and 1.23 "
+        f"above 3.4 in this package's benchmark; 40-70 % at the lightest loads "
+        f"in Milanez, Culham & Yovanovich (2002).",
+        remedy=("Treat h_c as a LOWER estimate. A truncated-Gaussian model "
+                "(Milanez, Yovanovich & Mantelli 2003: RMS error 21-48 % -> 5-18 %) "
+                "needs the truncation level, which profilometer R_p/sigma does not "
+                "give reliably; a measured h_c at the working pressure is better. "
+                "Heat-sink mounting pressures (0.07-0.17 MPa) usually land here."),
+        y_over_sigma=y_over_sigma,
+    )
+    return y_over_sigma
+
+
 def mean_plane_separation(
     sigma_eff: Quantity, p_over_hc: Quantity, flags: FlagSet
 ) -> Quantity:

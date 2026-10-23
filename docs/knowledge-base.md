@@ -1490,6 +1490,12 @@ only an abstract was reachable, it says so.
   **Consequence:** flag CMY below ~0.5 MPa as a likely under-estimate
   (tracker P0-7); a truncated-Gaussian option needs the paper's correlation,
   which was garbled in the retrieved text.
+- **Our own benchmark shows the same bias, and where it starts.** Binned by
+  Y/σ (Yovanovich separation), measured/predicted over the 207 points: 0.90
+  (< 2.8), 0.91 (2.8–3.0), 0.93 (3.0–3.2), 1.05 (3.2–3.4), 1.23 (> 3.4); by
+  pressure, 1.36 below 0.5 MPa. The crossover sits just below the fitted
+  truncation levels (3.5–4.2σ), as the mechanism predicts. `light_load_check`
+  uses these thresholds.
 - **Asperity models vs. full theory.** Afferrante, Bottiglione, Putignano,
   Persson & Carbone (Tribol. Lett. 66, 2018): GW-type asperity models
   "cannot correctly capture" contact area and separation; interacting-asperity

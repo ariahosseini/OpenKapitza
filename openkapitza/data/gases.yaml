@@ -146,3 +146,23 @@ accommodation_defaults:
     SS304: 0.92          # measured
     Ni200: 0.90          # measured
   _fallback: 0.80
+
+# ---------------------------------------------------------------------------
+# Accommodation BANDS (open issue P0-8, knowledge base 8.2). The spread for one
+# gas on one metal is surface state, not scatter: clean machined or polished
+# surfaces accommodate helium far less than bead-blasted, air-exposed ones. The
+# extracted value also depends on the gap model used to fit it (Trott et al.:
+# Ar 0.87 Sherman-Lees vs 0.94 GTR). When an alpha is a default, the pipeline
+# reports h_g and h_joint over this band; a default outside it widens it.
+#   Trott, Rader, Castaneda, Torczynski & Gallis, AIAA 2007-4039 (304 SS):
+#     He 0.36 machined / 0.40 polished (Sherman-Lees; GTR 0.38 / 0.42),
+#     Ar 0.87 / 0.94, N2 0.80 / 0.86.
+#   Song & Yovanovich 1989 (bead-blasted SS 304, Ni 200, Table 2):
+#     He 0.58-0.67, Ar 0.87-0.96, N2 0.79-0.87.
+# ---------------------------------------------------------------------------
+accommodation_bands:
+  He: {low: 0.36, high: 0.67, source: "Trott et al. 2007 (machined SS 304) to Song & Yovanovich 1989 (bead-blasted SS 304)"}
+  Ar: {low: 0.87, high: 0.96, source: "Trott et al. 2007 to Song & Yovanovich 1989"}
+  N2: {low: 0.79, high: 0.87, source: "Song & Yovanovich 1989; Trott et al. 2007 0.80-0.86"}
+  air: {low: 0.79, high: 0.87, proxy: N2, source: "N2 band used for air (no measured air values in these sources)"}
+

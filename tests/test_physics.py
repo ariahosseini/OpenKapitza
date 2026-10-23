@@ -829,3 +829,61 @@ class TestKnowledgeBase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestLightLoad(unittest.TestCase):
+    def test_thresholds_and_direction(self):
+        from openkapitza.contact import light_load_check
+        from openkapitza.schema.flags import Code, Severity
+        for x, sev in ((2e-3, None), (4e-4, Severity.CAUTION), (1e-4, Severity.WARNING)):
+            f = FlagSet()
+            light_load_check(Quantity.parse(x, "-", provenance=Provenance.USER_MEASURED), f)
+            got = [fl for fl in f.flags if fl.code == Code.CMY_LIGHT_LOAD]
+            if sev is None:
+                self.assertFalse(got)
+            else:
+                self.assertEqual(got[0].severity, sev)
+                self.assertIn("LOWER estimate", got[0].remedy)
+
+
+class TestAccommodationBand(unittest.TestCase):
+    """P0-8: defaulted alpha -> h_g and h_joint reported over a sourced band."""
+
+    def _run(self, gas, **kw):
+        j = build_joint("SS304", "SS304", sigma_a_um=1.2, sigma_b_um=1.2,
+                        pressure_MPa=1.0, temperature_K=300.0, slope_a=0.1, slope_b=0.1,
+                        gas=gas, gas_pressure_kPa=10.0, **kw)
+        return run_continuum(j, with_uncertainty=False)
+
+    def test_helium_band_brackets_the_quoted_value(self):
+        from openkapitza.schema.flags import Code
+        r = self._run("He")
+        b = r.accommodation_band
+        self.assertEqual(b["alpha"], (0.36, 0.67))
+        lo, hi = b["h_joint"]
+        self.assertLess(lo, r.primary.h_joint.si); self.assertGreater(hi, r.primary.h_joint.si)
+        self.assertLess(b["h_g"][0], b["h_g"][1])          # more accommodation, more h_g
+        self.assertIn(Code.GAP_ACCOMMODATION_BAND, r.flags.codes())
+
+    def test_default_outside_the_band_widens_it(self):
+        j = build_joint("Al", "Al", sigma_a_um=1.0, sigma_b_um=1.0, pressure_MPa=1.0,
+                        temperature_K=300.0, slope_a=0.1, slope_b=0.1, gas="He",
+                        gas_pressure_kPa=10.0)
+        r = run_continuum(j, with_uncertainty=False)
+        self.assertEqual(r.accommodation_band["alpha"][0], 0.30)   # He on Al default
+
+    def test_measured_alpha_means_no_band(self):
+        r = self._run("He", accommodation_a=0.4, accommodation_b=0.4)
+        self.assertIsNone(r.accommodation_band)
+
+    def test_air_uses_the_nitrogen_band_and_says_so(self):
+        from openkapitza.schema.flags import Code
+        r = self._run("air")
+        self.assertEqual(r.accommodation_band["alpha"][1], 0.87)
+        flag = next(f for f in r.flags.flags if f.code == Code.GAP_ACCOMMODATION_BAND)
+        self.assertIn("N2 band", flag.remedy)
+
+    def test_vacuum_has_no_band(self):
+        j = build_joint("SS304", "SS304", sigma_a_um=1.2, sigma_b_um=1.2, pressure_MPa=1.0,
+                        temperature_K=300.0, slope_a=0.1, slope_b=0.1)
+        self.assertIsNone(run_continuum(j, with_uncertainty=False).accommodation_band)

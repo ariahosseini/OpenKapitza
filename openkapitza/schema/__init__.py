@@ -3,6 +3,7 @@
 from .db import (
     available_gases,
     available_materials,
+    accommodation_band,
     default_accommodation,
     load_gas,
     load_material,
@@ -21,6 +22,7 @@ from .units import K_B, N_A, R_GAS, UnitError, from_si, to_si
 __all__ = [
     "available_gases",
     "available_materials",
+    "accommodation_band",
     "default_accommodation",
     "load_gas",
     "load_material",

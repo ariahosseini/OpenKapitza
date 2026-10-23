@@ -10,6 +10,7 @@ from .cmy import (
     contact_conductance_elastic,
     contact_conductance_plastic,
     harmonic_conductivity,
+    light_load_check,
     mean_plane_separation,
     regime_branches,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "contact_conductance_elastic",
     "contact_conductance_plastic",
     "harmonic_conductivity",
+    "light_load_check",
     "mean_plane_separation",
     "regime_branches",
     "HardnessResult",
