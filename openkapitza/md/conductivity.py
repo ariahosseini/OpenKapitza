@@ -55,7 +55,7 @@ import numpy as np
 
 from ..schema.flags import Code, FlagSet, Severity
 from ..schema.quantities import Confidence, Provenance, Quantity
-from .elastic import CubicSpec
+from .elastic import CubicSpec, stage_potential
 from .fill_policy import cap_md
 
 # eV/ps per A^2, divided by K/A, to W/(m K): 1.602177e-19 / 1e-12 / 1e-10.
@@ -406,12 +406,9 @@ def _run(lmp: Path, work: Path, deck: str, timeout: int) -> str:
 
 def run_length(lmp: Path, spec: KappaSpec, potential_dir: Path, flags: FlagSet,
                *, timeout: int = 14400) -> KappaPoint:
-    source = Path(potential_dir) / spec.solid.potential
-    if not source.is_file():
-        raise FileNotFoundError(f"potential not found: {source}")
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        (work / spec.solid.potential).write_bytes(source.read_bytes())
+        stage_potential(spec.solid, potential_dir, work)
         out = _run(lmp, work, build_kappa_deck(spec), timeout)
         lx, ly, lz, n_atoms = parse_box(out)
         thermo = parse_production_thermo(out)

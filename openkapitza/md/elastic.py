@@ -133,8 +133,19 @@ class CubicSpec:
     label: str | None = None  # element label AS IN the file; None for funcfl eam
     reference: str | None = None   # key into REFERENCE_CUBIC
     cells: int = 4
+    # Multi-file potentials (MEAM: a library file plus a parameter file) list
+    # every file to stage beside the deck, and give the full pair_coeff
+    # argument list after "* *". `potential` stays the primary file.
+    extra_files: tuple[str, ...] = ()
+    coeff_args: str | None = None
+
+    @property
+    def files(self) -> tuple[str, ...]:
+        return (self.potential, *self.extra_files)
 
     def pair_coeff(self) -> str:
+        if self.coeff_args:
+            return f"pair_coeff      * * {self.coeff_args}"
         # `pair_style eam` (funcfl) takes the file per type pair and no label;
         # every many-body and setfl style takes `* * file label`.
         if self.pair_style == "eam":
@@ -142,6 +153,15 @@ class CubicSpec:
         if not self.label:
             raise ValueError(f"{self.name}: pair_style {self.pair_style} needs a label")
         return f"pair_coeff      * * {self.potential} {self.label}"
+
+
+def stage_potential(spec: "CubicSpec", potential_dir: Path, work: Path) -> None:
+    """Copy every file the potential needs into the run directory."""
+    for name in spec.files:
+        source = Path(potential_dir) / name
+        if not source.is_file():
+            raise FileNotFoundError(f"potential file not found: {source}")
+        (work / name).write_bytes(source.read_bytes())
 
 
 DECK = """\
@@ -315,15 +335,11 @@ def run_elastic(
     timeout: int = 1800,
 ) -> ElasticResult:
     """Run every strain on a real engine and return the constants."""
-    source = Path(potential_dir) / spec.potential
-    if not source.is_file():
-        raise FileNotFoundError(f"potential not found: {source}")
-
     rows: list[tuple] = []
     a0: float | None = None
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        (work / spec.potential).write_bytes(source.read_bytes())
+        stage_potential(spec, potential_dir, work)
         for component in ("xx", "yz"):
             for m in magnitudes:
                 for sign in (1.0, -1.0):

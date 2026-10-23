@@ -182,5 +182,28 @@ class TestOnRealEngine(unittest.TestCase):
         self.assertNotIn(Code.MD_ELASTIC_UNCONVERGED, flags.codes())
 
 
+class MultiFilePotential(unittest.TestCase):
+    """MEAM needs a library file and a parameter file, staged together."""
+
+    def test_meam_pair_coeff_and_files(self):
+        spec = CubicSpec("Al", "fcc", 4.05, 26.98, "meam", "library.meam", "AlS", None,
+                         extra_files=("AlSiMgCuFe.meam",),
+                         coeff_args="library.meam AlS SiS MgS CuS FeS AlSiMgCuFe.meam AlS")
+        self.assertEqual(spec.files, ("library.meam", "AlSiMgCuFe.meam"))
+        self.assertEqual(spec.pair_coeff(),
+                         "pair_coeff      * * library.meam AlS SiS MgS CuS FeS "
+                         "AlSiMgCuFe.meam AlS")
+
+    def test_missing_extra_file_is_reported(self):
+        import tempfile
+        from openkapitza.md.elastic import stage_potential
+        spec = CubicSpec("Al", "fcc", 4.05, 26.98, "meam", "library.meam", "AlS", None,
+                         extra_files=("AlSiMgCuFe.meam",))
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as dst:
+            Path(src, "library.meam").write_text("x")
+            with self.assertRaises(FileNotFoundError):
+                stage_potential(spec, Path(src), Path(dst))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
