@@ -167,6 +167,35 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
         block_failure = str(exc)
         per_dT, per_q = [], []
 
+    # Is the JUMP itself still trending across production? This is the
+    # steady-state question that matters for h_K, and far better resolved
+    # than reservoir-power drift (see md.stationarity.analyse_block_trend).
+    if len(per_dT) >= 4:
+        from .stationarity import Verdict, analyse_block_trend
+        try:
+            tr = analyse_block_trend(per_dT)
+        except ValueError:
+            tr = None
+        if tr is not None and tr.verdict is Verdict.DRIFTING:
+            flags.add(
+                Code.NEMD_UNEQUILIBRATED,
+                Severity.WARNING,
+                f"The temperature jump trends by {tr.drift * 100:+.0f} +/- "
+                f"{tr.drift_se * 100:.0f} % across the production frames; the "
+                f"interface had not reached steady state.",
+                remedy=("Lengthen the steady-state stage; h_K from a trending "
+                        "jump depends on which part of the run is averaged."),
+                jump_drift=tr.drift,
+            )
+        elif tr is not None and tr.verdict is Verdict.UNRESOLVED:
+            flags.add(
+                Code.NEMD_STATIONARITY_UNRESOLVED,
+                Severity.INFO,
+                f"Per-frame jump: no significant trend ({tr.drift * 100:+.0f} +/- "
+                f"{tr.drift_se * 100:.0f} %), but not certified flat to 10 %.",
+                remedy="The block error on h_K already carries this scatter.",
+            )
+
     block_se = None
     n = len(per_dT)
     if n >= 3:

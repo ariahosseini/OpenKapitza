@@ -141,3 +141,42 @@ def analyse_drift(t, e, *, tolerance: float = 0.15,
     else:
         verdict = Verdict.UNRESOLVED
     return DriftResult(verdict, mean_p, drift, drift_se, t_stat, int(p.size), lag1)
+
+
+def analyse_block_trend(values, *, tolerance: float = 0.10) -> DriftResult:
+    """Trend test on per-block values (e.g. the temperature jump per profile
+    frame), with the same successive-difference noise and the same three
+    verdicts as `analyse_drift`.
+
+    This tests the quantity h_K actually depends on. The reservoir-power test
+    asks a proxy question, and on a 400 ps, 2.2 nm Si/Ge run it could only
+    resolve 59 % drift; the per-frame jump on the same run carried 11.6 %
+    block error.
+    """
+    v = np.asarray(values, dtype=float)
+    if v.size < 4:
+        raise ValueError(f"{v.size} blocks: too few for a trend (need >= 4)")
+    mean_v = float(v.mean())
+    if mean_v == 0.0:
+        raise ValueError("block mean is zero")
+    x = np.arange(v.size, dtype=float)
+    x -= x.mean()
+    sxx = float(x @ x)
+    slope = float(x @ (v - mean_v)) / sxx
+    resid = v - mean_v - slope * x
+    d = np.diff(v)
+    s2 = float(d @ d) / (2.0 * d.size)
+    slope_se = math.sqrt(s2 / sxx)
+    span = float(v.size - 1)
+    drift = slope * span / abs(mean_v)
+    drift_se = slope_se * span / abs(mean_v)
+    t_stat = (slope / slope_se) if slope_se > 0 else (math.inf if slope != 0 else 0.0)
+    lag1 = (float(resid[:-1] @ resid[1:]) / float(resid @ resid)
+            if float(resid @ resid) > 0 else 0.0)
+    if abs(t_stat) >= T_SIGNIFICANT and abs(drift) > tolerance:
+        verdict = Verdict.DRIFTING
+    elif abs(drift) + 2.0 * drift_se <= tolerance:
+        verdict = Verdict.STATIONARY
+    else:
+        verdict = Verdict.UNRESOLVED
+    return DriftResult(verdict, mean_v, drift, drift_se, t_stat, int(v.size), lag1)

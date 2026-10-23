@@ -278,6 +278,14 @@ class TestDeck(unittest.TestCase):
         deck = build_input_deck(self.spec)
         self.assertIn("fix             nve gmobile nve", deck)
 
+    def test_thermo_temperature_excludes_frozen_walls(self):
+        """Default thermo temp averages the 0 K walls in: ~0.9 x the truth."""
+        deck = build_input_deck(self.spec)
+        self.assertIn("compute         tmobile gmobile temp", deck)
+        prod = deck.split("run             " + str(self.spec.production_steps))[0]
+        self.assertGreater(prod.rfind("thermo_modify   temp tmobile"),
+                           prod.rfind("unfix           relax"))
+
     def test_walls_are_frozen(self):
         self.assertIn("setforce 0.0 0.0 0.0", build_input_deck(self.spec))
 

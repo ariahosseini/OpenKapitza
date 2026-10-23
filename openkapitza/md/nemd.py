@@ -473,11 +473,17 @@ group           gmobile  subtract all gwalls
 
 velocity        gwalls set 0.0 0.0 0.0 units box
 fix             freeze gwalls setforce 0.0 0.0 0.0
+# Thermo temperature over MOBILE atoms. The default averages every atom, and
+# the frozen walls (about 10 % of a 21 nm cell, at 0 K) pulled the reported
+# mean to ~0.9 of the true one -- read for months as "equilibration did not
+# finish". Re-applied before each stage because a barostat fix overrides it.
+compute         tmobile gmobile temp
 {relax_block}
 # ---- equilibration --------------------------------------------------------
 velocity        gmobile create {t_init:.2f} {seed} mom yes rot yes dist gaussian
 {pressure_block}
 fix             equil gmobile nvt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f}
+thermo_modify   temp tmobile
 thermo          10000
 thermo_style    custom step temp pe etotal press
 run             {equilibrate_steps}
@@ -537,6 +543,7 @@ variable        sxx equal pxx*v_slabf
 variable        syy equal pyy*v_slabf
 variable        szz equal pzz*v_slabf
 thermo_style    custom step temp press pxx pyy pzz f_hot f_cold v_sxx v_syy v_szz
+thermo_modify   temp tmobile
 run             {production_steps}
 
 print           "OPENKAPITZA_DONE area_m2 {area:.6e} interface_z_ang {interface_ang:.4f}"

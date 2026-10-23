@@ -684,12 +684,17 @@ defect, not the disagreement.
 **Symptom.** Thermo shows ~268 K against a 300 K target through the production
 run.
 
-**Cause.** Equilibration did not finish. The system is still converting kinetic
-to potential energy, so anything measured on top of it is not a steady state.
-Stored strain energy draining into kinetic degrees of freedom is one source.
+**Cause — CORRECTED 22 Oct 2026.** This entry used to say "equilibration did
+not finish". It was a measurement artefact all along: LAMMPS's default thermo
+temperature averages over EVERY atom, including the frozen walls at 0 K. The
+walls are 2 nm of a 21 nm cell, 9.5 % of the atoms, and 0.905 × 300 = 271.5 K
+— the 268–272 K seen on every run. The mobile atoms were at 300 K.
 
-**Fix.** Lengthen equilibration. Check cell stress at the same time — the two
-usually appear together.
+**Fix.** The deck reports `compute temp` on `gmobile` (`thermo_modify temp
+tmobile`, re-applied after the barostat stage, which overrides it). A mean
+temperature off the setpoint is meaningful again only on decks with this
+line. Lesson: check what a diagnostic measures before explaining what it
+says.
 
 **Verify.** `check_run_health()` flags a mean temperature more than 8 % from
 the setpoint.

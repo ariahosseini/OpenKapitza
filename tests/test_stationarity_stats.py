@@ -97,3 +97,29 @@ class Mechanics(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BlockTrend(unittest.TestCase):
+    """The per-frame temperature-jump trend: the steady-state test h_K needs."""
+
+    def test_settling_jump_is_drifting(self):
+        from openkapitza.md.stationarity import analyse_block_trend
+        v = [30, 27, 24.5, 22.5, 21, 20, 19.4, 19.0]
+        self.assertEqual(analyse_block_trend(v).verdict, Verdict.DRIFTING)
+
+    def test_flat_quiet_jump_is_stationary(self):
+        from openkapitza.md.stationarity import analyse_block_trend
+        rng = np.random.default_rng(3)
+        v = 20 + 0.2 * rng.standard_normal(8)
+        self.assertEqual(analyse_block_trend(v).verdict, Verdict.STATIONARY)
+
+    def test_four_noisy_frames_are_unresolved(self):
+        # The real 400 ps Si/Ge frames: no significant trend with 4 blocks.
+        from openkapitza.md.stationarity import analyse_block_trend
+        r = analyse_block_trend([24.53, 29.13, 18.55, 18.55])
+        self.assertEqual(r.verdict, Verdict.UNRESOLVED)
+
+    def test_too_few_blocks_raise(self):
+        from openkapitza.md.stationarity import analyse_block_trend
+        with self.assertRaises(ValueError):
+            analyse_block_trend([1.0, 2.0, 3.0])
