@@ -917,6 +917,32 @@ physics fix is compute: ns-scale production and a wider cross-section for
 the long cells, or Green–Kubo. Check the two-halves agreement before
 trusting any length; it is the cheapest convergence test the layout gives.
 
+### The flux used the as-built area; relaxation changes it
+
+`measure_kapitza` divided reservoir power by the as-built cross-section, but
+the in-plane barostat changes lx, ly during relaxation (Si/Ge: 21.72 → 22.29
+Å, +5 % area), so every h_K from a relaxed cell read ~5 % high. The deck now
+prints `OPENKAPITZA_BOX lx ly` after relaxation and the flux uses it. Found
+while wiring read-in structures, where the built area is not even defined.
+
+### a-SiO₂: the local geometry comes right before the network does
+
+A 10¹⁴ K/s melt-quench with the Munetoh Tersoff already gives the right
+Si–O / O–O / Si–Si distances (1.63 / 2.63 / 3.13 Å) and angles (145°, 109°),
+yet only 73 % of Si is fourfold (15 % fivefold, 11 % threefold) and the
+density is 6 % high. Bond lengths and angles alone would have passed this
+glass; coordination and density are what reject it. Check all of them.
+
+### Interface bonding: an anneal can leave the interface weakly coupled
+
+Si(100)/a-SiO₂ joined with a 1.6 Å gap and annealed at 1200 K for 20 ps
+ended with 2.8 Si(crystal)–O bonds per nm², 20 % of full oxidation
+(13.6 per nm²), and 88 % of the top Si layer with no O neighbour — the
+weakly coupled class, whose h_K Lampin et al. (2012) find 5x lower than the
+strongly coupled one with the same potential and quench rate. The builder
+now reports coverage and class for every interface, and flags a preset that
+missed its class.
+
 ## 5. Environment facts
 
 ### `minimize` advances the timestep counter

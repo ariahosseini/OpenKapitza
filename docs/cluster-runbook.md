@@ -91,7 +91,22 @@ on the converged geometry. Si/Al at 300 K brackets: NEMD 470 MW/m²K
 phonon-only (Liang et al. 2014, a different MEAM), TDTR 200–350. The metal
 side is phonon-only (P1-14).
 
-## 7. Only if needed
+## 7. Si/a-SiO₂ (P2-2 … P2-6)
+
+Glass and interface first, then NEMD on the read-in cell:
+
+```bash
+python3 scripts/build_si_sio2.py --lmp $(which lmp) --potentials <lammps>/potentials \
+    --out <dir> --quench-rate 1e12 --bonding strong --bulk-nm 8
+python3 scripts/build_si_sio2.py ... --bonding weak --glass <dir>/quench/glass.data
+```
+
+Read the validation table and the bonding line (coverage, class) before
+running NEMD. Run both bonding classes on the same glass (P2-6), and repeat
+at 10¹³ K/s for the rate sensitivity (P2-5). Bracket: Lampin et al. 2012,
+≈1.2 GW/m²K strong / ≈0.23 weak; experiment > 0.6 GW/m²K.
+
+## 8. Only if needed
 
 SW-Si bulk k at ns scale (P5-1): only if bulk k for a material without
 handbook data becomes an input.

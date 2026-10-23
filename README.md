@@ -591,10 +591,18 @@ Four axes: cross-section, length, duration, flux. Flux linearity is a
 ΔT ∝ q through the origin. A significant intercept means a fixed offset that
 is not the interface.
 
-## Next
+## Phase 2 — structure module (in progress)
 
-- **Phase 2** — structure module: crystalline supercell matching, then
-  melt-quench with quench-rate reporting and RDF/bond-angle validation.
+`openkapitza/structure/`: analysis (density, partial RDFs, coordination, bond
+angles; exact on ideal crystals), a-SiO₂ melt-quench with a validation gate
+against sourced targets and an always-raised quench-rate caveat, and a
+Si(100)/a-SiO₂ join whose bonding choices (cut, gap, anneal) and resulting
+chemistry (Si–O bonds per nm², coverage, class) are reported.
+Heterostructures for crystalline pairs (fcc on diamond) are built by the NEMD
+deck itself. End to end: `scripts/build_si_sio2.py`. Status and open items:
+[`docs/open-issues.md`](docs/open-issues.md).
+
+## Next
 - **Phase 3** — LangGraph agent layer wrapping Phases 0–2.
 - **Phase 4** — Tier-2 MLIPs behind a phonon-DOS/elastic-constant gate, and the
   temperature-fluctuation equilibrium cross-check (not Green–Kubo).
