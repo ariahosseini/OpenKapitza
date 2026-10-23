@@ -21,6 +21,11 @@ make -j 16
 
 Check the build: `lmp -h | grep -A3 "Installed packages"` must list all four.
 
+The 30 Sep 2026 stable release needs C++17 and CMake ≥ 3.20 (KOKKOS: C++20).
+For P1-14 (TTM) `EXTRA-FIX` already provides `fix ttm/thermal`. For Tier-2 MACE
+later: `PKG_ML-IAP`, `MLIAP_ENABLE_PYTHON`, `PKG_PYTHON`, KOKKOS with CUDA — GPU
+nodes only (knowledge base §8.4).
+
 ## 1. Test suite and audits on the cluster (minutes)
 
 ```bash
@@ -105,7 +110,7 @@ The quench checkpoints after every segment of its ramp: if a job hits its
 walltime, resubmit the same command and it resumes from the last completed
 segment. Read the validation table and the bonding line (coverage, class)
 before running NEMD. Run both bonding classes on the same glass (P2-6), and repeat
-at 10¹³ K/s for the rate sensitivity (P2-5). Bracket: Lampin et al. 2012,
+at 10¹³ K/s for the rate sensitivity (P2-5). Bracket: Chen, Zhang & Li 2012 (arXiv:1210.0354),
 ≈1.2 GW/m²K strong / ≈0.23 weak; experiment > 0.6 GW/m²K.
 
 ## 8. Only if needed

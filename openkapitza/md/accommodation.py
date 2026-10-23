@@ -838,8 +838,8 @@ def run_accommodation(lmp: Path, spec: AccommodationSpec, potential_dir: Path,
             f"He and Ne exchange energy mainly through elastic and single-phonon "
             f"events, which classical dynamics does not reproduce.",
             remedy=("Read the MD value as an UPPER estimate for the clean surface "
-                    "(Fan & Manson, arXiv:0804.2269, report classical values 'much "
-                    "too large for He and Ne'). Technical surfaces still sit higher."),
+                    "(classical theory matches data for the heavier rare gases only: "
+                    "Fan & Manson, arXiv:0804.2269). Technical surfaces still sit higher."),
         )
     if coverage > 0.1:
         flags.add(

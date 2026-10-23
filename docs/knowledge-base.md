@@ -915,9 +915,12 @@ energy), Maxwell 0.4 → 0.4015 ± 0.0059, Maxwell 0.8 → 0.8062 ± 0.0056.
 ### Classical MD over-estimates helium accommodation
 
 Helium (and neon) exchange energy with a surface mainly through elastic and
-single-phonon scattering, which classical dynamics does not reproduce;
-classical calculations are known to give α "much too large for He and Ne"
-(Fan & Manson, arXiv:0804.2269). A classical He value is therefore an UPPER
+single-phonon scattering, which classical dynamics does not reproduce. Fan
+& Manson (arXiv:0804.2269) find classical theory agrees with data for the
+HEAVIER rare gases, where classical physics should hold; an earlier version of
+this entry quoted them as saying classical values are "much too large for He
+and Ne" — that sentence is not in the abstract, and the full text could not be
+retrieved to check it (survey, 23 Oct 2026). A classical He value is therefore an UPPER
 estimate for the clean surface, flagged `MD_ACCOMMODATION_QUANTUM_GAS`.
 Technical surfaces (oxides, adsorbates) sit higher still: uncleaned W and Pt
 filaments give roughly 0.15–0.2 for He and 0.5–0.7 for Ar (Caltech thesis,
@@ -971,8 +974,9 @@ carries the defect content in its flags until then.
 Si(100)/a-SiO₂ joined with a 1.6 Å gap and annealed at 1200 K for 20 ps
 ended with 2.8 Si(crystal)–O bonds per nm², 20 % of full oxidation
 (13.6 per nm²), and 88 % of the top Si layer with no O neighbour — the
-weakly coupled class, whose h_K Lampin et al. (2012) find 5x lower than the
-strongly coupled one with the same potential and quench rate. The builder
+weakly coupled class, whose h_K Chen, Zhang & Li (2012, arXiv:1210.0354) find
+5x lower than the strongly coupled one with a Tersoff-type potential at the same
+quench rate. The builder
 now reports coverage and class for every interface, and flags a preset that
 missed its class.
 
@@ -1408,3 +1412,208 @@ above. The LAMMPS examples are bulk-only.
   The estimate's "reproduction" of 0.37 GW/m²K used k_p = 12.3, chosen to hit
   0.37 from 0.47. The paper's own inputs (G_pp 0.46, k_p 17.0) give 0.375 —
   the test now uses those.
+
+## 8. Literature survey across all topics (23 Oct 2026)
+
+Extends §7 to every topic covered so far. Each entry: what the source says,
+then what it changes here. Numbers are quoted from the sources named; where
+only an abstract was reachable, it says so.
+
+### 8.1 Contact conductance
+
+- **Our constants are the published ones.** Yovanovich, Bahrami & Culham
+  (HT2005-72850, 2005): plastic CMY h_c σ/(k_s m) = 1.25 (P/H_c)^0.95; Mikic
+  elastic h_e = 1.55 k_s (m/σ)(P/H_e)^0.94 with H_e = E′m/√2; plasticity index
+  γ = H_mic/(E′m), γ ≥ 3 predominantly elastic, γ ≤ 0.33 predominantly
+  plastic ("for most engineering surfaces the asperity deformation mode is
+  plastic"). `contact/regime.py` uses ψ = 1/γ with the same thresholds. Song &
+  Yovanovich (J. Thermophys. 2, 43, 1988): the 1.25/0.95 correlation is valid
+  for 10⁻⁶ ≤ P/H_c ≤ 2.3×10⁻²; measured pressure exponents 0.94–0.97.
+- **CMY under-predicts at LIGHT loads, the packaging regime.** Milanez, Culham
+  & Yovanovich (AIAA 2002-0787): bead-blasted SS 304 in vacuum, 16 kPa–3 MPa;
+  the Gaussian (CMY) model under-predicts first-loading data by ~40 % (σ =
+  0.72 µm) to ~70 % (σ = 1.31 µm) at light loads. Cause: real surfaces lack the
+  tallest Gaussian asperities (truncation), so the mean-plane separation is
+  smaller than CMY assumes. Milanez, Yovanovich & Mantelli (AIAA Thermophysics
+  2003): a truncated-Gaussian model cuts the RMS error from 21–48 % to 5–18 %;
+  fitted truncation 3.5–4.2 σ; profilometer R_p/σ is NOT a reliable estimate
+  of it; at 15.8 kPa, z_trunc 4.1 → 3.3 changes h_c by ~150 %. Heat-sink
+  mounting pressures in electronics are 0.07–0.17 MPa (Electronics Cooling,
+  "Calculating interface resistance", web version 2023), i.e. inside this regime.
+  **Consequence:** flag CMY below ~0.5 MPa as a likely under-estimate
+  (tracker P0-7); a truncated-Gaussian option needs the paper's correlation,
+  which was garbled in the retrieved text.
+- **Asperity models vs. full theory.** Afferrante, Bottiglione, Putignano,
+  Persson & Carbone (Tribol. Lett. 66, 2018): GW-type asperity models
+  "cannot correctly capture" contact area and separation; interacting-asperity
+  models and Persson theory agree with boundary-element results. Mechanics
+  only, no conductance comparison. Komvopoulos (Front. Mech. Eng. 6:36, 2020)
+  likewise rejects GW for multiscale (fractal) surfaces. **Consequence:** CMY
+  stays (it is calibrated on thermal data, which these are not), but a
+  Persson-type alternative is the natural Phase-0 extension if light-load
+  errors matter.
+- **In electronics, the gap often dominates a bare joint.** Electronics
+  Cooling (2023), Al 6063 heat sink on alumina in air: joint resistance
+  2.67 → 1.90 cm²K/W over 0.007–0.35 MPa, gap-dominated; silicone grease
+  lowers it ~10x (0.34 → 0.21 cm²K/W). Supports P0-1 (filled joints).
+- Multiscale TCR for packaging exists (Cui, Li, Xuan & Zhang, Int. J. Therm.
+  Sci. 83, 16, 2014: lattice Boltzmann on measured profiles + finite
+  differences), but none found that bridges MD Kapitza to CMY as this project
+  does.
+
+### 8.2 Gap conductance and accommodation
+
+- **Clean machined/polished surfaces accommodate He far less than technical
+  ones.** Trott, Rader, Castañeda, Torczynski & Gallis (AIAA 2007-4039; SAND
+  reports 2004-5329, 2005-6084): 304 SS, ±0.02: Ar 0.87, N₂ 0.80 (finish-
+  independent), He 0.36 machined / 0.40 polished. Our default He on SS 304 is
+  0.63 (Song & Yovanovich 1989, bead-blasted, air-exposed). Both are
+  measurements; the spread is surface state.
+- **The extracted α depends on the analysis model.** The same Trott data give
+  Ar 0.87 (Sherman–Lees) vs 0.94 (GTR), He 0.36 vs 0.38. An α is only
+  transferable together with the gap model it was fitted with; ours is the
+  Song–Yovanovich form, matching our default's source.
+- **Recommendation from the rarefied-gas side** (Roohi, arXiv:2606.14039,
+  2026 review): accommodation is uncertain at "several-percent-to-tens-of-
+  percent" depending on surface state; report a band, and MD on pristine
+  surfaces can predict a real wall worse than a fitted Maxwell α.
+  **Consequence:** propagate an α band through h_g by default for He (tracker
+  P0-8); keep MD α as compare-only.
+- P0-3 (exact tabulated h_j(P_gas) data to settle the continuum-limit
+  shortfall): not found in this pass.
+
+### 8.3 NEMD interfacial conductance
+
+- **NEMD and equilibrium MD measure different conductances.** Merabia &
+  Termentzidis (arXiv:1209.3485): for LJ interfaces NEMD exceeds EMD by ~5x
+  typically, by >10x near mass ratio 1, and they estimate ~3x for Si/Ge. EMD
+  gives the Landauer (equilibrium-distribution) conductance and agrees with
+  DMM; NEMD agrees with a generalised AMM that accounts for non-equilibrium
+  distributions. Use NEMD for steady-state experiments (3ω), EMD for transient
+  pump–probe (their suggestion). **Consequence:** P1-8's closing criterion
+  ("agree within joint uncertainty") is wrong in principle; change it.
+- **Converged Si/Ge is above our quoted band.** Feng, Zhong, Shi & Ruan (PRB
+  99, 045301, 2019): Tersoff, Ge lattice-matched to Si (no strain), Langevin
+  ±30 K, 0.5 ps damping; G nearly converged at 152 nm total length; 28Si/73Ge
+  4.5×10⁸ W/m²K at 300 K; high inelastic share. Our §5 band (NEMD 315–368)
+  came from shorter cells. **Consequence:** add 450 to the P1-4 reference set
+  with its length, and note our cells (≤ 20 nm) sit on the steep part.
+- **Reservoir length is a convergence axis.** Wei et al. (Chin. Phys. B 34,
+  116301, 2025): Si/Ge ITR linear in 1/L_sys AND 1/L_bath, extrapolable;
+  coupling τ negligible below ~5 ps; size effects from phonons < ~6 THz.
+  Balasubramanian & Puri (APL 99, 013116, 2011): R_K falls steeply from 1 to
+  40 nm, then levels. **Consequence:** add L_bath to the P1-3 campaign.
+- **Spectral and quantum corrections.** Xu, Yang & Zhou (arXiv:2206.05403):
+  per-frequency correction with dn_BE/dT on an MD-derived transmission; LJ
+  system, 1–40 K only. Rajabpour et al. (arXiv:2407.15404) apply the same
+  Landauer-type weighting at 300 K for Si/diamond. Our rule (§3: report
+  uncorrected as primary, correction as a labelled bracket) stands; a
+  spectral (frequency-resolved) correction is the defensible form to offer.
+- **Pressure.** Hohensee, Wilson & Cahill (Nat. Commun. 6, 6578, 2015):
+  metal/diamond TDTR to 50 GPa; conductance increases weakly or saturates;
+  pressure suppresses extrinsic (weak-bonding) effects. Relevant to P1-9/P1-10:
+  expect a strong pressure effect only where the as-built interface is weakly
+  bonded.
+
+### 8.4 Interatomic potentials and Tier-2 MLIPs
+
+- **Empirical potentials can be off by ~3x for interface conductance.**
+  Rajabpour, Mortazavi, Mirchi, El Hajj, Guo, Zhuang & Merabia
+  (arXiv:2407.15404): moment-tensor potential for Si/diamond, trained with
+  interface configurations and active learning, gives the infinite-length
+  ITC within ~10 % of experiment; Tersoff and Brenner over-estimate by "a
+  factor of about 3" (stiffer interface bonding, over-predicted group
+  velocities). Interface-localised modes (8–12 THz) carry ~40 % of the ITC.
+- **GaN/SiC: MD ~2x experiment.** Mu et al. (arXiv:1905.04171): bonded
+  GaN-SiC TDTR 169 MW/m²K as-bonded (3 nm amorphous layer), 229 after
+  1000 °C anneal; MBE/MOCVD with AlN 189–200; cited MD ~500. NEP-MLIP work
+  on Ga₂O₃/SiC (Liu et al., arXiv:2605.05620) gives 550–700 against
+  measurements of 140–162 for real (SiOₓ-containing) interfaces — the gap is
+  interface structure, not only the potential.
+- **Foundation models are not yet reliable for thermal transport.** Anam et
+  al. (arXiv:2509.03401), 2,429 OQMD structures: lattice-k log₁₀ MAE vs DFT
+  0.17 (EquiformerV2 fine-tuned) to 1.0 (MACE-MP-0a); dynamic stability 81 %
+  (EqV2-FT), 53 % (MACE), 48 % (CHGNet); force RMSE does not predict phonon
+  quality. **Consequence:** Tier 2 means a potential trained or fine-tuned on
+  the interface, passed through our elastic / phonon / bulk-k gate — never a
+  foundation model as shipped.
+- **LAMMPS access.** MACE via `pair_style mliap unified` (ML-IAP + KOKKOS +
+  Python, GPU only, beta, LAMMPS develop branch; mace-docs). NEP: fastest of
+  NEP/DP/MACE/NequIP on GPU (NEP review, arXiv:2501.11191); in LAMMPS
+  through the NEP_CPU interface. **Consequence:** the cluster build needs GPU
+  nodes for MACE; NEP runs on CPU.
+- **Validate MLIPs on interface force constants, not only bulk** (Wyant,
+  Rohskopf & Henry, Ge/GaAs SNAP, Comput. Mater. Sci. 2021): interface IFC2s
+  return to bulk-like within ~1 nm; mixing rules are unlikely to work.
+
+### 8.5 a-SiO₂ and Si/SiO₂
+
+- **Attribution corrected.** The 0.83 ± 0.25 / 4.27 ± 1.78 × 10⁻⁹ m²K/W
+  strong/weak targets are Chen, Zhang & Li (arXiv:1210.0354): Tersoff Si with
+  a Tersoff-type SiO₂ set, α-quartz melted at 3000 K, 10¹³ K/s; classes set by
+  the join gap L₀/N_c (N_c = 20 strong, 2 weak). Lampin et al. are their
+  ref. 45 (0.4 × 10⁻⁹ at 500 K). Fixed in code and docs.
+- **Tersoff SiO₂ densities are off; COMB3 is closer.** France-Lanord,
+  Soukiassian, Glattli & Wimmer (arXiv:1510.05416): Tersoff α-quartz 2.446 vs
+  2.649 g/cm³; COMB3 (variable charge) near experiment, a-SiO₂ k 1.455 vs
+  1.3–1.5 measured; a ~1 nm sub-oxide layer reproduces experiment better than
+  a sharp interface; Si/SiO₂ resistance halves from 300 to 900 K. COMB3 needs
+  charge equilibration (cost) and small timesteps. Consistent with P2-2's
+  hypothesis that the potential, not the rate, sets our defects.
+- **Open Si/SiOₓ MLIP.** Cvitkovich et al. (J. Chem. Phys. 161, 144706,
+  2024): GAP (SOAP) for thermal oxidation of Si; oxide 2.5 g/cm³ (exp.
+  2.24–2.36), interface 2.37 (exp. 2.36–2.41), roughness 0.79 Å (exp.
+  0.4–0.9), mostly fourfold Si; potential, structures and data on GitHub
+  (lukas-cvitkovich/MLFF-SiOx). No thermal validation. A Tier-2 candidate for
+  P2-2 / P2-3, after our gate.
+- **Modal picture.** Gordiz, Muraleedharan & Henry (arXiv:1807.06633,
+  Tersoff): ~650 MW/m²K at 600 K; interfacial modes ~3 % of states but ~18 %
+  of conductance; TDTR/FDTR/3ω barely resolve the Si/SiO₂ interface
+  resistance, so experiment is weakly constraining.
+
+### 8.6 Lattice matching and interface building
+
+- pymatgen `ZSLGenerator` / `CoherentInterfaceBuilder` (Zur–McGill): general
+  (not orthogonal) supercells, strain on the film only, terminations
+  enumerated (`termination_ftol`), default gap 2.0 Å. Our matcher deliberately
+  differs: rectangular only (the NEMD box stays orthogonal, and `fix ttm`
+  requires orthogonal), mismatch split between the sides, registry-based gap.
+- **Registry is a separate search.** Tang & Butler (arXiv:2608.19933,
+  RegFGW): after ZSL, an optimal-transport score plus Bayesian optimisation
+  over the in-plane shift; ZSL "considers only geometric commensurability".
+  Ours sets the gap from the registry it is given but does not search
+  registries. **Consequence:** add a registry scan (static energy over a
+  lateral grid) to P2-1's open items.
+
+### 8.7 MD inputs and LAMMPS
+
+- **Bulk k (5c):** Dong, Fan, Shi, Harju & Ala-Nissila (arXiv:1805.00269),
+  Tersoff Si 300 K: Green–Kubo 250 ± 10; NEMD 1/κ–1/L linear only for
+  L > 200 nm (260 ± 10); fitting L < 200 nm gives 220. Our 8.7–34.8 nm SW
+  cells are an order of magnitude short of the linear regime — consistent with
+  P5-1's CRITICAL guard. Their caveat: the heat current for many-body
+  potentials must be implemented correctly. LAMMPS `compute heat/flux` says
+  the stress/atom route gives "unphysical values" for angle-type terms and
+  `compute centroid/stress/atom` was "implemented specifically for such
+  cases". **Consequence:** any Green–Kubo path for Tersoff/SW/MEAM uses
+  centroid/stress/atom.
+- **Nanohardness (5d):** Yang, Zhang, Xiao, Wang & Bai (Sci. Rep. 7, 16053,
+  2017): Cu hardness rises then falls with depth below ~100 nm because of tip
+  roundness; MD loads are higher (strain rate, contact-area definition); a
+  sharp-tip MD gave hardness ~100x experiment. Abram, Chrobak & Nowak (PRL 118,
+  095502, 2017): Si pop-ins at ~9–10 nm from extruded Si-III/XII. Supports
+  5d staying compare-only.
+- **LAMMPS 30 Sep 2026 stable (our build):** C++17 and CMake ≥ 3.20 (KOKKOS:
+  C++20); format strings for thermo, `fix ave/time`, `fix ave/chunk` are now
+  checked against the data (our decks set none); removed ATC, AWPMD, POEMS,
+  ML-RANN, VTK (none used); new `fix baoab`; KOKKOS styles more than doubled.
+  4 Jul 2026 feature release: restart-format changes for `fix gjf`,
+  `fix press/berendsen` (not used); no changes to ttm, MEAM or heat flux.
+
+### 8.8 Lessons from the survey itself
+
+- **Three citations in this repository were wrong** and two shaped targets:
+  "Liang et al." for Yang et al. (§7), "Lampin et al." for Chen, Zhang & Li
+  (§8.5), and a verbatim Fan & Manson quote that is not in the abstract and
+  could not be checked. Rule: before a source enters code or a target, check
+  the author list on the abstract page, and quote only text actually read.

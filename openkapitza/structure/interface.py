@@ -43,9 +43,13 @@ SI_O_BOND = 2.0               # A, bond cutoff for counting
 SI100_SITES_PER_NM2 = 2.0 / (0.5431 ** 2)
 FULL_BONDS_PER_NM2 = 2.0 * SI100_SITES_PER_NM2
 
-# Interface bonding classes (Lampin et al. 2012, arXiv:1210.0354: strongly
-# coupled 0.83e-9 m^2K/W vs weakly coupled 4.27e-9 m^2K/W at 300 K, same
-# potential and quench rate). Presets aim at a class; the build reports the
+# Interface bonding classes (Chen, Zhang & Li 2012, arXiv:1210.0354 -- an
+# earlier version credited this to "Lampin et al.", whom that paper cites
+# separately: strongly coupled 0.83e-9 m^2K/W vs weakly coupled 4.27e-9 m^2K/W
+# at 300 K; Tersoff Si with a Tersoff-type SiO2 set, quench 1e13 K/s. Their
+# classes are set by the join gap L0/N_c (N_c = 20 strong, 2 weak), not by a
+# bond count, so our coverage-based classes are the comparable descriptor,
+# not the same definition). Presets aim at a class; the build reports the
 # coverage it actually reached and flags a miss.
 # Measured on a 1e14 K/s test glass: annealing alone (1.0 A gap, 2000 K
 # oxide-side band, 50 ps) reached only 35 % oxidation -- a stoichiometric glass
@@ -360,7 +364,7 @@ def build_interface(lmp: Path, glass: Cell, spec: InterfaceSpec, potential_dir: 
             f"Requested a {spec.bonding}ly bonded interface but reached "
             f"{chem.coverage * 100:.0f} % of full Si(100) oxidation "
             f"({chem.bonding_class}).",
-            remedy=("Lampin et al. (2012) find a 5x spread in h_K between strong "
+            remedy=("Chen, Zhang & Li (2012) find a 5x spread in h_K between strong "
                     "and weak coupling with this potential. Adjust gap / anneal and "
                     "rebuild, or report the class actually reached."),
             coverage=chem.coverage,
