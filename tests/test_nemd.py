@@ -679,20 +679,30 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(prof.z.size, n - 3)
         self.assertIn(Code.NEMD_FEW_BINS, f.codes())
 
-    def test_only_the_last_frame_is_used(self):
-        """Earlier frames are running averages that include the transient."""
+    def test_all_frames_are_averaged_by_default(self):
+        """Frames are independent `ave one` windows, not running averages.
+
+        This test used to assert the opposite ("only the last frame is used",
+        on the belief that earlier frames carried the transient). With the
+        deck's `fix ave/chunk` and no `ave running`, each frame is its own
+        slice of the production window, so keeping one of four threw away 75 %
+        of the profile and measured the jump over a quarter of the flux window.
+        """
         g = NEMDGeometry()
         n = g.n_bins
         z = (np.arange(n) + 0.5) * g.bin_width
         path = self.tmp / "p.dat"
         with open(path, "w") as fh:
             fh.write("# a\n# b\n# c\n")
-            for frame, val in ((1000, 999.0), (2000, 300.0)):
-                fh.write(f"{frame} {n} {n}\n")
+            for frame, val, cnt in ((1000, 310.0, 50), (2000, 300.0, 150)):
+                fh.write(f"{frame} {n} {n * cnt}\n")
                 for i, zz in enumerate(z, start=1):
-                    fh.write(f"{i} {zz * 1e10:.4f} 50 {val}\n")
+                    fh.write(f"{i} {zz * 1e10:.4f} {cnt} {val}\n")
         prof = parse_profile(path, g, FlagSet())
-        self.assertTrue(np.allclose(prof.T, 300.0))
+        # Count-weighted: (310*50 + 300*150) / 200 = 302.5
+        self.assertTrue(np.allclose(prof.T, 302.5))
+        last = parse_profile(path, g, FlagSet(), frames="last")
+        self.assertTrue(np.allclose(last.T, 300.0))
 
     def test_thermo_parsing_and_health_checks(self):
         """Both conditions the first successful shakedown exhibited.

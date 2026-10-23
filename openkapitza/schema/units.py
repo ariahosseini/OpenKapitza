@@ -49,6 +49,9 @@ _FACTORS: dict[str, float] = {
     "W/mK": 1.0,
     "W/m/K": 1.0,
     "W/(m*K)": 1.0,
+    # heat flux -> W/m^2
+    "W/m2": 1.0,
+    "W/m^2": 1.0,
     # conductance -> W/(m^2*K)
     "W/m2K": 1.0,
     "W/m^2K": 1.0,

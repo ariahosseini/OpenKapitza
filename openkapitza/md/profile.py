@@ -396,7 +396,7 @@ def extract_kapitza(
                      note="direct NEMD, extrapolated fits; per REAL contact area"),
         R_K=Quantity(si=1.0 / h, unit="m2K/W", provenance=Provenance.COMPUTED,
                      confidence=conf, name="R_K"),
-        flux=Quantity(si=flux, unit="W/m2K", provenance=Provenance.COMPUTED,
+        flux=Quantity(si=flux, unit="W/m2", provenance=Provenance.COMPUTED,
                       name="flux"),
         fit_a=fit_a,
         fit_b=fit_b,

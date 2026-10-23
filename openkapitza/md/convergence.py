@@ -41,13 +41,18 @@ class ConvergenceSeries:
     values: list[float]            # the parameter
     h_K: list[float]               # W/(m^2 K)
     units: str = ""
+    h_K_err: list[float] | None = None   # 1-sigma, W/(m^2 K); see check_series
 
     def __post_init__(self) -> None:
         if len(self.values) != len(self.h_K):
             raise ValueError("values and h_K must be the same length")
+        if self.h_K_err is not None and len(self.h_K_err) != len(self.h_K):
+            raise ValueError("h_K_err must match h_K")
         order = np.argsort(self.values)
         self.values = [self.values[i] for i in order]
         self.h_K = [self.h_K[i] for i in order]
+        if self.h_K_err is not None:
+            self.h_K_err = [self.h_K_err[i] for i in order]
 
 
 @dataclass
@@ -83,17 +88,52 @@ def check_series(
 
     last_change = abs(h[-1] - h[-2]) / abs(h[-2])
     spread = (h.max() - h.min()) / abs(np.median(h))
-    converged = last_change <= tolerance
+
+    # With errors: the same three verdicts as the stationarity test (P1-1).
+    # A fixed tolerance on a noisy difference cannot tell "still moving" from
+    # "noisy"; judging the change against its own uncertainty can.
+    change_se = None
+    if series.h_K_err is not None:
+        e = np.asarray(series.h_K_err, dtype=float)
+        change_se = float(np.hypot(e[-1], e[-2]) / abs(h[-2]))
+    if change_se is None:
+        converged = last_change <= tolerance
+        unresolved = False
+    else:
+        significant = last_change >= 2.0 * change_se
+        converged = last_change + 2.0 * change_se <= tolerance
+        unresolved = not converged and not (significant and last_change > tolerance)
 
     verdict = ConvergenceVerdict(
         axis=series.axis,
         converged=converged,
         last_change=float(last_change),
         total_spread=float(spread),
-        detail={"values": series.values, "h_K": series.h_K},
+        detail={"values": series.values, "h_K": series.h_K,
+                "h_K_err": series.h_K_err, "change_se": change_se,
+                "unresolved": unresolved},
     )
 
-    if not converged:
+    if unresolved:
+        verdict.recommendation = (
+            f"reduce the error on the last {series.axis} points; the change "
+            f"is within noise"
+        )
+        flags.add(
+            Code.NEMD_NOT_CONVERGED,
+            Severity.CAUTION,
+            f"h_K changed by {last_change * 100:.1f} +/- {change_se * 100:.1f} % "
+            f"between the last two {series.axis} points; that is within noise, "
+            f"but the noise is too large to certify convergence to "
+            f"{tolerance * 100:.0f} %.",
+            remedy=(
+                "This is a statistics limit, not evidence the answer is still "
+                "moving. Lengthen the production runs of the last two points "
+                "(the error falls as 1/sqrt(time)) before adding larger ones."
+            ),
+            axis=series.axis, last_change=last_change, change_se=change_se,
+        )
+    elif not converged:
         trend = "rising" if h[-1] > h[-2] else "falling"
         verdict.recommendation = (
             f"extend the {series.axis} axis; h_K is still {trend}"
@@ -104,7 +144,9 @@ def check_series(
             f"h_K changed by {last_change * 100:.1f} % between the last two "
             f"{series.axis} points ({series.values[-2]:.3g} -> "
             f"{series.values[-1]:.3g} {series.units}), above the "
-            f"{tolerance * 100:.0f} % tolerance.",
+            f"{tolerance * 100:.0f} % tolerance"
+            + (f" and significant against its {change_se * 100:.1f} % error."
+               if change_se is not None else "."),
             remedy=(
                 f"The answer is still {trend} with {series.axis}. Quoting the "
                 f"largest box as the converged value understates the "

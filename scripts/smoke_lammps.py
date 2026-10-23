@@ -31,18 +31,13 @@ from openkapitza.md.nemd import (
     NEMDGeometry,
     NEMDSpec,
     build_input_deck,
-    check_flux_stationarity,
-    check_run_health,
     check_spec,
     complete_pairs,
     match_species,
-    parse_log_thermo,
-    parse_profile,
-    parse_reservoir_energy,
     potential_elements,
     potential_triples,
 )
-from openkapitza.md.profile import extract_kapitza, flux_from_reservoirs
+from openkapitza.md.measure import measure_kapitza
 from openkapitza.schema import FlagSet
 
 # What the corrected Debye-DMM predicts for Si/Ge at 300 K, and what published
@@ -229,43 +224,26 @@ def main() -> int:
               "column layout are the likely culprits.")
         return 1
 
-    # Did the run do what the deck asked? Checked before anything is
-    # extracted from it.
-    thermo = parse_log_thermo(wd / "log.lammps") if (wd / "log.lammps").exists() else []
-    check_run_health(thermo, spec.temperature, flags)
-
-    print("\nParsing output ...")
+    # One library call: run health, stationarity, all-frames profile, flux,
+    # extraction and the frame-block error. Scripts no longer assemble this
+    # themselves (knowledge base: "a fix that lives in a script is not a fix").
+    print("\nMeasuring ...")
     try:
-        profile = parse_profile(wd / "temperature_profile.dat", geom, flags)
-        e_hot, e_cold, duration = parse_reservoir_energy(wd / "reservoir_energy.dat")
+        m = measure_kapitza(wd, spec, flags, k_expected_a=148.0, k_expected_b=60.0)
     except (OSError, ValueError) as exc:
-        print(f"  parsing failed: {exc}")
-        print("  Check the column layout written by fix ave/chunk against "
-              "parse_profile.")
+        print(f"  measurement failed: {exc}")
         return 1
-
-    area = spec.snapped_area
-    # Is the heat flow actually stationary while we measure it? A 20 ps and a
-    # 60 ps run of this same cell differed 13x in h_K while raising identical
-    # flag sets; this is the check that separates them.
-    check_flux_stationarity(wd / "reservoir_energy.dat", flags)
-
-    flux = flux_from_reservoirs(e_hot, e_cold, duration, area, flags)
-    print(f"  {profile.z.size} bins, flux {flux:.3e} W/m^2 "
-          f"over {duration * 1e12:.1f} ps")
-
-    try:
-        r = extract_kapitza(profile, flux, flags,
-                            bulk_a=geom.bulk_a, bulk_b=geom.bulk_b,
-                            k_expected_a=148.0, k_expected_b=60.0)
-    except ValueError as exc:
-        print(f"  extraction refused: {exc}")
-        return 1
+    r = m.extraction
+    print(f"  {len(m.per_frame_h_K)} profile frames, flux {m.flux:.3e} W/m^2")
+    if m.block_se is not None:
+        print(f"  h_K error: fit {m.fit_se / m.h_K * 100:.1f} %, "
+              f"block {m.block_se / m.h_K * 100:.1f} % -> reported "
+              f"{m.relative_uncertainty * 100:.1f} %")
 
     mw = r.h_K.si / 1e6
     print(f"\n  dT      = {r.delta_T.si:.3f} +/- "
           f"{r.delta_T.uncertainty or float('nan'):.3f} K")
-    print(f"  h_K     = {mw:.1f} MW/m^2K")
+    print(f"  h_K     = {mw:.1f} +/- {m.uncertainty / 1e6:.1f} MW/m^2K")
     print(f"  fits    R^2 = {r.fit_a.r2:.4f} / {r.fit_b.r2:.4f}")
     print(f"  naive adjacent-bin dT would have been {r.naive_delta_T:.3f} K "
           f"({r.naive_error * 100:+.1f} %)")

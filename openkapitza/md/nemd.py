@@ -330,7 +330,7 @@ class NEMDSpec:
     steady_steps: int = 500_000
     production_steps: int = 2_000_000
     profile_every: int = 100
-    profile_frames: int = 4
+    profile_frames: int = 8
     damping_fs: float = 100.0
     spot_pressure_GPa: float | None = None
     seed: int = 12345
@@ -911,37 +911,31 @@ def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:
         )
 
 
-def parse_profile(
-    path: Path | str, geometry: NEMDGeometry, flags: FlagSet
-) -> TemperatureProfile:
-    """Read a LAMMPS `fix ave/chunk` file into a TemperatureProfile.
+def read_chunk_frames(path: Path | str) -> list[tuple[int, np.ndarray]]:
+    """Every frame of a `fix ave/chunk` file: (timestep, rows of coord, count, value).
 
-    The format is three comment lines, then per-frame blocks of
-    `chunk coord ncount value`. Only the LAST frame is used: earlier frames
-    are the running averages LAMMPS emits along the way, and mixing them in
-    would blend the transient into the steady state.
+    Coordinates are left in the file's units (Angstrom).
     """
-    path = Path(path)
-    rows: list[tuple[float, float, float]] = []
-    with open(path, "r", encoding="utf-8") as fh:
+    frames: list[tuple[int, list[tuple[float, float, float]]]] = []
+    with open(Path(path), "r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             parts = line.split()
             if len(parts) == 3:           # frame header: timestep nchunks total
-                rows = []
+                frames.append((int(float(parts[0])), []))
                 continue
-            if len(parts) >= 4:
-                rows.append((float(parts[1]), float(parts[2]), float(parts[3])))
+            if len(parts) >= 4 and frames:
+                frames[-1][1].append((float(parts[1]), float(parts[2]), float(parts[3])))
+    return [(step, np.asarray(rows)) for step, rows in frames if rows]
 
-    if not rows:
-        raise ValueError(f"no chunk data found in {path}")
 
-    coord = np.array([r[0] for r in rows]) / M_TO_ANG   # Angstrom -> m
-    counts = np.array([r[1] for r in rows])
-    temps = np.array([r[2] for r in rows])
-
+def _profile_from_rows(rows: np.ndarray, geometry: NEMDGeometry,
+                       flags: FlagSet) -> TemperatureProfile:
+    coord = rows[:, 0] / M_TO_ANG                     # Angstrom -> m
+    counts = rows[:, 1]
+    temps = rows[:, 2]
     keep = counts > 0
     dropped = int((~keep).sum())
     if dropped:
@@ -956,7 +950,6 @@ def parse_profile(
             ),
             dropped=dropped,
         )
-
     return TemperatureProfile(
         z=coord[keep],
         T=temps[keep],
@@ -964,6 +957,57 @@ def parse_profile(
         area=geometry.area,
         counts=counts[keep],
     )
+
+
+def parse_profile_frames(
+    path: Path | str, geometry: NEMDGeometry, flags: FlagSet
+) -> list[tuple[int, TemperatureProfile]]:
+    """One TemperatureProfile per frame, with the frame's end timestep."""
+    frames = read_chunk_frames(path)
+    if not frames:
+        raise ValueError(f"no chunk data found in {path}")
+    return [(step, _profile_from_rows(rows, geometry, flags)) for step, rows in frames]
+
+
+def parse_profile(
+    path: Path | str, geometry: NEMDGeometry, flags: FlagSet, *,
+    frames: str = "all",
+) -> TemperatureProfile:
+    """Read a LAMMPS `fix ave/chunk` file into a TemperatureProfile.
+
+    The format is three comment lines, then per-frame blocks of
+    `chunk coord ncount value`.
+
+    `frames="all"` (default) averages every frame, weighted by atom count.
+    The deck uses `fix ave/chunk` WITHOUT `ave running`, so each frame is an
+    INDEPENDENT average over its own slice of the production window, and
+    together they cover exactly the window the flux is measured over.
+
+    This used to keep only the last frame, on the stated belief that earlier
+    frames were running averages carrying the transient. They are not: with
+    the default `ave one` each frame is its own window. Keeping the last of
+    four discarded 75 % of the profile statistics and measured the jump over
+    a quarter of the window the flux came from. Whether the production window
+    holds a transient is `check_flux_stationarity`'s question, asked of the
+    same window. `frames="last"` keeps the old behaviour for comparison.
+    """
+    raw = read_chunk_frames(path)
+    if not raw:
+        raise ValueError(f"no chunk data found in {path}")
+    if frames == "last":
+        return _profile_from_rows(raw[-1][1], geometry, flags)
+    if frames != "all":
+        raise ValueError("frames must be 'all' or 'last'")
+    shapes = {rows.shape for _, rows in raw}
+    if len(shapes) != 1:
+        raise ValueError(f"frames have different bin counts: {sorted(shapes)}")
+    stack = np.stack([rows for _, rows in raw])        # frames x bins x 3
+    counts = stack[:, :, 1]
+    total = counts.sum(axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        temp = np.where(total > 0, (stack[:, :, 2] * counts).sum(axis=0) / total, 0.0)
+    rows = np.column_stack([stack[:, :, 0].mean(axis=0), total / len(raw), temp])
+    return _profile_from_rows(rows, geometry, flags)
 
 
 def parse_log_thermo(path: Path | str) -> list[dict[str, float]]:

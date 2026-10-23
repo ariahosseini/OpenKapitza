@@ -86,10 +86,10 @@ class TestAuditHasTeeth(unittest.TestCase):
             "region written in lattice counts")
 
     def test_catches_ave_chunk_missing_chunk_id(self):
-        self.assertCaught(
-            self.deck.replace("ave/chunk 100 5000 500000 layers",
-                              "ave/chunk 100 5000 500000"),
-            "fix ave/chunk missing its chunk ID")
+        # Patterned, not literal: the window follows spec.profile_frames, and a
+        # literal string silently became a no-op when the default changed 4 -> 8.
+        mutated = re.sub(r"(ave/chunk \d+ \d+ \d+) layers", r"\1", self.deck, count=1)
+        self.assertCaught(mutated, "fix ave/chunk missing its chunk ID")
 
     def test_catches_window_outrunning_production(self):
         """Produced an empty profile file and exit code 0."""
