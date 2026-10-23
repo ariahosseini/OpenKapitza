@@ -20,9 +20,17 @@ from ..schema.flags import Code, FlagSet, Severity
 from .runner import Resources
 
 # Atom-timesteps per core-second. Rough, build dependent, calibrate locally.
+# Atom-steps per core-second. The three-body figures are MEASURED, and were
+# 3-4x lower than first assumed (sw 2.0e6, tersoff 1.5e6). That gap is larger
+# than the walltime safety factor, so jobs sized on the old figures would have
+# been killed at the wall with nothing saved:
+#   tersoff  4.1e5  Si/Ge 4,787 atoms, macOS arm64, 30 Sep 2026
+#            5.6e5  Si/Ge 4,960 atoms, cloud x86, NPT, 2 jobs on 2 cores, 22 Oct
+#   sw       5.0e5  SW-Si 2,048 atoms, cloud x86, NVE + Langevin, 22 Oct
+# Re-measure on the cluster with one short run before the campaign.
 THROUGHPUT = {
-    "sw": 2.0e6,          # Stillinger-Weber, 3-body
-    "tersoff": 1.5e6,     # Tersoff, 3-body
+    "sw": 5.0e5,          # Stillinger-Weber, 3-body (measured, see above)
+    "tersoff": 4.5e5,     # Tersoff, 3-body (measured, see above)
     "eam": 5.0e6,         # EAM, pair-ish
     "lj": 2.0e7,          # Lennard-Jones
     "mlip": 2.0e3,        # machine-learned: ~3 orders slower, often GPU-bound
