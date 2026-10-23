@@ -1431,6 +1431,19 @@ above. The LAMMPS examples are bulk-only.
   `exclusion_lc` cooling lengths from the interface. `compare_runs` turns a
   phonon-only/TTM pair of the same cell into h_ep = 1/(1/h_TTM − 1/h_pp) with
   errors in quadrature, and declines to quote it when not resolved.
+- **First interface pair (plumbing, 23 Oct 2026).** Si(100)/Al hetero cell, 5,901
+  atoms, 1.6 nm wide, 14 nm Al, MEAM, 6 ps relax + 6 ps equilibration + 20 ps
+  steady + 40 ps production, exclusion 1 l_c, 2 nm electron cells (~320 atoms).
+  Both decks ran end to end; vacuum gap after relaxation 22.3 Å (guard 12).
+  Neither run was steady: hot and cold reservoir fluxes differ by 85 % (pp)
+  and 102 % (TTM), the jump trends +101 % across production (pp). h_K: pp 340
+  ± 99, TTM 1207 ± 917 MW/m²K; `compare_runs` correctly refused to quote h_ep
+  (1/h_TTM − 1/h_pp = −2.1 ± 1.1 × 10⁻⁹ m²K/W, wrong sign, not resolved).
+  Electrons vs lattice in production: mean of 8 T_e snapshots over the metal
+  292.4 K, metal lattice mean 288.6 K — equal within the snapshot noise
+  (±27/√8 ≈ ±10 K), so the 315–331 K seen during the steady stage was noise,
+  as the bulk check predicted. Steady state needs ~0.4–1 ns (Baer & Walker
+  2025), ~10x this run: cluster.
 - **Checks raised by `check_spec`:** cross-interface channel not modelled
   (always); metal shorter than 2·exclusion; < 1000 metal atoms per electron
   cell (Wang et al.); electron cell longer than the cooling length; reduced

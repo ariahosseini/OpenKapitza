@@ -96,6 +96,17 @@ on the converged geometry. Si/Al at 300 K brackets: NEMD 470 MW/m²K
 phonon-only (Yang et al., arXiv:1401.5550, a different MEAM), TDTR 200–350. The metal
 side is phonon-only (P1-14).
 
+## 6b. Electron–phonon on metal sides (P1-14)
+
+Build one Si/Al cell twice, phonon-only and `ttm=TTMSpec("Al")`, from the
+same spec (≥ 30 nm Al so the default 3-cooling-length fit exclusion leaves a
+bulk region; cross-section wide enough for ≥ 1000 Al atoms per 1 nm electron
+cell, i.e. ≳ 4 nm). `write_campaign` stages `ttm_props.in`. Steady state is
+~0.5–1 ns. Measure both with `measure_kapitza`, then
+`md.ttm.compare_runs(h_pp, err_pp, h_ttm, err_ttm, flags)`; compare with
+`md.electron_phonon.series_band` (Al: lower bound by construction). Check
+`T_e_mean.dat` against the metal lattice mean (equal far from the interface).
+
 ## 7. Si/a-SiO₂ (P2-2 … P2-6)
 
 Glass and interface first, then NEMD on the read-in cell:
