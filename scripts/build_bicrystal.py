@@ -54,6 +54,9 @@ def main(argv=None) -> int:
                     help="A: shift the cut through A to choose its top termination")
     ap.add_argument("--z-offset-b", type=float, default=0.0,
                     help="A: shift the cut through B to choose its bottom termination")
+    ap.add_argument("--list-terminations", action="store_true",
+                    help="print every distinct cut of each side (species, bonds cut, "
+                         "z offset) and exit; pass the chosen offsets as --z-offset-a/-b")
     ap.add_argument("--registry", choices=["none", "energy", "hollow"], default="none",
                     help="choose the in-plane shift of B on A: 'energy' = relaxed LAMMPS "
                          "energy scan with the given potential (needs --lmp); 'hollow' = "
@@ -76,6 +79,14 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     A, B = LIBRARY[a.a](), LIBRARY[a.b]()
+    if a.list_terminations:
+        from openkapitza.structure.crystalline import terminations
+        for side, X, hkl in (("A (top face bonds to B)", A, a.hkl_a), ("B (bottom face bonds to A)", B, a.hkl_b)):
+            print(f"{side}: {X.name}{tuple(hkl)}")
+            for tm in terminations(X, tuple(hkl), thickness=a.bulk_nm * 10):
+                print(f"   z_offset {tm.z_offset:8.3f}  bottom {'/'.join(tm.bottom):4s} top "
+                      f"{'/'.join(tm.top):4s}  bonds cut per bottom atom: {tm.bottom_coordination_loss}")
+        return 0
     g = NEMDGeometry(wall_thickness=0.8e-9, reservoir_thickness=1.0e-9,
                      bulk_a_length=a.bulk_nm * 1e-9, bulk_b_length=a.bulk_nm * 1e-9,
                      bin_width=0.4e-9)

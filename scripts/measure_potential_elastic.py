@@ -28,7 +28,7 @@ which is what the continuum model needs. They are different quantities.
 
 Usage:
     python3 scripts/measure_potential_elastic.py --lmp <lmp> --potentials <dir>
-        [--set sicge|sw|ni]
+        [--set sicge|sw|ni|sio|alsicu|comb]
 """
 
 from __future__ import annotations
@@ -58,6 +58,15 @@ SETS = {
     # Si as described by the Munetoh SiO2 Tersoff (the crystal side of Si/SiO2).
     "sio": [CubicSpec("Si(SiO)", "diamond", 5.431, 28.0855, "tersoff", "SiO.tersoff",
                       "Si", "Si")],
+    # COMB (Shan, Devine, Sinnott & Phillpot, PRB 81, 125328, 2010; Si from Yu,
+    # Sinnott & Phillpot, PRB 75, 085311, 2007): one variable-charge fit with
+    # Si, O, Cu, Si-O, Cu-Si, Cu-O -- a Tier-1 candidate for Si/SiO2 (P2-2/P2-4)
+    # and Si/Cu. Elemental crystals are neutral: charges fixed at 0.
+    "comb": [
+        CubicSpec(f"{el}(COMB)", lat, a0, m, "comb", "ffield.comb", el, el, charge=True)
+        for el, lat, a0, m in (("Si", "diamond", 5.431, 28.0855),
+                               ("Cu", "fcc", 3.615, 63.546))
+    ],
     # Jelinek et al. 2012 MEAM (AlSiMgCuFe.meam): one fit with Al-Si and
     # Cu-Si cross terms, the candidate for die-level Si/Al and Si/Cu (P1-6).
     # Needs a LAMMPS build with the MEAM package.
@@ -77,20 +86,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lmp", required=True, type=Path)
     parser.add_argument("--potentials", required=True, type=Path)
     parser.add_argument("--set", default="sicge", choices=sorted(SETS))
+    parser.add_argument("--temperature", type=float,
+                        help="K: finite-temperature constants (P5-2); default 0 K minimisation")
     args = parser.parse_args(argv)
 
     results = []
     for spec in SETS[args.set]:
         flags = FlagSet()
         try:
-            res = run_elastic(args.lmp, spec, args.potentials, flags)
+            res = run_elastic(args.lmp, spec, args.potentials, flags,
+                              temperature=args.temperature)
         except (RuntimeError, FileNotFoundError) as exc:
             print(f"{spec.name}: measurement failed: {exc}")
             return 1
         results.append((spec, res, flags))
 
     print("=" * 96)
-    print("Potential's own properties at 0 K, against reference single-crystal values")
+    at = "0 K" if args.temperature is None else f"{args.temperature:g} K"
+    print(f"Potential's own properties at {at}, against reference single-crystal values")
     print("=" * 96)
     print(f"{'species':8} {'a0':>8} {'C11':>7} {'C12':>7} {'C44':>7} {'spread':>8}"
           f"  {'E':>7} {'nu':>6}  gate   C11/C12/C44 error")

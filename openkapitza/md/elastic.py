@@ -143,6 +143,9 @@ class CubicSpec:
     # argument list after "* *". `potential` stays the primary file.
     extra_files: tuple[str, ...] = ()
     coeff_args: str | None = None
+    # Variable-charge potentials (COMB) need atom_style charge; an elemental
+    # crystal is neutral, so charges are set to 0 and no equilibration is run.
+    charge: bool = False
 
     @property
     def files(self) -> tuple[str, ...]:
@@ -174,12 +177,12 @@ DECK = """\
 # Generated; see openkapitza/md/elastic.py.
 units           metal
 boundary        p p p
-atom_style      atomic
+atom_style      {atom_style}
 lattice         {lattice} {a0_guess:.6f}
 region          box block 0 {n} 0 {n} 0 {n}
 create_box      1 box
 create_atoms    1 box
-mass            1 {mass:.4f}
+{charge_line}mass            1 {mass:.4f}
 pair_style      {pair_style}
 {pair_coeff}
 thermo_style    custom step pe press pxx pyy pzz pyz lx ly lz
@@ -215,8 +218,86 @@ minimize        1.0e-14 1.0e-14 100000 1000000
 """
 
 
-def build_elastic_deck(spec: CubicSpec, component: str, eps: float) -> str:
-    """One self-contained run: relax, strain, relax atoms, print stress."""
+# Finite temperature (open issue P5-2). The 0 K constants above are compared
+# with ROOM-temperature references (McSkimin 1964 at 298 K, Ledbetter 1974);
+# this path makes that comparison like with like. NPT equilibration with the
+# box set to its mean (as in the NEMD relaxation), the strain applied to the
+# thermal box, NVT, and the stress averaged after a clock reset so the
+# averaging window lines up with the run (fix ave/time fires on multiples of
+# its Nfreq).
+DECK_T = """\
+# OpenKapitza elastic constants at {temperature:g} K -- {name}, {component} strain {eps:+.5f}
+units           metal
+boundary        p p p
+atom_style      {atom_style}
+lattice         {lattice} {a0_guess:.6f}
+region          box block 0 {n} 0 {n} 0 {n}
+create_box      1 box
+create_atoms    1 box
+{charge_line}mass            1 {mass:.4f}
+pair_style      {pair_style}
+{pair_coeff}
+timestep        0.001
+velocity        all create {t_init:.2f} {seed} mom yes rot yes dist gaussian
+fix             eq all npt temp {temperature:.2f} {temperature:.2f} 0.1 iso 0.0 0.0 1.0
+variable        lxv equal lx
+fix             lav all ave/time 10 {nrep_eq} {n_eq} v_lxv
+run             {n_eq}
+unfix           eq
+change_box      all x final $(xlo) $(xlo+f_lav) y final $(ylo) $(ylo+f_lav) z final $(zlo) $(zlo+f_lav) remap units box
+unfix           lav
+variable        a_eq equal lx/{n}
+print           "ELASTIC_A0 ${{a_eq}}"
+{strain_block}
+fix             nvt all nvt temp {temperature:.2f} {temperature:.2f} 0.1
+run             {n_settle}
+reset_timestep  0
+variable        sxx equal -pxx/{bar_per_gpa}
+variable        syy equal -pyy/{bar_per_gpa}
+variable        szz equal -pzz/{bar_per_gpa}
+variable        syz equal -pyz/{bar_per_gpa}
+fix             sav all ave/time 10 {nrep_avg} {n_avg} v_sxx v_syy v_szz v_syz
+thermo          {n_avg}
+run             {n_avg}
+print           "ELASTIC_STRESS {component} {eps:.8f} $(f_sav[1]) $(f_sav[2]) $(f_sav[3]) $(f_sav[4])"
+"""
+
+STRAIN_XX_T = """\
+change_box      all x scale {scale:.10f} remap units box
+"""
+
+STRAIN_YZ_T = """\
+change_box      all triclinic
+variable        tilt equal {eps:.10f}*lz
+change_box      all yz delta ${{tilt}} remap units box
+"""
+
+
+def build_elastic_deck(spec: CubicSpec, component: str, eps: float, *,
+                       temperature: float | None = None, equil_ps: float = 20.0,
+                       settle_ps: float = 5.0, average_ps: float = 40.0,
+                       seed: int = 4928) -> str:
+    """One self-contained run: relax, strain, relax atoms, print stress.
+
+    With `temperature`, the finite-T path (DECK_T) instead.
+    """
+    if temperature is not None:
+        blocks = {"xx": STRAIN_XX_T.format(scale=1.0 + eps), "yz": STRAIN_YZ_T.format(eps=eps),
+                  "none": ""}
+        if component not in blocks:
+            raise ValueError(f"unknown strain component {component!r}")
+        n_eq, n_avg = int(equil_ps * 1000), int(average_ps * 1000)
+        n_eq -= n_eq % 20; n_avg -= n_avg % 10
+        return DECK_T.format(
+            temperature=temperature, t_init=2.0 * temperature, seed=seed,
+            name=spec.name, component=component, eps=eps, lattice=spec.lattice,
+            a0_guess=spec.a0_guess, n=spec.cells, mass=spec.mass,
+            pair_style=spec.pair_style, pair_coeff=spec.pair_coeff(),
+            strain_block=blocks[component], bar_per_gpa=BAR_PER_GPA,
+            atom_style="charge" if spec.charge else "atomic",
+            charge_line="set             group all charge 0.0\n" if spec.charge else "",
+            n_eq=n_eq, nrep_eq=n_eq // 20, n_settle=int(settle_ps * 1000),
+            n_avg=n_avg, nrep_avg=n_avg // 10)
     if component == "xx":
         block = STRAIN_XX.format(scale=1.0 + eps)
     elif component == "yz":
@@ -230,6 +311,8 @@ def build_elastic_deck(spec: CubicSpec, component: str, eps: float) -> str:
         a0_guess=spec.a0_guess, n=spec.cells, mass=spec.mass,
         pair_style=spec.pair_style, pair_coeff=spec.pair_coeff(),
         strain_block=block, bar_per_gpa=BAR_PER_GPA,
+        atom_style="charge" if spec.charge else "atomic",
+        charge_line="set             group all charge 0.0\n" if spec.charge else "",
     )
 
 
@@ -295,7 +378,8 @@ def constants_from_rows(rows: list[tuple], magnitude: float) -> tuple[float, flo
 
 
 def assemble(spec: CubicSpec, a0: float, rows: list[tuple],
-             magnitudes: tuple[float, ...], flags: FlagSet) -> ElasticResult:
+             magnitudes: tuple[float, ...], flags: FlagSet, *,
+             spread_tolerance: float = STRAIN_SPREAD_TOLERANCE) -> ElasticResult:
     """Turn parsed stresses into constants, and run the insensitivity check."""
     by_strain = {m: constants_from_rows(rows, m) for m in magnitudes}
     # Report the SMALLEST magnitude: closest to the linear limit. The larger one
@@ -305,7 +389,7 @@ def assemble(spec: CubicSpec, a0: float, rows: list[tuple],
     result = ElasticResult(spec.name, a0, c11, c12, c44, by_strain,
                            potential=spec.potential)
 
-    if len(magnitudes) >= 2 and result.spread > STRAIN_SPREAD_TOLERANCE:
+    if len(magnitudes) >= 2 and result.spread > spread_tolerance:
         flags.add(
             Code.MD_ELASTIC_UNCONVERGED,
             Severity.WARNING,
@@ -336,10 +420,17 @@ def run_elastic(
     potential_dir: Path,
     flags: FlagSet,
     *,
-    magnitudes: tuple[float, ...] = (0.002, 0.005),
+    magnitudes: tuple[float, ...] | None = None,
     timeout: int = 1800,
+    temperature: float | None = None,
 ) -> ElasticResult:
-    """Run every strain on a real engine and return the constants."""
+    """Run every strain on a real engine and return the constants.
+
+    `temperature` (K) runs the finite-T path: larger default strains (stress
+    noise) and a 5 % strain-insensitivity tolerance instead of 1 %.
+    """
+    if magnitudes is None:
+        magnitudes = (0.005, 0.01) if temperature else (0.002, 0.005)
     rows: list[tuple] = []
     a0: float | None = None
     with tempfile.TemporaryDirectory() as tmp:
@@ -350,7 +441,8 @@ def run_elastic(
                 for sign in (1.0, -1.0):
                     eps = sign * m
                     deck = work / f"el_{component}_{eps:+.5f}.in"
-                    deck.write_text(build_elastic_deck(spec, component, eps))
+                    deck.write_text(build_elastic_deck(spec, component, eps,
+                                                       temperature=temperature))
                     run = subprocess.run(
                         [str(lmp), "-in", deck.name], cwd=work,
                         capture_output=True, text=True, timeout=timeout,
@@ -365,7 +457,8 @@ def run_elastic(
                     rows.extend(run_rows)
     if a0 is None:
         raise RuntimeError(f"{spec.name}: no lattice constant reported")
-    return assemble(spec, a0, rows, magnitudes, flags)
+    return assemble(spec, a0, rows, magnitudes, flags,
+                    spread_tolerance=0.05 if temperature else STRAIN_SPREAD_TOLERANCE)
 
 
 # --------------------------------------------------------------------------

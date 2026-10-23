@@ -139,6 +139,30 @@ class Registry(unittest.TestCase):
         self.assertGreater(small.spread, 0.1)
 
 
+class Terminations(unittest.TestCase):
+    def _t(self, name, hkl, thickness):
+        from openkapitza.structure.crystalline import terminations
+        return {(x.bottom, x.bottom_coordination_loss) for x in
+                terminations(L[name], hkl, thickness=thickness)}
+
+    def test_polar_faces_and_bonds_cut(self):
+        self.assertEqual(self._t("GaN", (0, 0, 1), 2 * 5.185), {(("N",), 1), (("Ga",), 3)})
+        self.assertEqual(self._t("4H-SiC", (0, 0, 1), 10.053), {(("C",), 1), (("Si",), 3)})
+
+    def test_elemental_faces_by_bonds_cut(self):
+        self.assertEqual(self._t("Si", (1, 0, 0), 3 * 5.431), {(("Si",), 2)})
+        self.assertEqual(self._t("Si", (1, 1, 1), 3 * 9.407), {(("Si",), 1), (("Si",), 3)})
+        self.assertEqual(self._t("Al", (1, 1, 1), 7.0), {(("Al",), 3)})
+        self.assertEqual(self._t("Al", (1, 0, 0), 8.1), {(("Al",), 4)})
+
+    def test_offset_reproduces_the_listed_face(self):
+        from openkapitza.structure.crystalline import build_slab, rectangular_cells, terminations
+        for t in terminations(L["GaN"], (0, 0, 1), thickness=2 * 5.185):
+            s = build_slab(L["GaN"], rectangular_cells(L["GaN"], (0, 0, 1))[0], 2 * 5.185,
+                           z_offset=t.z_offset)
+            self.assertEqual(tuple(sorted(s.bottom_species())), t.bottom)
+
+
 class NEMDLayout(unittest.TestCase):
     def test_sides_sit_where_the_geometry_puts_them(self):
         from openkapitza.md.nemd import NEMDGeometry

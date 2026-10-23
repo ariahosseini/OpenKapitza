@@ -307,8 +307,10 @@ def build_slab(crystal: Crystal, cell: RectCell, thickness: float, *,
     _, first = np.unique(key, axis=0, return_index=True)
     first = np.sort(first)
     pos, spec = pos[first], [spec[i] for i in first]
-    pos[:, 2] -= pos[:, 2].min()
-    return Slab(pos, spec, (L1, L2), thickness, meta={"crystal": crystal.name})
+    z_shift = float(pos[:, 2].min())
+    pos[:, 2] -= z_shift
+    return Slab(pos, spec, (L1, L2), thickness,
+                meta={"crystal": crystal.name, "z_shift": z_shift + z_offset})
 
 
 def slab_cell(slab: Slab, types: dict[str, int], z_box: float) -> Cell:
@@ -544,3 +546,56 @@ def lammps_static_energy(lmp: str, pair_style: str, pair_coeff: str, *,
         raise RuntimeError(f"LAMMPS energy failed in {wd}: {res.stdout[-400:]}{res.stderr[-400:]}")
     energy.__name__ = "lammps_static_energy" + ("_minimized" if minimize else "")
     return energy
+
+
+@dataclass
+class Termination:
+    z_offset: float              # pass to build_slab / join_bicrystal (A)
+    bottom: tuple[str, ...]      # species on the slab's bottom face
+    top: tuple[str, ...]         # species on its top face, for this thickness
+    bottom_coordination_loss: int = 0   # bonds cut per bottom-face atom (covalent)
+
+
+def terminations(crystal: Crystal, hkl, *, thickness: float, max_strain_cell=None,
+                 tol: float = 0.05) -> list[Termination]:
+    """Every distinct cut of `crystal` normal to (hkl), with the faces it gives.
+
+    For compound (polar) surfaces the termination is a CHOICE with physical
+    consequences (Ga- vs N-polar GaN, Si- vs C-face SiC, which species bonds
+    across the interface). This lists them, with the bonds each cut breaks per
+    bottom-face atom; the caller picks one, or scores them by energy when a
+    cross potential exists. Cuts are placed just below each distinct plane of
+    the middle period of a thick probe slab.
+    """
+    cell = max_strain_cell or rectangular_cells(crystal, hkl)[0]
+    period = 3.0 * float(np.linalg.norm(crystal.lattice, axis=1).max())
+    probe = build_slab(crystal, cell, 3.0 * period)
+    pos, L1, L2 = probe.pos, probe.lengths[0], probe.lengths[1]
+    nn = crystal.nearest_neighbour()
+    # Bonds from the central cell to a 3 x 3 lateral tiling. Minimum-image
+    # distances are wrong here: a primitive surface cell (Si(100): 3.84 A) is
+    # smaller than twice the bond reach, so an atom and its own periodic image
+    # would be merged into one neighbour.
+    tiles = np.vstack([pos + np.array([i * L1, j * L2, 0.0])
+                       for i in (-1, 0, 1) for j in (-1, 0, 1)])
+    r = np.linalg.norm(tiles[None, :, :] - pos[:, None, :], axis=2)   # (n, 9n)
+    ii, jj = np.nonzero((r > 0.1) & (r < 1.15 * nn))
+    zi_all, zj_all = pos[ii, 2], tiles[jj, 2]
+    zs = np.unique(np.round(pos[:, 2], 3))
+    mid = zs[(zs > period) & (zs < 2.0 * period)]
+    out: dict[tuple, Termination] = {}
+    for zp in mid:
+        zc = float(zp) - tol
+        z_offset = zc + probe.meta["z_shift"]
+        sl = build_slab(crystal, cell, thickness, z_offset=z_offset)
+        # each bond is seen from both ends: count from the atom ABOVE the cut
+        crossing = int(np.sum((zi_all > zc) & (zj_all < zc)))
+        above = pos[:, 2] > zc
+        first = above & (pos[:, 2] < pos[above, 2].min() + 0.3)
+        lost = round(crossing / max(1, int(first.sum())))
+        # Same species but different bonds cut is a different surface
+        # (Si(111) shuffle: 1, glide: 3), so the bond count is part of the key.
+        key = (tuple(sorted(sl.bottom_species())), tuple(sorted(sl.top_species())), lost)
+        if key not in out:
+            out[key] = Termination(z_offset, key[0], key[1], lost)
+    return list(out.values())

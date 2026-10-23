@@ -207,3 +207,31 @@ class MultiFilePotential(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class FiniteTemperatureDeck(unittest.TestCase):
+    """P5-2: thermal box, strain without minimisation, averaged stress."""
+
+    def test_deck_structure(self):
+        from openkapitza.md.elastic import CubicSpec, build_elastic_deck
+        spec = CubicSpec("Si", "diamond", 5.431, 28.0855, "sw", "Si.sw", "Si", "Si")
+        d = build_elastic_deck(spec, "xx", 0.01, temperature=300.0)
+        self.assertIn("npt temp 300.00 300.00 0.1 iso 0.0 0.0 1.0", d)
+        self.assertNotIn("minimize", d)
+        self.assertNotIn("box/relax", d)
+        i_strain = d.index("x scale 1.0100000000")
+        i_reset = d.index("reset_timestep  0")
+        i_avg = d.index("fix             sav all ave/time")
+        self.assertLess(i_strain, i_reset); self.assertLess(i_reset, i_avg)
+        self.assertIn("ELASTIC_STRESS xx 0.01000000 $(f_sav[1])", d)
+        d0 = build_elastic_deck(spec, "xx", 0.01)
+        self.assertIn("minimize", d0)                       # 0 K path unchanged
+
+    def test_charge_style_for_variable_charge_potentials(self):
+        from openkapitza.md.elastic import CubicSpec, build_elastic_deck
+        spec = CubicSpec("Si(COMB)", "diamond", 5.431, 28.0855, "comb", "ffield.comb",
+                         "Si", "Si", charge=True)
+        for T in (None, 300.0):
+            d = build_elastic_deck(spec, "yz", 0.005, temperature=T)
+            self.assertIn("atom_style      charge", d)
+            self.assertIn("set             group all charge 0.0", d)
