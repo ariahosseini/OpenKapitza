@@ -33,6 +33,7 @@ from .contact import (
 from .gap import GapResult, gap_conductance, gas_state, vacuum_gap
 from .md.dmm import KapitzaEstimate, dmm_conductance
 from .network import MonteCarloResult, NetworkResult, combine, propagate, sample_lognormal
+from .network.stack import StackResult, as_network, stack_resistance
 from .schema import (
     Confidence,
     FlagSet,
@@ -49,20 +50,21 @@ from .schema.flags import Code
 class JointResult:
     inputs: JointInputs
     flags: FlagSet
-    hardness: HardnessResult
-    regime: RegimeResult
-    E_eff: Quantity
+    hardness: HardnessResult | None       # None for a filled/bonded joint
+    regime: RegimeResult | None
+    E_eff: Quantity | None
     sigma_eff: Quantity
-    m_eff: Quantity
-    k_s: Quantity
-    Y: Quantity
-    kapitza: KapitzaEstimate
+    m_eff: Quantity | None
+    k_s: Quantity | None
+    Y: Quantity | None
+    kapitza: KapitzaEstimate | None
     gap: GapResult | None
     branches: dict[str, NetworkResult] = field(default_factory=dict)
     uncertainty: dict[str, MonteCarloResult] = field(default_factory=dict)
     # P0-8: h_g and h_joint over the sourced accommodation band, when any
     # alpha was a default: {"alpha": (lo, hi), "h_g": (lo, hi), "h_joint": (lo, hi)}
     accommodation_band: dict | None = None
+    stack: StackResult | None = None      # filled/bonded joint (P0-1)
 
     @property
     def primary(self) -> NetworkResult:
@@ -72,12 +74,16 @@ class JointResult:
         REGIME_AMBIGUOUS flag is raised and both branches are in `branches`.
         A caller presenting only this number without the flag is misusing it.
         """
+        if self.stack is not None:
+            return self.branches[self.stack.kind]
         if self.regime.regime is Regime.ELASTIC:
             return self.branches["elastic"]
         return self.branches["plastic"]
 
     @property
     def confidence(self) -> Confidence:
+        if self.stack is not None:
+            return self.primary.h_joint.confidence
         return min(
             self.primary.h_joint.confidence,
             self.hardness.H_c.confidence,
@@ -95,6 +101,8 @@ def run_continuum(
     """Run the full Phase-0 continuum calculation."""
     flags = flags or FlagSet()
     a, b = inputs.material_a, inputs.material_b
+    if inputs.fill is not None:
+        return _run_stack(inputs, flags, with_uncertainty, n_samples)
 
     # -- surface parameters -------------------------------------------------
     m_a = inputs.surface_a.slope_or_estimate(flags)
@@ -163,6 +171,57 @@ def run_continuum(
     if with_uncertainty:
         result.uncertainty = _propagate(result, n_samples)
     return result
+
+
+def _stack_kapitza(inputs: JointInputs, flags: FlagSet):
+    """DMM h_K at each bond face when both neighbours are in the database."""
+    from .schema import load_material
+    fill = inputs.fill
+    if fill.kind != "bond" or not fill.layers:
+        return None, None
+    out = []
+    for outer, layer in ((inputs.material_a, fill.layers[0]),
+                         (inputs.material_b, fill.layers[-1])):
+        if layer.material_key is None:
+            out.append(None); continue
+        try:
+            inner = load_material(layer.material_key, FlagSet())
+            est = dmm_conductance(outer, inner, inputs.temperature, flags)
+            out.append(est.h_K)
+        except (KeyError, ValueError, FileNotFoundError):
+            out.append(None)
+    return out[0], out[1]
+
+
+def _run_stack(inputs: JointInputs, flags: FlagSet, with_uncertainty: bool,
+               n_samples: int) -> JointResult:
+    """Filled or bonded joint: a series stack, no contact spots or gas path."""
+    sigma_eff = combined_roughness(inputs.surface_a.sigma, inputs.surface_b.sigma)
+    ka, kb = _stack_kapitza(inputs, flags)
+    stack = stack_resistance(inputs.fill, sigma_eff, flags, kapitza_a=ka, kapitza_b=kb)
+    result = JointResult(
+        inputs=inputs, flags=flags, hardness=None, regime=None, E_eff=None,
+        sigma_eff=sigma_eff, m_eff=None, k_s=None, Y=None, kapitza=None, gap=None,
+        branches={stack.kind: as_network(stack, inputs.pressure)}, stack=stack,
+    )
+    if with_uncertainty:
+        result.uncertainty = {"h_joint": propagate(
+            lambda rng: _perturbed_stack(inputs, ka, kb, rng), stack.h_joint.si, n=n_samples)}
+    return result
+
+
+def _perturbed_stack(inputs: JointInputs, ka, kb, rng: random.Random) -> float:
+    import copy
+    from .network.stack import FillSpec, Layer
+    f = inputs.fill
+    def draw(q):
+        return None if q is None else q.with_(si=sample_lognormal(q, rng))
+    layers = [Layer(l.label, draw(l.thickness), draw(l.k), l.void_fraction, l.material_key)
+              for l in f.layers]
+    g = FillSpec(f.kind, layers, f.tim_class, draw(f.R_c_total), draw(f.R_measured),
+                 draw(f.h_K_a), draw(f.h_K_b))
+    return stack_resistance(g, None, FlagSet(), kapitza_a=draw(ka),
+                            kapitza_b=draw(kb)).h_joint.si
 
 
 def _accommodation_band(result, state, alpha_a, alpha_b, contacts, flags) -> dict | None:

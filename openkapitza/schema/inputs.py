@@ -118,6 +118,9 @@ class JointInputs:
     accommodation_a: Quantity | None = None
     accommodation_b: Quantity | None = None
     regime_override: str | None = None   # "plastic" | "elastic" | None (auto)
+    # Filled (TIM) or bonded (solder, sinter, die attach) joint: a series stack
+    # replaces the contact-spot + gas-gap network (network.stack, open issue P0-1).
+    fill: object | None = None
     label: str = ""
     extra: dict = field(default_factory=dict)
 
@@ -132,7 +135,9 @@ class JointInputs:
             f"  P (apparent) = {self.pressure}",
             f"  sigma_a      = {self.surface_a.sigma}",
             f"  sigma_b      = {self.surface_b.sigma}",
-            f"  medium       = {'vacuum' if self.is_vacuum else self.gas.name}",
+            f"  medium       = "
+            + (f"{self.fill.kind} stack (filled/bonded; no gas path)" if self.fill is not None
+               else ('vacuum' if self.is_vacuum else self.gas.name)),
         ]
         if self.gas is not None and self.gas.pressure is not None:
             lines.append(f"  P_gas        = {self.gas.pressure}")

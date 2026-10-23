@@ -21,8 +21,23 @@ joint = build_joint(
 print(render(run_continuum(joint)))
 ```
 
+Filled and bonded joints (TIM, solder, sintered Ag, die attach) go through a
+series stack instead of the contact-plus-gas network (open issue P0-1):
+
+```python
+from openkapitza import bond_fill, tim_fill
+
+grease = build_joint("Al", "Cu", sigma_a_um=1.0, sigma_b_um=1.0, pressure_MPa=0.2,
+                     temperature_K=330.0,
+                     fill=tim_fill(100, 4.0, tim_class="grease", R_c_mm2K_W=15.0))
+die = build_joint("Si", "Cu", sigma_a_um=0.05, sigma_b_um=0.5, pressure_MPa=0.1,
+                  temperature_K=330.0,
+                  fill=bond_fill([("SAC305", 30, 60, 0.03)], h_K_a_MW=300, h_K_b_MW=300))
+print(render(run_continuum(grease)))
 ```
-python3 -m unittest discover -s tests    # 63 tests
+
+```
+python3 -m unittest discover -s tests
 ```
 
 ---

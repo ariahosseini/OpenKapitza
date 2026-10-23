@@ -17,7 +17,7 @@ Quick start
     print(render(run_continuum(joint)))
 """
 
-from .builder import build_joint
+from .builder import bond_fill, build_joint, tim_fill
 from .pipeline import JointResult, run_continuum
 from .report import render
 from .schema import Confidence, FlagSet, Provenance, Quantity, Severity
@@ -25,7 +25,9 @@ from .schema import Confidence, FlagSet, Provenance, Quantity, Severity
 __version__ = "0.2.0"
 
 __all__ = [
+    "bond_fill",
     "build_joint",
+    "tim_fill",
     "JointResult",
     "run_continuum",
     "render",

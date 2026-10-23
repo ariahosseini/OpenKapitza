@@ -27,6 +27,10 @@ def render(result: JointResult, *, show_samples: bool = False) -> str:
     add(result.inputs.summary())
     add("")
 
+    if result.stack is not None:
+        _render_stack(result, add)
+        return _render_tail(result, add, lines)
+
     add("-- derived surface and material parameters " + "-" * 29)
     add(f"  sigma_eff (combined RMS)   {result.sigma_eff.to('um'):10.4g} um")
     add(f"  m_eff (combined slope)     {result.m_eff.si:10.4g}")
@@ -106,6 +110,30 @@ def render(result: JointResult, *, show_samples: bool = False) -> str:
             add("        the hardness uncertainty removes most of the gap.")
         add("")
 
+    return _render_tail(result, add, lines)
+
+
+def _render_stack(result: JointResult, add) -> None:
+    st = result.stack
+    title = "filled joint (TIM)" if st.kind == "tim" else "bonded joint"
+    add(f"-- {title}: series stack, full contact, no gas path " + "-" * max(1, 20 - len(title)))
+    for t in st.terms:
+        add(f"  {t.label:36s} {t.resistance * 1e6:10.4g} mm^2.K/W  {t.fraction * 100:6.2f} %   {t.note}")
+    add("")
+    add(f"  h_JOINT                    {st.h_joint.si:10.4g} W/m^2.K   [{st.h_joint.confidence.label}]")
+    add(f"  R_TOTAL                    {st.R_total.si * 1e6:10.4g} mm^2.K/W")
+    if not st.complete:
+        add("  NOTE: a known term is missing (see flags); h_JOINT is an UPPER bound.")
+    add("")
+
+
+def _render_tail(result: JointResult, add, lines: list[str]) -> str:
+    if result.stack is not None and "h_joint" in result.uncertainty:
+        mc = result.uncertainty["h_joint"]
+        add("-- uncertainty (Monte Carlo over quantities with stated errors) " + "-" * 8)
+        add(f"  {mc.summary(unit=' W/m^2.K')}")
+        add("  NOTE: inputs with no stated uncertainty were held fixed; LOWER BOUND.")
+        add("")
     add("-- caveats " + "-" * 61)
     worst = result.flags.worst
     add(f"  worst severity: {worst.label.upper()}   ({len(result.flags)} flags)")

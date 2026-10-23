@@ -41,6 +41,7 @@ def build_joint(
     hardness_rel_unc: float | None = 0.30,
     label: str = "",
     flags: FlagSet | None = None,
+    fill=None,
 ) -> JointInputs:
     """Assemble a JointInputs from values in laboratory units.
 
@@ -104,5 +105,39 @@ def build_joint(
         accommodation_a=acc(accommodation_a),
         accommodation_b=acc(accommodation_b),
         regime_override=regime_override,
+        fill=fill,
         label=label or f"{material_a}/{material_b}",
     )
+
+
+def tim_fill(blt_um: float, k_W_mK: float, *, tim_class: str | None = None,
+             R_c_mm2K_W: float | None = None, R_measured_mm2K_W: float | None = None,
+             label: str = "TIM", rel_unc: float | None = 0.10):
+    """A filled joint in lab units: BLT (um), k (W/mK), boundaries/total in mm^2K/W."""
+    from .network.stack import FillSpec, Layer
+    q = lambda v, u, n: Quantity.parse(v, u, rel_uncertainty=rel_unc,
+                                       provenance=Provenance.USER_MEASURED, name=n)
+    return FillSpec(
+        kind="tim",
+        layers=[Layer(label, q(blt_um, "um", "BLT"), q(k_W_mK, "W/mK", "k_TIM"))],
+        tim_class=tim_class,
+        R_c_total=None if R_c_mm2K_W is None else q(R_c_mm2K_W * 1e-6, "m2K/W", "R_c"),
+        R_measured=None if R_measured_mm2K_W is None else q(R_measured_mm2K_W * 1e-6, "m2K/W", "R_TIM"),
+    )
+
+
+def bond_fill(layers: list[tuple], *, h_K_a_MW: float | None = None,
+              h_K_b_MW: float | None = None, rel_unc: float | None = 0.10):
+    """A bonded joint: layers as (label, thickness_um, k_W_mK[, void_fraction[, material_key]]),
+    from material_a to material_b; optional face conductances in MW/m^2K."""
+    from .network.stack import FillSpec, Layer
+    q = lambda v, u, n: Quantity.parse(v, u, rel_uncertainty=rel_unc,
+                                       provenance=Provenance.USER_MEASURED, name=n)
+    out = []
+    for spec in layers:
+        lab, t, k, *rest = spec
+        f = rest[0] if rest else 0.0
+        mk = rest[1] if len(rest) > 1 else None
+        out.append(Layer(lab, q(t, "um", "t"), q(k, "W/mK", "k"), f, mk))
+    hk = lambda v: None if v is None else q(v * 1e6, "W/m2K", "h_K")
+    return FillSpec(kind="bond", layers=out, h_K_a=hk(h_K_a_MW), h_K_b=hk(h_K_b_MW))

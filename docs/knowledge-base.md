@@ -1670,3 +1670,64 @@ only an abstract was reachable, it says so.
   (§8.5), and a verbatim Fan & Manson quote that is not in the abstract and
   could not be checked. Rule: before a source enters code or a target, check
   the author list on the abstract page, and quote only text actually read.
+
+## 9. Filled and bonded joints (P0-1, 23 Oct 2026)
+
+Survey and design for joints that are not bare contact: thermal interface
+materials (grease, gel, pad, PCM, adhesive) and bonds (solder, sintered Ag,
+die attach). Built as `network/stack.py`; `build_joint(..., fill=tim_fill(...)
+| bond_fill(...))` routes `run_continuum` through it.
+
+### Sources
+
+- **Model form.** R_TIM = BLT/k_TIM + R_c1 + R_c2: bulk plus two boundary
+  resistances (Mahajan, "Thermal Interface Materials: A Brief Review of Design
+  Characteristics and Materials", Electronics Cooling, Feb 2004; Xing, Xu,
+  Song & Deng, Nanomaterials 12, 3365, 2022). R_c comes from the real contact
+  area of the TIM on rough surfaces: pressure, capillarity, trapped air
+  (Prasher). The equations were images on the pages read, so only the form is
+  used.
+- **BLT** depends on the TIM's yield stress and pressure, with a size-
+  dependent yield stress (Prasher, IEEE TCPT 28, 230, 2005; abstract only).
+  Not modelled: BLT is an input.
+- **Class ranges of the TOTAL R_TIM** (Blazej, Electronics Cooling, Nov 2003,
+  K cm²/W): grease 0.2–1 (traditional ~1, newest ~0.2), elastomeric pad 1–3
+  (~0.25 mm, ~700 kPa), tape 1–4, PCM 0.3–0.7, gel 0.4–0.8, adhesive < 1 (best
+  0.15), solder < 0.05. Worked example there: 0.1 mm grease is 56 % of 0.4
+  K cm²/W, so its two boundaries carry ~17 mm²K/W; 0.2 mm pad 90 % of 1.7.
+  Datasheets often use K in²/W (× 6.45 → K cm²/W).
+- **Bond layers.** SAC (all variants) ≈ 60 W/mK at 25 °C, AuSn 80/20 57 W/mK;
+  rule-of-mixtures estimates for solders "can lead to significant errors"
+  (Wilson, "Thermal Conductivity of Solders", Electronics Cooling, Aug 2006).
+  Pressure-less sintered Ag 80–190 W/mK depending on porosity (17–55 %) and
+  sintering (Murali et al., IMAPS 2023; laser-flash 223.9 W/mK at 1–17 %
+  porosity quoted there); the data are not monotonic in porosity, so no
+  porosity correlation is used. Intermetallic (Cu₆Sn₅, Cu₃Sn) conductivities:
+  no source read; user input.
+- **Voids.** No closed form. Alavi, De Ceuninck & Daenen (Electronics 13, 2188,
+  2024, IGBT solder layer, FE + ML): small voids (10–50 µm) negligible (< 0.05 %
+  change); one large void raises R_th more than several small ones of the
+  same area; from 5 % void area some layouts, from 7.5 % all, exceed a 20 %
+  R_th increase. Shape barely matters (< 1 %).
+- **Degradation** (NREL/DuPont, NREL/CP-5400-68014): greases lose performance
+  through pump-out and dry-out over −40/125 °C cycling. Not modelled.
+
+### Design
+
+- Filled: bulk t/k per layer plus measured R_c1 + R_c2, or a measured total at
+  the working pressure. Missing R_c → bulk only, `STACK_INCOMPLETE` WARNING,
+  h_joint an upper bound; the class check is skipped (a partial R against a
+  total range would mislead). BLT < 2σ_eff → `STACK_THIN_TIM` (asperities
+  bridge the TIM; the parallel solid path is not modelled).
+- Bonded: t/(k(1 − f)) per layer, plus the two atomic faces at full contact
+  (Kapitza, UNSCALED — xi = 1). h_K from the user/MD, else DMM when both
+  neighbours are in `materials.yaml`. A missing face is graded by what it
+  could do at 100 MW/m²K (low end of the measured solid–solid interfaces in
+  §7–8): > 5 % of R → WARNING and upper bound, else INFO. A 30 µm solder: INFO;
+  a 200 nm metal film: WARNING — the thin-film case where this project's MD
+  matters directly (P0-5).
+- Voids: area-reduction estimate with the direction of its error stated
+  (`STACK_VOIDS`, WARNING above 5 %).
+- Output: a `StackResult` and, for existing consumers, a `NetworkResult` view
+  (xi = 1, no constriction, no gas path); Monte Carlo over layer t, k, R_c,
+  R_measured, h_K with stated uncertainties; report section of its own.
