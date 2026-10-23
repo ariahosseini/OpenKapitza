@@ -79,6 +79,25 @@ class TestAnisotropicStress(unittest.TestCase):
                          expected_pzz_GPa=6.0)
         self.assertIn(Code.NEMD_CELL_STRESS, flags.codes())
 
+    def test_lateral_stress_is_expected_under_uniaxial_strain(self):
+        """P1-10: a held box under load carries ~C12/C11 * P in-plane."""
+        flags = FlagSet()
+        check_run_health(_rows(10, pxx=2.3, pyy=2.3, pzz=6.0), 300.0, flags,
+                         expected_pzz_GPa=6.0, lateral_constrained=True)
+        self.assertNotIn(Code.NEMD_CELL_STRESS, flags.codes())
+        # the same lateral stress under uniaxial STRESS is a failed barostat
+        flags = FlagSet()
+        check_run_health(_rows(10, pxx=2.3, pyy=2.3, pzz=6.0), 300.0, flags,
+                         expected_pzz_GPa=6.0)
+        self.assertIn(Code.NEMD_CELL_STRESS, flags.codes())
+
+    def test_unphysical_lateral_ratio_is_flagged(self):
+        for pxx in (-0.5, 6.5):                 # wrong sign; larger than the load
+            flags = FlagSet()
+            check_run_health(_rows(10, pxx=pxx, pyy=2.3, pzz=6.0), 300.0, flags,
+                             expected_pzz_GPa=6.0, lateral_constrained=True)
+            self.assertIn(Code.NEMD_CELL_STRESS, flags.codes(), pxx)
+
     def test_in_plane_residual_is_also_caught(self):
         """Not only z: a failed in-plane relaxation must flag too."""
         flags = FlagSet()

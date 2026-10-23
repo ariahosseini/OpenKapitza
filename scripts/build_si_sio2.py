@@ -46,7 +46,8 @@ def nemd_spec(g: NEMDGeometry, production_ps: float = 500.0) -> NEMDSpec:
                     coeff_args="SiO.tersoff Si Si O", mass_a=28.0855, mass_b=28.0855,
                     timestep_fs=0.5, production_steps=int(production_ps * 2000),
                     equilibrate_steps=200_000, steady_steps=200_000, relax_steps=100_000,
-                    profile_every=200, profile_frames=8)
+                    profile_every=200, profile_frames=8,
+                    types_a=(1,), types_b=(2, 3))     # crystal Si / glass Si + O
 
 
 def geometry(bulk_nm: float, cells: int) -> NEMDGeometry:

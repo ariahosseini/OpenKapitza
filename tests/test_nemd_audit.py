@@ -199,6 +199,12 @@ class TestBarostatAndRelaxChecks(unittest.TestCase):
         spec.spot_pressure_GPa = 6.0
         self.assertEqual(audit_mod.audit_one(spec, "spot-pressure"), [])
 
+    def test_uniaxial_strain_deck_passes_the_audit(self):
+        spec = _spec()
+        spec.spot_pressure_GPa = 6.0
+        spec.spot_pressure_mode = "strain"
+        self.assertEqual(audit_mod.audit_one(spec, "spot-pressure-strain"), [])
+
     def test_relax_can_be_turned_off(self):
         spec = _spec()
         spec.relax_structure = False

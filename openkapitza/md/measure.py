@@ -120,7 +120,9 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
         area = box[0] * box[1] / M_TO_ANG ** 2
     if log.exists():
         check_run_health(parse_log_thermo(log), spec.temperature, flags,
-                         expected_pzz_GPa=spec.spot_pressure_GPa or 0.0)
+                         expected_pzz_GPa=spec.spot_pressure_GPa or 0.0,
+                         lateral_constrained=(bool(spec.spot_pressure_GPa)
+                                              and spec.spot_pressure_mode == "strain"))
 
     energy = wd / "reservoir_energy.dat"
     profile_path = wd / "temperature_profile.dat"

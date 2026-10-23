@@ -397,6 +397,9 @@ def main() -> int:
         temperature=300.0, spot_pressure_GPa=6.0,
     )
     cases.append((spot, "spot-pressure 6 GPa"))
+    from dataclasses import replace
+    cases.append((replace(spot, spot_pressure_mode="strain"),
+                  "spot-pressure 6 GPa uniaxial strain"))
 
     print(f"auditing {len(cases)} deck configurations\n")
     all_problems_pre: list[str] = []

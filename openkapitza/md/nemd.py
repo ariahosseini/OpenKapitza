@@ -344,7 +344,23 @@ class NEMDSpec:
     profile_every: int = 100
     profile_frames: int = 8
     damping_fs: float = 100.0
+    # Barostat x and y together (one scale factor). Right when the surface is
+    # elastically isotropic in-plane -- cubic (100), (111), hexagonal (0001) --
+    # and wrong otherwise (e.g. (110): the two axes differ in stiffness and in
+    # their share of the mismatch), where each axis must relax on its own.
+    couple_xy: bool = True
     spot_pressure_GPa: float | None = None
+    # How the spot pressure is applied (open issue P1-10). The two bound what
+    # an asperity sees, which is partly constrained laterally by the
+    # material around it:
+    #   "stress": uniaxial STRESS -- the in-plane barostat holds sigma_xx =
+    #             sigma_yy = 0 while the piston loads z; the slab expands
+    #             sideways (Poisson). Upper bound on lateral freedom.
+    #   "strain": uniaxial STRAIN -- the in-plane box is relaxed UNLOADED,
+    #             then held fixed while the piston loads z; lateral stress
+    #             builds to ~C12/C11 * P. Fully constrained bound.
+    spot_pressure_mode: str = "stress"
+    load_steps: int | None = None       # strain mode: loaded stage; default relax_steps
     seed: int = 12345
     structure_mode: str = "build"       # "build" | "read_data"
     data_file: str = "interface.data"
@@ -363,6 +379,12 @@ class NEMDSpec:
     # full argument list after "* *", and every extra file to stage.
     coeff_args: str | None = None
     extra_files: tuple[str, ...] = ()
+    # Atom types on each side of the interface. One element per side is
+    # (1,) / (2,); a read-in cell with several species per side lists them all
+    # (Si/a-SiO2: (1,) and (2, 3); SiC/GaN: (1, 2) and (3, 4)). They locate the
+    # relaxed interface, so a side type missing here moves the reported plane.
+    types_a: tuple[int, ...] = (1,)
+    types_b: tuple[int, ...] = (2,)
     extra: dict = field(default_factory=dict)
 
     @property
@@ -711,15 +733,16 @@ RELAX_BLOCK = """\
 # where the net in-plane stress vanishes, splitting the mismatch between the
 # two sides instead of putting all of it on the B side.
 #
-# `couple xy` keeps the cross-section square, which the periodic images
-# require and which the cubic symmetry of both materials justifies.
+# `couple xy` (couple_xy, default on) scales x and y together, which is right
+# for an in-plane isotropic surface (cubic (100)/(111), hexagonal (0001)). An
+# anisotropic one -- (110) -- relaxes each axis on its own (couple_xy=False).
 minimize        1.0e-6 1.0e-8 10000 100000
 # minimize advances the step counter by its iteration count. Reset it, or any
 # fix ave/time window below never lands on an output step and reads as zero.
 reset_timestep  0
 velocity        gmobile create {t_init:.2f} {seed} mom yes rot yes dist gaussian
 fix             relax gmobile npt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f} \
-                couple xy x 0.0 0.0 {pdamp_ps:.4f} y 0.0 0.0 {pdamp_ps:.4f}
+                {couple}x 0.0 0.0 {pdamp_ps:.4f} y 0.0 0.0 {pdamp_ps:.4f}
 # Sample often enough to SEE the box converge. Inheriting a coarse interval
 # from an earlier stage left two samples across 30 000 steps, which cannot
 # distinguish a converged box from one still drifting -- and the relaxed
@@ -773,12 +796,30 @@ unfix           piston
 unfix           freeze_hi
 velocity        gwall_hi set 0.0 0.0 0.0 units box
 fix             freeze_hi gwall_hi setforce 0.0 0.0 0.0
-group           gside_a type 1
-group           gside_b type 2
+group           gside_a type {types_a}
+group           gside_b type {types_b}
 print           "OPENKAPITZA_RELAXED wall_hi_zmin $(bound(gwall_hi,zmin):%.4f) top_a $(bound(gside_a,zmax):%.4f) bottom_b $(bound(gside_b,zmin):%.4f)"
 # The structure actually measured: relaxation can close a gap or form bonds,
 # so the interface chemistry is re-measured on this, not on the input.
 write_data      relaxed.data
+"""
+
+# Uniaxial-strain loading (spot_pressure_mode="strain"): the in-plane box has
+# just been relaxed with the piston UNLOADED and set to its mean; now hold it
+# and load the piston. The equal-style pfz is redefined in place, so the
+# aveforce already on the wall picks the load up. The wall's mean position is
+# re-averaged over this stage only.
+LOAD_STAGE = """\
+# ---- uniaxial-strain load: in-plane box held at its unloaded size ----------
+# Spot pressure {pressure:g} GPa; lateral stress builds to ~C12/C11 * P.
+variable        pfz equal -{p:.8e}*lx*ly/count(gwall_hi)
+unfix           zav
+fix             relax_load gmobile nvt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f}
+fix             zav all ave/time 10 {nrep} {load_steps} v_zwall
+thermo          {load_thermo}
+run             {load_steps}
+unfix           relax_load
+print           "OPENKAPITZA_LOADED mode strain pressure_GPa {pressure:g}"
 """
 
 # The spot-pressure template that used to live here is deliberately gone, not
@@ -835,6 +876,11 @@ def _piston_load(spec: NEMDSpec) -> dict[str, str]:
     """
     if not spec.spot_pressure_GPa:
         return {"piston_force": "", "piston_fz": "0.0"}
+    if spec.spot_pressure_mode == "strain":
+        # Relax the in-plane box unloaded first; LOAD_STAGE applies the load.
+        return {"piston_force": ("# Uniaxial strain: unloaded while the in-plane box relaxes.\n"
+                                 "variable        pfz equal 0.0\n"),
+                "piston_fz": "v_pfz"}
     p = spec.spot_pressure_GPa * GPA_TO_EV_A3
     return {
         "piston_force": (
@@ -843,6 +889,31 @@ def _piston_load(spec: NEMDSpec) -> dict[str, str]:
             f"variable        pfz equal -{p:.8e}*lx*ly/count(gwall_hi)\n"),
         "piston_fz": "v_pfz",
     }
+
+
+def _load_steps(spec: NEMDSpec) -> int:
+    """Loaded-stage length. fix ave/time fires on multiples of its Nfreq and
+    the stage starts at step relax_steps, so it must divide relax_steps or the
+    wall average is never evaluated where PISTON_OFF reads it."""
+    relax = _relax_steps(spec)
+    steps = max(20, -(-(spec.load_steps or relax) // 20) * 20)
+    if relax % steps:
+        raise ValueError(f"load_steps {steps} must divide relax_steps {relax} "
+                         f"(the wall average fires on multiples of its window)")
+    return steps
+
+
+def _load_stage(spec: NEMDSpec) -> str:
+    """The loaded stage of a uniaxial-strain run; empty otherwise."""
+    if not (spec.spot_pressure_GPa and spec.spot_pressure_mode == "strain"):
+        return ""
+    steps = _load_steps(spec)
+    return LOAD_STAGE.format(pressure=spec.spot_pressure_GPa,
+                             p=spec.spot_pressure_GPa * GPA_TO_EV_A3,
+                             temperature=spec.temperature,
+                             damp_ps=spec.damping_fs * FS_TO_PS,
+                             nrep=steps // 20, load_steps=steps,
+                             load_thermo=max(1, steps // 20))
 
 
 def _piston_gamma(spec: NEMDSpec) -> float:
@@ -856,6 +927,12 @@ def build_input_deck(spec: NEMDSpec) -> str:
     g = spec.geometry
     a = M_TO_ANG
 
+    if not spec.types_a or not spec.types_b or set(spec.types_a) & set(spec.types_b):
+        raise ValueError(f"types_a {spec.types_a} and types_b {spec.types_b} must be "
+                         f"non-empty and disjoint: they define the two sides")
+    if spec.structure_mode == "build" and (tuple(spec.types_a), tuple(spec.types_b)) != ((1,), (2,)):
+        raise ValueError("built cells have one type per side: types_a=(1,), types_b=(2,)")
+
     relax_block = ""
     # Read-in structures (e.g. Si/a-SiO2 from md.structure.interface) relax the
     # same way; the data file must carry the piston headroom in its box.
@@ -866,6 +943,7 @@ def build_input_deck(spec: NEMDSpec) -> str:
             seed=spec.seed,
             damp_ps=spec.damping_fs * FS_TO_PS,
             pdamp_ps=10 * spec.damping_fs * FS_TO_PS,
+            couple="couple xy " if spec.couple_xy else "",
             relax_steps=_relax_steps(spec),
             # At least 20 samples, so a drifting box is visible.
             relax_thermo=max(1, _relax_steps(spec) // 20),
@@ -876,10 +954,15 @@ def build_input_deck(spec: NEMDSpec) -> str:
                                         nrep=_relax_steps(spec) // 20,
                                         **_piston_load(spec))
                        if spec.relax_z else ""),
-            piston_off=PISTON_OFF if spec.relax_z else "",
+            piston_off=(_load_stage(spec) + PISTON_OFF.format(types_a=" ".join(map(str, spec.types_a)),
+                                          types_b=" ".join(map(str, spec.types_b)))
+                        if spec.relax_z else ""),
         )
 
     pressure_block = ""
+    if spec.spot_pressure_mode not in ("stress", "strain"):
+        raise ValueError(f"spot_pressure_mode must be 'stress' or 'strain', "
+                         f"not {spec.spot_pressure_mode!r}")
     if spec.spot_pressure_GPa and not (spec.relax_structure and spec.relax_z):
         # The load is applied by the piston, so it needs the piston. (The
         # first implementation barostatted z with `fix npt`, which LAMMPS
@@ -1097,15 +1180,21 @@ def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:
         flags.add(
             Code.NEMD_SPOT_PRESSURE_MODEL,
             Severity.CAUTION,
-            f"Spot pressure {spec.spot_pressure_GPa:g} GPa is applied as UNIAXIAL "
-            f"STRESS: sigma_zz = -P with the in-plane stress held at zero.",
+            (f"Spot pressure {spec.spot_pressure_GPa:g} GPa is applied as UNIAXIAL "
+             f"STRESS: sigma_zz = -P with the in-plane stress held at zero."
+             if spec.spot_pressure_mode == "stress" else
+             f"Spot pressure {spec.spot_pressure_GPa:g} GPa is applied as UNIAXIAL "
+             f"STRAIN: the in-plane box is held at its unloaded size, so lateral "
+             f"stress builds to ~C12/C11 * P."),
             remedy=(
                 "Under a real asperity the material is partly constrained "
                 "laterally by its surroundings, which lies between uniaxial "
-                "stress and uniaxial strain. The two bracket the answer; "
-                "report the bracket if h_K turns out pressure-sensitive."
+                "stress and uniaxial strain. The two bracket the answer: run "
+                "the other spot_pressure_mode too and report the bracket if "
+                "h_K turns out pressure-sensitive."
             ),
             spot_pressure_GPa=spec.spot_pressure_GPa,
+            spot_pressure_mode=spec.spot_pressure_mode,
         )
 
     bins_per_side = min(g.bulk_a_length, g.bulk_b_length) / g.bin_width
@@ -1443,6 +1532,7 @@ def check_run_health(
     max_pressure_GPa: float = 1.0,
     use_last_block: bool = True,
     expected_pzz_GPa: float = 0.0,
+    lateral_constrained: bool = False,
 ) -> None:
     """Did the run actually do what the deck asked?
 
@@ -1517,6 +1607,25 @@ def check_run_health(
     # (LAMMPS: positive = compressive). Judge the residual about it.
     if "Pzz" in component_means and expected_pzz_GPa:
         component_means["Pzz"] -= expected_pzz_GPa
+    # Uniaxial strain: the in-plane box is held, so sigma_xx, sigma_yy are
+    # SUPPOSED to follow the load (~C12/C11 * P; Si(100) ~0.39). Not a residual:
+    # check it is physical (same sign, smaller than the load) instead.
+    if lateral_constrained and expected_pzz_GPa:
+        for key in ("Pxx", "Pyy"):
+            if key not in component_means:
+                continue
+            ratio = component_means.pop(key) / expected_pzz_GPa
+            if not 0.0 < ratio < 1.0:
+                flags.add(
+                    Code.NEMD_CELL_STRESS,
+                    Severity.WARNING,
+                    f"Under uniaxial strain {key} / P = {ratio:+.2f}; a loaded, "
+                    f"laterally held crystal sits between 0 and 1 (~C12/C11).",
+                    remedy=("The load stage did not reach the state it claims: "
+                            "check that the in-plane box was fixed and the "
+                            "load stage long enough for the piston to settle."),
+                    **{f"lateral_ratio_{key}": ratio},
+                )
 
     if component_means:
         worst_key = max(component_means, key=lambda k: abs(component_means[k]))

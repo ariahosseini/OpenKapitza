@@ -316,6 +316,62 @@ class TestDeck(unittest.TestCase):
         check_spec(self.spec, f)
         self.assertIn(Code.NEMD_SPOT_PRESSURE_MODEL, f.codes())
 
+    def test_uniaxial_strain_loads_only_after_the_box_is_fixed(self):
+        """P1-10: relax in-plane UNLOADED, fix the box, then load the piston.
+        Loading under the barostat would be uniaxial stress again."""
+        self.spec.spot_pressure_GPa = 3.0
+        self.spec.spot_pressure_mode = "strain"
+        deck = build_input_deck(self.spec)
+        i_unload = deck.index("variable        pfz equal 0.0")
+        i_unfix = deck.index("unfix           relax\n")
+        i_box = deck.index("change_box")
+        i_load = deck.index("variable        pfz equal -")
+        i_run = deck.index("run", i_load)
+        i_freeze = deck.index("displace_atoms  gwall_hi")
+        self.assertLess(i_unload, i_unfix)
+        self.assertLess(i_unfix, i_box); self.assertLess(i_box, i_load)
+        self.assertLess(i_load, i_run); self.assertLess(i_run, i_freeze)
+        p_ev = float(re.search(r"pfz equal -([0-9.e+-]+)\*", deck).group(1))
+        self.assertAlmostEqual(p_ev * 160.21766208, 3.0, places=6)
+        # the loaded stage integrates at fixed box, and averages the wall afresh
+        load = deck[i_load:i_freeze]
+        self.assertIn("nvt", load); self.assertNotIn("npt", load)
+        self.assertIn("fix             zav", load)
+
+    def test_uniaxial_stress_is_the_default_and_unchanged(self):
+        self.spec.spot_pressure_GPa = 3.0
+        deck = build_input_deck(self.spec)
+        self.assertNotIn("OPENKAPITZA_LOADED", deck)
+        self.assertNotIn("pfz equal 0.0", deck)
+
+    def test_load_window_must_tile_the_relaxation(self):
+        self.spec.spot_pressure_GPa = 3.0
+        self.spec.spot_pressure_mode = "strain"
+        self.spec.load_steps = 30_000          # does not divide 50 000
+        with self.assertRaises(ValueError):
+            build_input_deck(self.spec)
+        self.spec.load_steps = 25_000
+        self.assertIn("run             25000", build_input_deck(self.spec))
+        self.spec.spot_pressure_mode = "sideways"
+        with self.assertRaises(ValueError):
+            build_input_deck(self.spec)
+
+    def test_strain_mode_flag_names_the_bound(self):
+        self.spec.spot_pressure_GPa = 2.0
+        self.spec.spot_pressure_mode = "strain"
+        f = FlagSet()
+        check_spec(self.spec, f)
+        flag = next(x for x in f.flags if x.code == Code.NEMD_SPOT_PRESSURE_MODEL)
+        self.assertIn("UNIAXIAL STRAIN", flag.message)
+        self.assertIn("other spot_pressure_mode", flag.remedy)
+
+    def test_anisotropic_surfaces_relax_each_axis(self):
+        self.spec.couple_xy = False
+        deck = build_input_deck(self.spec)
+        npt = re.search(r"(?m)^fix\s+relax .*npt.*$", deck).group(0)
+        self.assertNotIn("couple", npt)
+        self.assertRegex(npt, r"x 0\.0 0\.0 [0-9.]+ y 0\.0 0\.0 [0-9.]+")
+
     def test_relaxation_barostats_only_the_periodic_dimensions(self):
         """Relaxation is default-on, so the default deck DOES contain npt."""
         deck = build_input_deck(self.spec)
@@ -467,6 +523,25 @@ class TestDeck(unittest.TestCase):
         deck = build_input_deck(self.spec)
         self.assertIn("read_data       interface.data", deck)
         self.assertNotIn("create_atoms", deck)
+
+    def test_sides_group_by_their_types(self):
+        """The relaxed interface is located per side: every side type counts."""
+        self.assertIn("group           gside_a type 1\n", build_input_deck(self.spec))
+        self.spec.structure_mode = "read_data"
+        self.spec.types_a, self.spec.types_b = (1, 2), (3, 4)
+        deck = build_input_deck(self.spec)
+        self.assertIn("group           gside_a type 1 2\n", deck)
+        self.assertIn("group           gside_b type 3 4\n", deck)
+
+    def test_side_types_must_be_disjoint_and_one_per_side_when_built(self):
+        self.spec.structure_mode = "read_data"
+        self.spec.types_a, self.spec.types_b = (1, 2), (2, 3)
+        with self.assertRaises(ValueError):
+            build_input_deck(self.spec)
+        self.spec.structure_mode = "build"
+        self.spec.types_a, self.spec.types_b = (1,), (2, 3)
+        with self.assertRaises(ValueError):
+            build_input_deck(self.spec)
 
     def test_unknown_structure_mode_rejected(self):
         self.spec.structure_mode = "telepathy"

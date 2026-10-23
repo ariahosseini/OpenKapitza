@@ -5,4 +5,4 @@ ideal cells; `amorphous` makes and validates a melt-quenched glass;
 `interface` joins a crystal to a glass for NEMD.
 """
 
-from . import amorphous, analysis, crystals, interface  # noqa: F401
+from . import amorphous, analysis, crystalline, crystals, interface  # noqa: F401

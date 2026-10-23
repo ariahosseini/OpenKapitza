@@ -151,6 +151,30 @@ EXIT`, so it is written even when the script dies on a trappable signal.
 
 ---
 
+### Lattice matching on the conventional cell misses the primitive surface cells
+
+The first rectangular-supercell matcher enumerated in-plane vectors as integer
+combinations of the CONVENTIONAL cubic vectors. For diamond and fcc that lattice
+is missing the centring translations a/2⟨110⟩, so the smallest Si(100) cell it
+could find was 5.43 × 5.43 Å instead of the primitive 3.84 × 3.84 Å, and Si(111)
+was 2× too large. Every match was then found on supercells too big by 2-4× in
+area, and some good ones (Si/Al(100) at 8.59 Å, 0.04 %) not at all. Nothing
+failed: the matches it did report were valid, only not minimal. Fix:
+`Crystal.centring()` derives the pure translations from the basis (any shift
+mapping every atom onto a same-species atom), so a conventional cell with any
+basis is enumerated as its true lattice. Test: Si(100) primitive length
+a/√2, Si(111) a/√2 × a√(3/2), GaN(0001) a × a√3.
+
+### A side group built from one type misses the other species on that side
+
+`PISTON_OFF` grouped side B as `type 2`. On a Si/a-SiO₂ cell (types 1 crystal
+Si, 2 glass Si, 3 O) that group is the glass Si only, so `bottom_b` — and the
+relaxed interface plane every measurement bins against — ignored the oxygen,
+which at a strongly bonded interface is the species closest to the crystal.
+Both saved Si/SiO₂ decks carried it. Nothing errors. Now `NEMDSpec.types_a` /
+`types_b` list every type per side (Si/SiO₂: (1,) and (2, 3); SiC/GaN: (1, 2)
+and (3, 4)), are checked disjoint, and the decks were regenerated.
+
 ## 3. Physics corrections that change the answer
 
 ### h_K and h_c are per different areas — the naive series sum is wrong by 1/ξ
@@ -951,6 +975,15 @@ weakly coupled class, whose h_K Lampin et al. (2012) find 5x lower than the
 strongly coupled one with the same potential and quench rate. The builder
 now reports coverage and class for every interface, and flags a preset that
 missed its class.
+
+### A strain-mode load stage must tile the relaxation window
+
+The uniaxial-strain spot pressure (P1-10) adds a loaded stage after the
+in-plane relaxation, with its own `fix ave/time` for the wall position.
+`ave/time` fires only on timesteps that are multiples of its Nfreq, and the
+stage starts at step `relax_steps` (the counter is not reset), so unless
+`load_steps` divides `relax_steps` the average is never evaluated at the end
+of the stage and `f_zav` is read stale. `_load_steps` refuses such a length.
 
 ## 5. Environment facts
 
