@@ -10,10 +10,10 @@ Method
 ------
 One long run instead of a sweep. `steady_steps` is set deliberately SMALL so
 the transient lands inside the production window, and the reservoir
-accumulators are then read in sliding windows: for a window starting at t0,
-fit dE/dt over its first and second half and compare, exactly as
-`check_flux_stationarity` does. The equilibration time is the smallest t0
-whose window is stationary.
+accumulators are then read in sliding windows, each tested with the same
+noise-aware trend test `check_flux_stationarity` uses (`md.stationarity`).
+The equilibration time is the smallest t0 from which windows are CERTIFIED
+stationary; windows the data cannot resolve do not count.
 
 A sweep over `steady_steps` would answer the same question with one run per
 point and no more information, because the accumulators already record the
@@ -44,34 +44,23 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))          # pin to THIS tree
 
 from openkapitza.md import parse_reservoir_series
+from openkapitza.md.stationarity import Verdict, analyse_drift
 
 PS = 1e-12
 CONSECUTIVE_REQUIRED = 3
 
 
-def _rate(ts: list[float], es: list[float]) -> float:
-    n = len(ts)
-    if n < 2:
-        return 0.0
-    mean_t = sum(ts) / n
-    mean_e = sum(es) / n
-    denom = sum((t - mean_t) ** 2 for t in ts)
-    if denom == 0.0:
-        return 0.0
-    return sum((t - mean_t) * (e - mean_e) for t, e in zip(ts, es)) / denom
-
-
-def windowed_drift(
-    t: list[float], series: list[float], lo: int, hi: int
-) -> tuple[float, float]:
-    """(drift, mean power) for samples [lo, hi)."""
-    mid = lo + (hi - lo) // 2
-    first = _rate(t[lo:mid], series[lo:mid])
-    second = _rate(t[mid:hi], series[mid:hi])
-    mean_rate = (first + second) / 2.0
-    if mean_rate == 0.0:
-        return (float("inf"), 0.0)
-    return (abs(second - first) / abs(mean_rate), mean_rate)
+def _window(t: list[float], series: list[float], lo: int, hi: int,
+            tolerance: float):
+    """Drift test on samples [lo, hi), or None if the window cannot be tested."""
+    n = hi - lo
+    k = min(20, n // 3)
+    if k < 4:
+        return None
+    try:
+        return analyse_drift(t[lo:hi], series[lo:hi], tolerance=tolerance, n_windows=k)
+    except ValueError:
+        return None
 
 
 def analyse(run_dir: Path, window_ps: float, tolerance: float) -> int:
@@ -87,7 +76,7 @@ def analyse(run_dir: Path, window_ps: float, tolerance: float) -> int:
 
     span_ps = (t[-1] - t[0]) / PS
     dt_ps = (t[1] - t[0]) / PS
-    window_n = max(8, int(window_ps / dt_ps))
+    window_n = max(12, int(window_ps / dt_ps))
     if window_n >= len(t):
         window_ps = span_ps / 2.0
         window_n = len(t) // 2
@@ -99,17 +88,21 @@ def analyse(run_dir: Path, window_ps: float, tolerance: float) -> int:
           f"tolerance {tolerance * 100:.0f} %\n")
 
     step = max(1, window_n // 4)
-    print(f"{'window start':>13} {'hot drift':>10} {'cold drift':>11} "
-          f"{'hot power':>12} {'cold power':>12} {'imbal':>7} {'ok':>4}")
+    print(f"{'window start':>13} {'hot drift':>15} {'cold drift':>15} "
+          f"{'hot power':>12} {'cold power':>12} {'imbal':>7} {'verdict':>11}")
 
     equilibrated_at: float | None = None
     streak = 0
     imbalances: list[float] = []
+    verdicts: list[str] = []
     for lo in range(0, len(t) - window_n + 1, step):
         hi = lo + window_n
-        d_hot, p_hot = windowed_drift(t, hot, lo, hi)
-        d_cold, p_cold = windowed_drift(t, cold, lo, hi)
-        worst = max(d_hot, d_cold)
+        rh = _window(t, hot, lo, hi, tolerance)
+        rc = _window(t, cold, lo, hi, tolerance)
+        if rh is None or rc is None:
+            verdicts.append("untestable")
+            streak = 0
+            continue
 
         # Energy in must equal energy out at steady state. A persistent
         # imbalance is a DIFFERENT failure from drift: drift says the run has
@@ -117,16 +110,28 @@ def analyse(run_dir: Path, window_ps: float, tolerance: float) -> int:
         # for -- a thermostat on the wrong group, walls that are not really
         # fixed, or stored strain energy still draining into the lattice.
         # Both must be satisfied before a window is a measurement.
+        p_hot, p_cold = rh.mean_power, rc.mean_power
         mean_mag = (abs(p_hot) + abs(p_cold)) / 2.0
         imbalance = (abs(abs(p_hot) - abs(p_cold)) / mean_mag
                      if mean_mag > 0.0 else float("inf"))
         imbalances.append(imbalance)
 
-        ok = worst <= tolerance and imbalance <= tolerance
+        if Verdict.DRIFTING in (rh.verdict, rc.verdict):
+            verdict = "drifting"
+        elif rh.verdict is Verdict.STATIONARY and rc.verdict is Verdict.STATIONARY:
+            verdict = "stationary"
+        else:
+            verdict = "unresolved"
+        verdicts.append(verdict)
+        # Only a CERTIFIED stationary window counts toward equilibration:
+        # "unresolved" means the data could not show it, not that it holds.
+        ok = verdict == "stationary" and imbalance <= tolerance
         start_ps = (t[lo] - t[0]) / PS
-        print(f"{start_ps:11.0f} ps {d_hot * 100:9.1f}% {d_cold * 100:10.1f}% "
+        print(f"{start_ps:11.0f} ps "
+              f"{rh.drift * 100:+6.1f}+/-{rh.drift_se * 100:4.1f}% "
+              f"{rc.drift * 100:+6.1f}+/-{rc.drift_se * 100:4.1f}% "
               f"{p_hot:12.3e} {p_cold:12.3e} {imbalance * 100:6.0f}% "
-              f"{'yes' if ok else 'no':>4}")
+              f"{verdict + ('' if ok or verdict != 'stationary' else '*'):>11}")
         if ok:
             streak += 1
             if streak >= CONSECUTIVE_REQUIRED and equilibrated_at is None:
@@ -147,11 +152,18 @@ def analyse(run_dir: Path, window_ps: float, tolerance: float) -> int:
         print("or walls that are not actually fixed.")
         print()
     if equilibrated_at is None:
+        if verdicts and "drifting" not in verdicts and "unresolved" in verdicts:
+            print(f"STATISTICS-LIMITED over {span_ps:.0f} ps: no window shows a")
+            print("significant drift, but none can be certified steady to within")
+            print(f"{tolerance * 100:.0f} %. This is not an equilibration problem;")
+            print("lengthen the window (--window-ps) or the cross-section to cut")
+            print("the power noise. A longer equilibration will not help.")
+            return 1
         print(f"NOT EQUILIBRATED anywhere in {span_ps:.0f} ps.")
-        print("Every window still drifts beyond tolerance, so no part of this")
-        print("run is a steady-state measurement. Lengthen the run before")
-        print("reading any h_K from it, and do not start the convergence")
-        print("campaign on this cell yet.")
+        print("No window is certified stationary, so no part of this run is a")
+        print("steady-state measurement. Lengthen the run before reading any")
+        print("h_K from it, and do not start the convergence campaign on this")
+        print("cell yet.")
         return 1
 
     print(f"EQUILIBRATED from about {equilibrated_at:.0f} ps "

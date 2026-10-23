@@ -1175,29 +1175,33 @@ def check_flux_stationarity(
     flags: FlagSet,
     *,
     tolerance: float = 0.15,
+    n_windows: int = 10,
 ) -> dict[str, float]:
     """Is the reservoir power actually constant across the averaging window?
 
     WHY THIS EXISTS. A 20 ps and a 60 ps run of the same cell returned
     h_K = 17453 and 1348 MW/m^2K -- a factor of 13 -- while raising the
-    IDENTICAL set of eleven flags between them. Nothing in the extraction or
-    the run-health check distinguished them. `NEMD_UNEQUILIBRATED` existed but
-    never fired, because it compares mean temperature against the setpoint,
-    and temperature equilibrating is NOT the same as heat flow reaching steady
-    state: the reservoirs can sit at their setpoints while the thermal profile
-    between them is still developing.
+    IDENTICAL set of eleven flags between them. `NEMD_UNEQUILIBRATED` existed
+    but never fired, because it compares mean temperature against the
+    setpoint, and temperature equilibrating is NOT the same as heat flow
+    reaching steady state.
 
-    At steady state dE/dt is constant in each reservoir. So fit the rate over
-    the first and second half of the window separately and compare. On those
-    two runs this cleanly separated them -- hot/cold drift of 19 %/97 % at
-    60 ps against 76 %/169 % at 20 ps -- and correctly called BOTH
-    non-stationary, which they were.
+    HOW (see `md.stationarity`). A trend test on the window-mean reservoir
+    power whose standard error comes from the data's own scatter, so the
+    verdict distinguishes three cases the first version conflated:
+    drifting (WARNING, NEMD_UNEQUILIBRATED), stationary to within
+    `tolerance` (no flag), and unresolved -- the data cannot show drift below
+    the tolerance (CAUTION, NEMD_STATIONARITY_UNRESOLVED). The first version
+    compared two half-window slopes against a fixed 15 %, and on a real
+    400 ps run that ratio's own noise was 36 %, so it reported every run as
+    not steady (open issue P1-1).
 
-    Returns the measured drifts so a caller can report numbers rather than
-    just a flag.
+    Returns the measured relative drift per reservoir.
     """
+    from .stationarity import Verdict, analyse_drift
+
     t, hot, cold = parse_reservoir_series(path)
-    if len(t) < 8:
+    if len(t) < 4 * 3:
         flags.add(
             Code.NEMD_UNEQUILIBRATED,
             Severity.WARNING,
@@ -1213,42 +1217,53 @@ def check_flux_stationarity(
         )
         return {}
 
-    def _rate(ts: list[float], es: list[float]) -> float:
-        n = len(ts)
-        mean_t = sum(ts) / n
-        mean_e = sum(es) / n
-        denom = sum((x - mean_t) ** 2 for x in ts)
-        if denom == 0.0:
-            return 0.0
-        return sum((x - mean_t) * (y - mean_e) for x, y in zip(ts, es)) / denom
-
-    mid = len(t) // 2
-    drifts: dict[str, float] = {}
+    results = {}
     for name, series in (("hot", hot), ("cold", cold)):
-        first = _rate(t[:mid], series[:mid])
-        second = _rate(t[mid:], series[mid:])
-        mean_rate = (first + second) / 2.0
-        if mean_rate == 0.0:
+        try:
+            results[name] = analyse_drift(t, series, tolerance=tolerance,
+                                          n_windows=n_windows)
+        except ValueError:
             continue
-        drifts[name] = abs(second - first) / abs(mean_rate)
+    drifts = {k: abs(r.drift) for k, r in results.items()}
 
-    worst = max(drifts.values(), default=0.0)
-    if worst > tolerance:
-        detail = ", ".join(f"{k} {v * 100:.0f} %" for k, v in sorted(drifts.items()))
+    def _fmt(names):
+        return ", ".join(
+            f"{k} {results[k].drift * 100:+.0f} +/- {results[k].drift_se * 100:.0f} %"
+            for k in sorted(names))
+
+    drifting = [k for k, r in results.items() if r.verdict is Verdict.DRIFTING]
+    unresolved = [k for k, r in results.items() if r.verdict is Verdict.UNRESOLVED]
+    if drifting:
         flags.add(
             Code.NEMD_UNEQUILIBRATED,
             Severity.WARNING,
             f"Reservoir power is still drifting across the averaging window "
-            f"({detail}); the run was not at steady state while the flux was "
-            f"measured.",
+            f"({_fmt(drifting)}, significant against its own noise); the run "
+            f"was not at steady state while the flux was measured.",
             remedy=(
                 "h_K from a non-stationary run is not a measurement -- it can "
                 "be wrong by an order of magnitude while every other "
                 "diagnostic looks unremarkable. Lengthen the steady-state "
-                "stage before production, then re-run. Confirm this drift is "
-                "under the tolerance before quoting any h_K."
+                "stage before production, then re-run."
             ),
-            **{f"drift_{k}": v for k, v in drifts.items()},
+            **{f"drift_{k}": results[k].drift for k in drifting},
+            **{f"drift_se_{k}": results[k].drift_se for k in drifting},
+        )
+    elif unresolved:
+        worst = max(results[k].resolution for k in unresolved)
+        flags.add(
+            Code.NEMD_STATIONARITY_UNRESOLVED,
+            Severity.CAUTION,
+            f"No significant drift in reservoir power ({_fmt(unresolved)}), but "
+            f"the data can only resolve drift down to {worst * 100:.0f} %, above "
+            f"the {tolerance * 100:.0f} % tolerance. Steady state is plausible, "
+            f"not shown.",
+            remedy=(
+                "This is a statistics limit, not a transient: lengthen the "
+                "PRODUCTION window or widen the cross-section to cut the "
+                "power noise. A longer equilibration will not help."
+            ),
+            resolution=worst,
         )
     return drifts
 

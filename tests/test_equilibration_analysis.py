@@ -27,7 +27,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from scripts.find_equilibration_time import analyse, windowed_drift
+from scripts.find_equilibration_time import analyse
 
 EV_PER_J = 1.0 / 1.602176634e-19
 
@@ -154,19 +154,22 @@ class TestGuards(AnalyserFixture):
         self.assertIn(code, (1, 2))
 
 
-class TestWindowedDrift(unittest.TestCase):
-    def test_linear_series_has_zero_drift(self):
-        t = [1e-12 * i for i in range(200)]
-        e = [-0.5 * x for x in t]
-        drift, power = windowed_drift(t, e, 0, 200)
-        self.assertLess(drift, 1e-9)
-        self.assertAlmostEqual(power, -0.5, places=6)
-
-    def test_curving_series_has_nonzero_drift(self):
-        t = [1e-12 * i for i in range(200)]
-        e = [-0.5 * x - 1e10 * x * x for x in t]
-        drift, _ = windowed_drift(t, e, 0, 200)
-        self.assertGreater(drift, 0.01)
+class TestStatisticsLimited(AnalyserFixture):
+    def test_noisy_steady_run_is_statistics_limited_not_unequilibrated(self):
+        """Open issue P1-1: steady but noisy must not read as 'not equilibrated'."""
+        import random
+        rnd = random.Random(4)
+        times, hot, cold = [], [], []
+        h = c = 0.0
+        for i in range(1200):
+            h += -0.05 + rnd.gauss(0, 0.2)
+            c += 0.05 + rnd.gauss(0, 0.2)
+            times.append(0.1 * i); hot.append(h); cold.append(c)
+        path = _write(self.dir / "reservoir_energy.dat", times, hot, cold)
+        code, out = _run(path, window_ps=20.0)
+        self.assertEqual(code, 1, out)
+        self.assertIn("STATISTICS-LIMITED", out)
+        self.assertNotIn("NOT EQUILIBRATED", out)
 
 
 if __name__ == "__main__":

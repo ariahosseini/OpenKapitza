@@ -106,10 +106,14 @@ class TestStationarityDetection(StationarityFixture):
         self.assertIn("too few", flags.flags[0].message.lower())
 
     def test_tolerance_is_honoured(self):
+        # A noisy but stationary run cannot be CERTIFIED steady to 1e-9; that
+        # is "unresolved" (a statistics limit), not "drifting". The first
+        # version reported it as drifting -- the conflation P1-1 fixed.
         flags_strict = FlagSet()
         check_flux_stationarity(self._stationary(noise=0.05), flags_strict,
                                 tolerance=1e-9)
-        self.assertIn(Code.NEMD_UNEQUILIBRATED, flags_strict.codes())
+        self.assertIn(Code.NEMD_STATIONARITY_UNRESOLVED, flags_strict.codes())
+        self.assertNotIn(Code.NEMD_UNEQUILIBRATED, flags_strict.codes())
 
         flags_loose = FlagSet()
         check_flux_stationarity(self._drifting(), flags_loose, tolerance=10.0)
