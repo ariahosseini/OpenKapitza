@@ -77,5 +77,25 @@ class Join(unittest.TestCase):
         self.assertAlmostEqual(sum(ch.suboxide.values()), 1.0, places=9)
 
 
+class Bonding(unittest.TestCase):
+    def test_full_oxidation_reference(self):
+        from openkapitza.structure.interface import FULL_BONDS_PER_NM2
+        self.assertAlmostEqual(FULL_BONDS_PER_NM2, 13.56, delta=0.01)
+
+    def test_classes(self):
+        from openkapitza.structure.interface import bonding_class
+        self.assertEqual(bonding_class(0.2), "weak")
+        self.assertEqual(bonding_class(0.5), "intermediate")
+        self.assertEqual(bonding_class(0.9), "strong")
+
+    def test_presets(self):
+        g = NEMDGeometry()
+        s = InterfaceSpec.from_preset("strong", g, lateral_cells=4)
+        self.assertEqual((s.bonding, s.gap, s.anneal, s.anneal_T), ("strong", 1.0, True, 2000.0))
+        self.assertFalse(InterfaceSpec.from_preset("weak", g).anneal)
+        with self.assertRaises(ValueError):
+            InterfaceSpec.from_preset("medium", g)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -38,6 +38,28 @@ SI_C, SI_OX, O_T = 1, 2, 3
 SI_O_BOND = 2.0               # A, bond cutoff for counting
 
 
+# Si(100): 2 surface atoms per a0^2 cell = 6.78 per nm^2. In a fully oxidised
+# interface each bonds to two O, so ~13.6 Si(crystal)-O bonds per nm^2.
+SI100_SITES_PER_NM2 = 2.0 / (0.5431 ** 2)
+FULL_BONDS_PER_NM2 = 2.0 * SI100_SITES_PER_NM2
+
+# Interface bonding classes (Lampin et al. 2012, arXiv:1210.0354: strongly
+# coupled 0.83e-9 m^2K/W vs weakly coupled 4.27e-9 m^2K/W at 300 K, same
+# potential and quench rate). Presets aim at a class; the build reports the
+# coverage it actually reached and flags a miss.
+BONDING_PRESETS = {
+    "weak": {"gap": 2.5, "anneal": False},
+    # Hot band mostly on the oxide side: 2000 K reaching deep into the crystal
+    # would start to disorder it.
+    "strong": {"gap": 1.0, "anneal": True, "anneal_T": 2000.0, "anneal_ps": 50.0,
+               "cool_ps": 50.0, "anneal_band": 6.0, "anneal_band_si": 1.0},
+}
+
+
+def bonding_class(coverage: float) -> str:
+    return "weak" if coverage < 0.3 else ("strong" if coverage > 0.7 else "intermediate")
+
+
 @dataclass
 class InterfaceSpec:
     geometry: NEMDGeometry
@@ -47,16 +69,25 @@ class InterfaceSpec:
     headroom: float = 10.0         # A of empty box above the cell, for the piston
     anneal: bool = True
     anneal_T: float = 1200.0       # K, hot band around the interface
-    anneal_band: float = 6.0       # A either side of the interface
+    anneal_band: float = 6.0       # A above the interface (oxide side)
+    anneal_band_si: float | None = None   # A below it (crystal side); None: = anneal_band
     anneal_ps: float = 20.0
     cool_ps: float = 20.0
     timestep_fs: float = 0.5
     seed: int = 5531
     potential: str = "SiO.tersoff"
 
+    bonding: str | None = None     # requested class, set by from_preset
+
     @property
     def width(self) -> float:
         return self.lateral_cells * self.si_lattice
+
+    @classmethod
+    def from_preset(cls, name: str, geometry: NEMDGeometry, **kw) -> "InterfaceSpec":
+        if name not in BONDING_PRESETS:
+            raise ValueError(f"unknown bonding preset {name!r}; use {sorted(BONDING_PRESETS)}")
+        return cls(geometry, bonding=name, **{**BONDING_PRESETS[name], **kw})
 
 
 def _bonds(glass: Cell, si_type: int, o_type: int) -> tuple[np.ndarray, np.ndarray]:
@@ -169,6 +200,15 @@ class InterfaceChemistry:
     suboxide: dict[str, float]            # fraction of top-layer crystal Si with n O
     dangling_o: int                       # O with one Si neighbour near the interface
 
+    @property
+    def coverage(self) -> float:
+        """Si(crystal)-O bonds relative to a fully oxidised Si(100) interface."""
+        return self.si_o_bonds_per_nm2 / FULL_BONDS_PER_NM2
+
+    @property
+    def bonding_class(self) -> str:
+        return bonding_class(self.coverage)
+
 
 def interface_chemistry(cell: Cell, *, band: float = 4.0) -> InterfaceChemistry:
     """Si(crystal)-O bonding across the interface."""
@@ -256,7 +296,9 @@ def build_interface(lmp: Path, glass: Cell, spec: InterfaceSpec, potential_dir: 
         deck = ANNEAL_DECK.format(
             potential=spec.potential, dt_ps=spec.timestep_fs * 1e-3,
             z_lo_wall=g.wall_thickness * 1e10, z_hi_wall=g.z_cold_end * 1e10,
-            band_lo=iz - spec.anneal_band, band_hi=iz + spec.anneal_band,
+            band_lo=iz - (spec.anneal_band if spec.anneal_band_si is None
+                          else spec.anneal_band_si),
+            band_hi=iz + spec.anneal_band,
             seed=spec.seed, t_hot=spec.anneal_T, thermo=steps(1.0),
             anneal_steps=steps(spec.anneal_ps), cool_steps=steps(spec.cool_ps))
         (workdir / "anneal.in").write_text(deck)
@@ -270,11 +312,23 @@ def build_interface(lmp: Path, glass: Cell, spec: InterfaceSpec, potential_dir: 
         cell = annealed
         out_file = workdir / "interface.data"
     chem = interface_chemistry(cell)
+    if spec.bonding and chem.bonding_class != spec.bonding:
+        flags.add(
+            Code.STRUCT_INTERFACE_BONDING, Severity.CAUTION,
+            f"Requested a {spec.bonding}ly bonded interface but reached "
+            f"{chem.coverage * 100:.0f} % of full Si(100) oxidation "
+            f"({chem.bonding_class}).",
+            remedy=("Lampin et al. (2012) find a 5x spread in h_K between strong "
+                    "and weak coupling with this potential. Adjust gap / anneal and "
+                    "rebuild, or report the class actually reached."),
+            coverage=chem.coverage,
+        )
     flags.add(
         Code.STRUCT_INTERFACE_BONDING, Severity.INFO,
         f"Si/a-SiO2 interface: {'annealed at %.0f K' % spec.anneal_T if spec.anneal else 'joined, not annealed'}; "
         f"glass cut where {rep.broken_bonds} Si-O bonds cross ({rep.broken_per_nm2:.1f} per nm^2); "
-        f"gap {spec.gap:.2f} A; {chem.si_o_bonds_per_nm2:.1f} Si(crystal)-O bonds per nm^2; "
+        f"gap {spec.gap:.2f} A; {chem.si_o_bonds_per_nm2:.1f} Si(crystal)-O bonds per nm^2 "
+        f"({chem.coverage * 100:.0f} % of full oxidation: {chem.bonding_class}); "
         f"top-layer Si sub-oxides "
         + ", ".join(f"{k} {v * 100:.0f} %" for k, v in sorted(chem.suboxide.items())) + ".",
         remedy=("These choices change h_K more than most others (section 3). Quote them "

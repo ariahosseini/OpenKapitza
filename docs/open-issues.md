@@ -55,11 +55,27 @@ after Phase 1.
 | P5-4 | **Air (N₂/O₂) accommodation on Cu/Al** — the gases and metals packaging actually uses. Only He, Ne, Ar, N₂ LJ parameters exist; no physisorption target for N₂. | open, low priority | Calibrated N₂ on Cu with a sourced adsorption energy. |
 | P5-5 | **Nanohardness box too narrow** (2.1 contact diameters). | parked | Wider slab. |
 
+## Phase 2 — structure module (started 22 Oct)
+
+Built: `openkapitza/structure/` — analysis (density, RDF, coordination, angles;
+exact on ideal crystals), a-SiO₂ melt-quench with validation gate and
+quench-rate flag, Si(100)/a-SiO₂ join with recorded bonding choices;
+heterostructures (fcc on diamond) live in `md/nemd.py`. Script:
+`scripts/build_si_sio2.py`.
+
+| ID | Item | Status | Closes when |
+|---|---|---|---|
+| P2-2 | **a-SiO₂ at 10¹³ K/s passes the gate.** 10¹⁴ K/s smoke: local geometry right, but 73 % fourfold Si and 2.33 g/cm³ — rejected. | in progress (local 10¹³ K/s quenches running) | Gate passes, or the failing metrics are stated and a slower rate is queued for the cluster. |
+| P2-3 | **Si/a-SiO₂ h_K.** Targets (300 K): Lampin et al. 2012, same potential and rate — strong bonding 0.83 ± 0.25 × 10⁻⁹ m²K/W (≈1.2 GW/m²K), weak 4.27 ± 1.78 × 10⁻⁹ (≈0.23 GW/m²K); experiment > 0.6 GW/m²K (Kimling et al., TR-MOKE). | open | Converged h_K with bonding descriptors stated, inside the bracket for its bonding class. |
+| P2-4 | **Si in `SiO.tersoff` fails the elastic gate** (−14/+18/−13 %): same Tersoff Si(D) as `SiCGe.tersoff`. | open | Reported with every Si/SiO₂ h_K; or a gated Si–O potential. |
+| P2-5 | **Quench-rate sensitivity.** One rate is one sample of the rate-dependent glass. | **cluster** | h_K at two rates (10¹³ and 10¹² K/s). |
+| P2-6 | **Interface bonding sensitivity** (annealed vs as-joined; gap). Lampin: 5x spread between strong and weak coupling. | open | h_K for both bonding choices on the same glass. |
+| P2-1 | General crystalline supercell matching beyond (100) cube-on-cube (other orientations, hexagonal GaN/SiC). | open | — |
+
 ## Later phases
 
 | ID | Item | Status |
 |---|---|---|
-| P2-1 | Structure module: crystalline supercell matching; melt-quench amorphous path (Si/SiO₂) with quench-rate reporting and RDF/bond-angle validation. Feeds P1-6, P1-7. | open |
 | P3-1 | Agent layer wrapping Phases 0–2. | open |
 | P4-1 | Tier-2 MLIPs behind the phonon-DOS / elastic / bulk-k gate. | open |
 
