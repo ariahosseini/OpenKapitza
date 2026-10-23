@@ -11,11 +11,13 @@ from openkapitza.schema.flags import Code, Severity
 
 
 class SeriesModel(unittest.TestCase):
-    def test_reproduces_liang_al_si_series_value(self):
-        # Liang et al. 2014: phonon-only 0.47 GW/m^2K, series model 0.37.
+    def test_reproduces_yang_al_si_series_value_from_their_inputs(self):
+        # Yang et al., arXiv:1401.5550: G_pp 0.46 GW/m^2K, k_p 17.0 W/mK (their
+        # Green-Kubo), g 2.45e17 -> G_ep 2.0, series 0.37. Their inputs, not a fit.
         flags = FlagSet()
-        est = series_with_ep(0.47e9, "Al", 12.3, flags)
-        self.assertAlmostEqual(est.h_total / 1e9, 0.37, delta=0.005)
+        est = series_with_ep(0.46e9, "Al", 17.0, flags)
+        self.assertAlmostEqual(est.h_ep / 1e9, 2.0, delta=0.05)
+        self.assertAlmostEqual(est.h_total / 1e9, 0.37, delta=0.01)
         self.assertIn(Code.NEMD_PHONON_ONLY_METAL, flags.codes())
 
     def test_formula(self):

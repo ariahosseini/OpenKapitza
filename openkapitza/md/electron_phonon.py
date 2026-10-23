@@ -14,9 +14,18 @@ with g the metal's electron-phonon coupling factor and k_p its LATTICE
 thermal conductivity -- which is exactly what work package 5c's MD bulk k
 returns for a metal (`md.conductivity`, labelled lattice-only there).
 
-Check on Al/Si (Liang et al. 2014, arXiv:1401.5550): phonon-only NEMD
-0.47 GW/m^2K, their series model 0.37. With g = 2.45e17 W/m^3K this formula
-reproduces the series value for k_p = 12.3 W/mK (h_ep = 1.74 GW/m^2K).
+Check on Al/Si (N. Yang, T. Luo, ..., G. Chen, arXiv:1401.5550, 2NN MEAM of
+Lee et al.): phonon-only NEMD 0.47 GW/m^2K extrapolated; their series model
+uses G_pp = 0.46, g = 2.45e17 W/m^3K and their own Green-Kubo k_p = 17.0 W/mK,
+giving h_ep = 2.0 and a total of 0.37 GW/m^2K. This formula reproduces it from
+those inputs (0.375). An earlier version of this note back-solved k_p = 12.3
+to hit 0.37 from 0.47 and attributed the paper to "Liang et al."; both wrong.
+
+k_p is the input that matters most (h_ep ~ sqrt(k_p)) and the least certain:
+for Al, first principles give 10.7 W/mK from phonon-phonon scattering alone
+and 8.1 with phonon-electron scattering (Tong, Li, Ruan, Bao, arXiv:1907.01364);
+classical MD has no phonon-electron scattering, so MD k_p sits above the real
+lattice value (the MEAM above: 17.0).
 
 This is an estimate, flagged as one. Doing it properly is a two-temperature
 model coupled into the MD (LAMMPS `fix ttm`), which is not built.
@@ -33,7 +42,8 @@ from ..schema.flags import Code, FlagSet, Severity
 # Sourced values only; add a metal only with a citation.
 COUPLING: dict[str, dict] = {
     "Al": {"g": 2.45e17,
-           "citation": "as used by Liang et al. (2014), arXiv:1401.5550"},
+           "citation": "Lin, Zhigilei & Celli, PRB 77, 075133 (2008), ab initio, "
+                       "low T_e; used by Yang et al., arXiv:1401.5550"},
     "Cu": {"g": 8.31e16,
            "citation": "Zhang et al. (2022), arXiv:2202.03089 (ab initio, T_e = 315 K)"},
 }

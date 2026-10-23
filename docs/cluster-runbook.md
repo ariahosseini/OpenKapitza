@@ -88,7 +88,7 @@ the number.
 Si/Al and Si/Cu through `AlSiMgCuFe.meam` (needs MEAM from step 0). First
 gate the potential on each side (a0 and C_ij, within 10 %), then a campaign
 on the converged geometry. Si/Al at 300 K brackets: NEMD 470 MW/m²K
-phonon-only (Liang et al. 2014, a different MEAM), TDTR 200–350. The metal
+phonon-only (Yang et al., arXiv:1401.5550, a different MEAM), TDTR 200–350. The metal
 side is phonon-only (P1-14).
 
 ## 7. Si/a-SiO₂ (P2-2 … P2-6)

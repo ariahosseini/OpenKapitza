@@ -1256,3 +1256,155 @@ discrepancy is still unexplained. A model change justified by biased data can
 be worse than the error it fixes, since it also destroys the agreement that
 was previously honest. Implement the alternative, document the evidence, keep
 the specified form until exact data settles it.
+
+## 7. Electron–phonon transport at metal/non-metal interfaces (P1-14 survey, 23 Oct 2026)
+
+Survey of the LAMMPS documentation and source, recent papers, and GitHub,
+before building a two-temperature (TTM-MD) treatment. Values below are
+quoted from the sources named; nothing here is from memory.
+
+### LAMMPS `fix ttm` family — verified in the source of our build (30 Sep 2026)
+
+Variants: `ttm`, `ttm/grid` (distributed grid), `ttm/mod` (file parameters,
+T_e-dependent C_e, vacuum), `ttm/cascade`, and `ttm/thermal` (per-cell
+properties file: `ix iy iz C_vol kappa_e gamma_p eta`). All in EXTRA-FIX,
+which both our builds include.
+
+- **Periodic in all three dimensions, or a hard error.** `fix_ttm.cpp`:
+  "Cannot use non-periodic boundares with fix ttm". Our NEMD deck is
+  `boundary p p f`. A TTM run must use `p p p` with a vacuum gap above the
+  top wall wider than the potential cutoff, so the slab does not interact
+  with its own z-image. The electron grid's diffusion is also periodic, so
+  the electron-free cells (below) must separate the metal from its image.
+- **No box change while the fix exists** ("Cannot use fix ttm/thermal with
+  changing box shape, size, or sub-domains"). Define it after the in-plane
+  relaxation and `change_box`; no `fix npt` afterwards. Orthogonal boxes only.
+- **Electron-free cells.** In `ttm/thermal` a cell with `kappa_e = 0` and
+  `gamma_p = 0` exchanges no heat with its neighbours (the face conductivity
+  is the harmonic mean 2ab/(a+b), zero if either side is zero) and applies no
+  force to its atoms. `C_vol` must stay > 0: the update divides by it. The
+  initial T_e must be > 0 everywhere (`set`, `infile`), so the "zero-T_e
+  vacuum" convention of `ttm/mod` is not reachable from input in `ttm/thermal`;
+  use k_e = γ_p = 0 instead. The documentation page and the source disagree
+  on the property checks (doc: "> 0"; source: "< 0 is an error"); the source
+  is what runs.
+- **Heat source:** `source P` times per-cell `eta` (≥ 0) heats the electrons
+  directly. It cannot be a sink.
+- **Tallies:** `f_ID[1]` electronic energy, `f_ID[2]` energy moved electrons →
+  atoms on the step (extensive); `outfile N file` writes the T_e grid
+  (`ttm`, `ttm/mod`, `ttm/thermal`; not `ttm/grid`). The documentation notes a
+  half-step lag between the two energies.
+- **gamma_p** is a friction coefficient in mass/time units (metal: g/mol/ps),
+  per Duffy & Rutherford: γ_i = m_i g / (3 n k_B) with n the atom number
+  density (Wang et al. 2012). Results depend on processor count through the
+  random numbers (statistically equivalent).
+- Shipped examples (`examples/ttm`): `in.ttm.thermal` with `props.in` (bcc Fe,
+  fully periodic, uniform properties); nothing with an interface.
+
+### Physics and methods
+
+- **TTM-NEMD at a metal/non-metal interface** (Wang, Ruan & Roy, PRB 85,
+  205311, 2012): electrons on the metal side only; heat injected and removed
+  by PHONON thermostats; electron grid adiabatic at its ends. Pure Cu:
+  TTM-MD κ = 415 ± 11 W/mK against ~401 measured; plain NEMD 13.6 (phonons
+  only). Si/Cu: TTM-MD interface resistance ≥ 25 % above phonon-only MD.
+  Adding R_ep in series to R_pp **over-predicts** the full TTM-MD result by
+  6 % (g = 2.6e17) and 15 % (g = 5.5e16). Their R_ep carries a factor
+  (κ_e/(κ_e+κ_p))^{3/2}, ≈ 1 for good metals. Requirements they state: >
+  ~1000 atoms per electron cell; electron cells shorter than the cooling
+  length; metal longer than the cooling length so a linear region exists.
+  Potential caveat: their Si–Cu Morse cross term is not validated for
+  transport.
+- **Cooling length** (the decay length of T_e − T_p near the interface):
+  l = (g/κ_e + g/κ_p)^(-1/2) ≈ √(κ_p/g) when κ_e ≫ κ_p (Li, Wang, Zhou, Ren
+  & Li, arXiv:1412.2465). With the values below: Al √(8–17 / 2.45e17) ≈ 6–8
+  nm; Cu √(17.6 / 5.5e16–8.3e16) ≈ 15–18 nm. The metal slab must be several
+  cooling lengths long: tens of nm for Cu. Note h_ep = √(g κ_p) = κ_p / l.
+- **Cross-interface electron–phonon coupling** (metal electrons straight into
+  non-metal phonons): a parallel channel. Lu, Wang & Ruan, PRB 93, 064302
+  (2016), Cu/Si TTM-MD with an added interfacial coupling G_ei set equal to
+  G_ep (arbitrary, stated as such): TBR 2.8 → 2.29 × 10⁻⁹ m²K/W (−18 %).
+  Sadasivam, Waghmare & Fisher (arXiv:1501.02763, first principles, TiSi₂/Si):
+  electron coupling to interfacial modes is of the same order as to bulk
+  metal phonons, and its conductance comparable to the phonon–phonon one.
+  Li et al. (arXiv:1412.2465): the series–parallel network
+  σ = 1/(R_m^e + R_ep) + 1/(R_m^p + R_pp); for some pairs (Pb/diamond) the
+  interfacial channel dominates. **Status: real but unquantified for our
+  pairs; no reliable way to predict G_ei.** Not modelled; to be flagged.
+- **Rough interfaces:** Wu, Li, Huang & Tang, PRB 112, 035306 (2025),
+  "electron density-corrected" TTM-MD for Cu/GaN with fractal roughness;
+  validated against Cu/diamond, Cu/BN, Al/GaN experiments better than plain
+  NEMD. Abstract only (paywalled).
+- **Spatially varying TTM in LAMMPS for NEMD** (Baer & Walker, J. Mol. Model.
+  31, 220, 2025; the per-cell-property approach behind `ttm/thermal`, whose
+  face conductivity cites Baer): Ni, frozen ends + Langevin, 1×1×M grid with
+  ~1600 atoms per cell, 0.5 fs. Lessons they report: TTM coupling LOWERS the
+  MD lattice conductivity (~30 % at κ_e = 0), so the coupled phonon κ is not
+  the uncoupled one; short systems need separate electron and lattice
+  gradients (a single Fourier fit is wrong); steady state took 0.4–1 ns;
+  interface temperature jumps were noisy (some negative) and they prefer a
+  series-resistance method including the non-equilibrium region. They quote
+  a ~700 Å electron–phonon equilibration length for Ni, far longer than
+  √(κ_p/g) ≈ 7 nm from the same inputs; unresolved here.
+
+### Input values, ~300 K (sourced)
+
+| Metal | g (W/m³K) | κ_p lattice (W/mK) | κ_e (W/mK) | C_e |
+|---|---|---|---|---|
+| Al | 2.45e17 (Lin, Zhigilei & Celli, PRB 77, 075133, 2008) | 10.7 p-p only / **8.1** with p-e (Tong et al., arXiv:1907.01364); literature 5.8–21.1 quoted there; 17.0 MEAM Green–Kubo (Yang et al.) | 225.8 (DFT, Tong et al.) | — |
+| Cu | 5.5e16 (Lin et al. 2008, ab initio); 8.31e16 (Zhang et al., arXiv:2202.03089, T_e = 315 K); 2.6e17 (Eesley 1986, as quoted by Wang et al.) | 19.6 / **17.6** (Tong et al.); 13.6 EAM NEMD (Wang et al.) | 360.9 (DFT, Tong et al.); 401 total, Wiedemann–Franz (Lu et al.) | 96.8·T J/m³K (Wang et al.); 5.26e4 J/m³K at 300 K (Lu et al.) |
+
+Tong et al. also list Au, Ag, Ni, Pt, Ti (λ_ep, κ_p, κ_e) and report the
+dimensionless λ_ep, not g. T_e-dependent g, C_e, κ_e for many metals and
+semiconductors: XTANT-3 data set (github.com/N-Medvedev/XTANT-3_coupling_data,
+GPL-3.0, Medvedev & Milov, PRB 102, 064302, 2020 for metals); lowest T_e per
+file not yet checked.
+
+**Consequences.** (1) κ_p for the estimate should be the REAL lattice value
+(with phonon–electron scattering), not the MD one: MD has no electrons, and
+the MEAM Al value (17.0) is 2× the first-principles 8.1, which moves h_ep by
+√2. (2) Cu's g spans ~5× → h_ep ~2.2×. Report the estimate as a band.
+
+### Validation targets (300 K)
+
+- Al/Si: phonon-only MEAM NEMD 0.47 GW/m²K, series 0.37 (Yang et al.,
+  arXiv:1401.5550). TDTR: 0.35 (Minnich et al.), 0.22 (Zhang et al., Carbon 64,
+  61), ≤ ~0.2 falling with roughness (Hopkins et al., PRB 82, 085307, 2010:
+  removing the native oxide raises it). Experiment includes oxide and
+  roughness: a bracket, not a test.
+- Al/diamond (no electrons in the model): MTP-NEMD 284 ± 22 MW/m²K; TDTR
+  21–390 depending on surface (Adnan, Neupane & Feng, IJHMT 235, 126227, 2024).
+- Cu/Si: TTM-MD only (Wang 2012; Lu 2016), both on an unvalidated Morse
+  cross potential. No direct Cu/Si experiment found in this pass.
+
+### GitHub
+
+No public TTM-MD interface workflow found (the GitHub search API is blocked
+from this environment; web search only). Useful: the XTANT-3 parameter set
+above. The LAMMPS examples are bulk-only.
+
+### Design decisions taken from this survey
+
+1. Keep the series estimate, but take κ_p from first principles (with p-e
+   scattering) by default, report g and κ_p as ranges → an h_ep band; flag
+   that the series form over-predicts the coupled resistance by ~6–15 %.
+2. TTM-MD deck: `ttm/thermal`, electrons on the metal side only (k_e = γ_p = 0
+   elsewhere), electron-free buffer cells at both ends of the metal so the
+   periodic electron grid is broken, `boundary p p p` with vacuum headroom,
+   fix defined after relaxation. Heat in and out through the existing phonon
+   Langevin reservoirs (Wang 2012); electron source as an option later.
+   Separate T_e and T_p profiles → R_ep and R_pp separately.
+3. Metal slab ≥ several cooling lengths: Al ≳ 30 nm, Cu ≳ 60–90 nm. That is a
+   cluster-size cell; here only plumbing.
+4. Cross-interface coupling: not modelled; raise a flag with every metal h_K.
+
+### Lessons
+
+- **Check a citation's author list against the paper.** arXiv:1401.5550 is
+  N. Yang, T. Luo, ..., G. Chen; this repository called it "Liang et al." in
+  five places, and attributed its g to the paper rather than to Lin et al.
+  2008.
+- **A back-solved input that reproduces a published number is not a check.**
+  The estimate's "reproduction" of 0.37 GW/m²K used k_p = 12.3, chosen to hit
+  0.37 from 0.47. The paper's own inputs (G_pp 0.46, k_p 17.0) give 0.375 —
+  the test now uses those.
