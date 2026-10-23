@@ -41,6 +41,21 @@ python3 scripts/measure_potential_elastic.py --lmp $(which lmp) \
 A second platform has caught defects before (knowledge base, "verify on a
 second platform").
 
+## 1b. Write every job at once
+
+```bash
+python3 scripts/prepare_cluster.py <root> --potentials <lammps>/potentials \
+    --lmp "$(which lmp)" --partition <p> --account <a> --module <lammps-module>
+```
+
+One directory per job (campaign rungs incl. the reservoir-length axis, Si/Ge
+spot pressure in both modes, the P1-8 equilibrium run, Si/Al phonon-only and
+TTM, Si/Cu, Si/SiO₂ strong and weak), each validated, with `submit.sbatch`
+and `run.sh`; `manifest.json` costs them (dry run here: 22 jobs, ~69
+node-hours, ~1,800 core-hours with the 2× walltime factor); `commands.txt`
+holds the P2-5 quench commands. Update `THROUGHPUT` after step 2 and re-run
+it before submitting. The sections below describe each job.
+
 ## 2. Throughput (P1-11, ~10 core-minutes)
 
 The cost model's three-body rates are measured on a laptop and a cloud
@@ -123,6 +138,14 @@ segment. Read the validation table and the bonding line (coverage, class)
 before running NEMD. Run both bonding classes on the same glass (P2-6), and repeat
 at 10¹³ K/s for the rate sensitivity (P2-5). Bracket: Chen, Zhang & Li 2012 (arXiv:1210.0354),
 ≈1.2 GW/m²K strong / ≈0.23 weak; experiment > 0.6 GW/m²K.
+
+## 7b. Equilibrium cross-check (P1-8)
+
+`sige_emd/`: same Si/Ge potential, short slabs (2 nm + reservoirs), NVE after
+equilibration, ΔT(t) logged every 10 fs for 15 ns (≥ 500 relaxation times).
+Analyse with `md.emd_kapitza.read_emd` → `h_from_series` → `check(...,
+h_nemd=<converged campaign h_K>)`. Expect NEMD/EMD > 1 (≈3 for Si/Ge per
+Merabia & Termentzidis); below 1 means one of the runs is wrong.
 
 ## 8. Only if needed
 

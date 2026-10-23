@@ -35,6 +35,7 @@ PRESETS = {
         lengths_nm=(8.0, 32.0, 64.0),
         durations_ps=(250.0, 1000.0),
         deltas_K=(20.0, 60.0),
+        reservoirs_nm=(1.0, 4.0),           # base 2.0; Wei et al. 2025
         k_expected=(148.0, 60.0),
     ),
 }
@@ -76,7 +77,7 @@ def main(argv=None) -> int:
     if a.cmd == "write":
         rungs = plan_campaign(base_spec(p), cross_sections_nm=p["cross_sections_nm"],
                               lengths_nm=p["lengths_nm"], durations_ps=p["durations_ps"],
-                              deltas_K=p["deltas_K"])
+                              deltas_K=p["deltas_K"], reservoirs_nm=p["reservoirs_nm"])
         m = write_campaign(a.dir, rungs, a.potential, lmp_command=a.lmp, cores=a.cores,
                            cores_per_node=a.cores_per_node, partition=a.partition,
                            account=a.account, modules=tuple(a.module))

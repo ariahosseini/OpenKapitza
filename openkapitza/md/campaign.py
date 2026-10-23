@@ -35,8 +35,11 @@ from .convergence import ConvergenceSeries, check_flux_linearity, check_series
 from .measure import measure_kapitza
 from .nemd import NEMDSpec, build_input_deck
 
-AXES = ("cross_section", "length", "duration", "flux")
-UNITS = {"cross_section": "nm", "length": "nm", "duration": "ps", "flux": "K"}
+# "reservoir": thermostat-slab length. Si/Ge ITR is linear in 1/L_bath as well as
+# 1/L_sys (Wei et al., Chin. Phys. B 34, 116301, 2025), so it is an axis too.
+AXES = ("cross_section", "length", "duration", "flux", "reservoir")
+UNITS = {"cross_section": "nm", "length": "nm", "duration": "ps", "flux": "K",
+         "reservoir": "nm"}
 
 
 @dataclass
@@ -56,6 +59,8 @@ def _value(spec: NEMDSpec, axis: str) -> float:
         return round(spec.production_steps * spec.timestep_fs * 1e-3, 4)
     if axis == "flux":
         return round(spec.delta_reservoir, 4)
+    if axis == "reservoir":
+        return round(g.reservoir_thickness * 1e9, 4)
     raise ValueError(axis)
 
 
@@ -70,6 +75,8 @@ def _vary(base: NEMDSpec, axis: str, value: float) -> NEMDSpec:
         s.production_steps = int(round(value / (s.timestep_fs * 1e-3)))
     elif axis == "flux":
         s.delta_reservoir = value
+    elif axis == "reservoir":
+        s.geometry.reservoir_thickness = value * 1e-9
     else:
         raise ValueError(axis)
     return s
@@ -80,7 +87,7 @@ def _key(spec: NEMDSpec) -> tuple:
 
 
 def plan_campaign(base: NEMDSpec, *, cross_sections_nm=(), lengths_nm=(),
-                  durations_ps=(), deltas_K=()) -> list[Rung]:
+                  durations_ps=(), deltas_K=(), reservoirs_nm=()) -> list[Rung]:
     """One-factor-at-a-time ladders about `base`; identical cells run once."""
     rungs: dict[tuple, Rung] = {}
 
@@ -94,7 +101,8 @@ def plan_campaign(base: NEMDSpec, *, cross_sections_nm=(), lengths_nm=(),
             rungs[k].axes.append((axis, _value(spec, axis)))
 
     for axis, values in (("cross_section", cross_sections_nm), ("length", lengths_nm),
-                         ("duration", durations_ps), ("flux", deltas_K)):
+                         ("duration", durations_ps), ("flux", deltas_K),
+                         ("reservoir", reservoirs_nm)):
         if values:
             add(base, axis)                 # the base belongs to every ladder
         for v in values:
