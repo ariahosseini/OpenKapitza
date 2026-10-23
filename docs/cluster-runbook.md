@@ -101,8 +101,10 @@ python3 scripts/build_si_sio2.py --lmp $(which lmp) --potentials <lammps>/potent
 python3 scripts/build_si_sio2.py ... --bonding weak --glass <dir>/quench/glass.data
 ```
 
-Read the validation table and the bonding line (coverage, class) before
-running NEMD. Run both bonding classes on the same glass (P2-6), and repeat
+The quench checkpoints after every segment of its ramp: if a job hits its
+walltime, resubmit the same command and it resumes from the last completed
+segment. Read the validation table and the bonding line (coverage, class)
+before running NEMD. Run both bonding classes on the same glass (P2-6), and repeat
 at 10¹³ K/s for the rate sensitivity (P2-5). Bracket: Lampin et al. 2012,
 ≈1.2 GW/m²K strong / ≈0.23 weak; experiment > 0.6 GW/m²K.
 

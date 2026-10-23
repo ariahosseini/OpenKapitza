@@ -1204,6 +1204,15 @@ a default.
 command line contains "job.py". Wait on an artefact the job writes on exit
 (`echo done >> job.log`) instead.
 
+### Long runs checkpoint, or they are lost
+
+A 3-hour quench died at 68 % with a container restart and left nothing to
+resume from. Anything longer than about an hour now writes restart files at
+stage boundaries with a progress marker, and its runner resumes from the
+last completed stage (`structure.amorphous.run_quench`). The same protects
+against cluster walltime limits. A ramp must be split so each segment ramps
+between its own end temperatures, or a resumed run would restart the ramp.
+
 ### Do not change a specified default to chase a residual
 
 The continuum-limit shortfall above is real and physically explained, and the
