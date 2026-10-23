@@ -32,7 +32,8 @@ def available_materials() -> list[str]:
 
 def available_gases() -> list[str]:
     data = _load_yaml("gases.yaml")
-    return [k for k in data if not k.startswith("_") and k != "accommodation_defaults"]
+    return [k for k in data if not k.startswith("_")
+            and k not in ("accommodation_defaults", "accommodation_bands")]
 
 
 def _q(
@@ -64,54 +65,56 @@ def load_material(key: str, flags: FlagSet | None = None) -> MaterialSpec:
             f"unknown material {key!r}; available: {', '.join(available_materials())}"
         )
     e = data[key]
-    verified = bool(e.get("verified", False))
-    cite = f"openkapitza/data/materials.yaml::{key}"
-
-    if flags is not None and not verified:
+    sources = e.get("sources") or {}
+    entry = f"openkapitza/data/materials.yaml::{key}"
+    core = ("k", "rho", "E", "nu", "Hv")
+    verified = all(f in sources for f in core)
+    unverified = [f for f in (*core, "v_long", "v_trans", "theta_debye")
+                  if e.get(f) is not None and f not in sources]
+    if flags is not None and unverified:
         flags.add(
             Code.MATERIAL_UNVERIFIED,
             Severity.CAUTION,
-            f"Material '{key}' uses bundled properties that have not been "
-            f"checked against primary sources.",
+            f"Material '{key}': {', '.join(unverified)} not yet checked against a "
+            f"primary source (the other fields cite one in materials.yaml).",
             remedy=(
-                "Replace with cited values and set verified: true before "
-                "publishing. The hardness field in particular is a rough "
-                "mid-range figure and can be off by a factor of two for a "
-                "specific sample."
+                "Supply measured values for this sample where it matters, above all "
+                "hardness, which varies by a factor of two or more with temper and "
+                "surface preparation."
             ),
         )
+
+    def field(name, unit, *, confidence=None, value=None):
+        v = e.get(name) if value is None else value
+        src = sources.get(name)
+        return _q(v, unit, name, verified=src is not None,
+                  citation=src or f"{entry} (UNVERIFIED)", confidence=confidence)
 
     return MaterialSpec(
         key=key,
         name=e.get("name", key),
         phase=e.get("phase", "crystalline"),
-        k=_q(e["k"], "W/mK", "k", verified=verified, citation=cite),
-        rho=_q(e["rho"], "kg/m3", "rho", verified=verified, citation=cite),
-        E=_q(e["E"], "GPa", "E", verified=verified, citation=cite),
-        nu=_q(e["nu"], "-", "nu", verified=verified, citation=cite),
-        # Hardness is explicitly downgraded: it is the least reliable field.
-        Hv=_q(
-            e["Hv"], "GPa", "Hv", verified=verified, citation=cite,
-            confidence=Confidence.LOW,
-        ),
-        v_long=_q(e.get("v_long"), "m/s", "v_long", verified=verified, citation=cite),
-        v_trans=_q(e.get("v_trans"), "m/s", "v_trans", verified=verified, citation=cite),
-        theta_debye=_q(
-            e.get("theta_debye"), "K", "theta_debye", verified=verified, citation=cite
-        ),
+        k=field("k", "W/mK"),
+        rho=field("rho", "kg/m3"),
+        E=field("E", "GPa"),
+        nu=field("nu", "-"),
+        # Hardness is explicitly downgraded: it is the least reliable field
+        # even when sourced (temper and surface preparation dominate it).
+        Hv=field("Hv", "GPa", confidence=Confidence.LOW),
+        v_long=field("v_long", "m/s"),
+        v_trans=field("v_trans", "m/s"),
+        theta_debye=field("theta_debye", "K"),
         number_density=_q(
             e.get("number_density"), "-", "number_density",
-            verified=verified, citation=cite, confidence=Confidence.HIGH,
+            verified=True, citation=f"{entry} (rho/M * N_A)", confidence=Confidence.HIGH,
         ),
-        # c1/c2 carry their own citation when they are published fits rather
-        # than blanks, so they are not dragged down to the entry-wide
-        # confidence of the unverified bulk properties beside them.
+        # c1/c2 carry their own citation when they are published fits.
         c1=_q(e.get("c1"), "GPa", "c1",
               verified=bool(e.get("hardness_coefficients_source")),
-              citation=e.get("hardness_coefficients_source") or cite),
+              citation=e.get("hardness_coefficients_source") or entry),
         c2=_q(e.get("c2"), "-", "c2",
               verified=bool(e.get("hardness_coefficients_source")),
-              citation=e.get("hardness_coefficients_source") or cite),
+              citation=e.get("hardness_coefficients_source") or entry),
         notes=e.get("notes"),
         verified=verified,
     )
@@ -124,7 +127,7 @@ def load_gas(
 ) -> GasSpec:
     """Load a gas by key. `pressure_pa` is the gas pressure inside the gap."""
     data = _load_yaml("gases.yaml")
-    if key not in data or key == "accommodation_defaults":
+    if key not in data or key in ("accommodation_defaults", "accommodation_bands"):
         raise KeyError(
             f"unknown gas {key!r}; available: {', '.join(available_gases())}"
         )

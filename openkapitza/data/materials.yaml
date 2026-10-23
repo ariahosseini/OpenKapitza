@@ -3,10 +3,11 @@
 # ---------------------------------------------------------------------------
 # VERIFICATION STATUS -- READ THIS BEFORE TRUSTING ANY NUMBER HERE.
 #
-# Every entry is marked `verified: false`. These are starting values entered
-# to make the package runnable; they have NOT been checked against primary
-# sources. Before publishing anything, replace each with a cited value and
-# set `verified: true`.
+# Verification is PER FIELD (open issue P0-6, 23 Oct 2026). A field listed
+# under an entry's `sources:` was checked against the source named there and
+# loads with MEDIUM confidence and that citation; every other field is still
+# an unverified starting value (LOW confidence, named in the load-time flag).
+# An entry's `verified` is true only when k, rho, E, nu and Hv are all sourced.
 #
 # Reliability varies sharply by field:
 #   k, rho, E, nu, v_long, v_trans, theta_debye
@@ -27,12 +28,12 @@ Si:
   name: Silicon (single crystal)
   phase: crystalline
   verified: false
-  k: 148.0              # W/(m*K) at 300 K
+  k: 149.0  # W/(m*K) at ~300 K
   rho: 2329.0           # kg/m^3
-  E: 160.0e9            # Pa, averaged; Si is strongly anisotropic (130-188 GPa)
-  nu: 0.22
-  v_long: 8433.0        # m/s
-  v_trans: 5843.0       # m/s
+  E: 162.5e9  # Pa; Hill average of Voigt 165.6 / Reuss 159.4 (anisotropic: 130-188)
+  nu: 0.223  # Hill average of Voigt 0.218 / Reuss 0.228
+  v_long: 8433.0  # m/s; [100] value sqrt(C11/rho), NOT an isotropic average
+  v_trans: 5843.0  # m/s; [100] value sqrt(C44/rho)
   theta_debye: 645.0    # K
   number_density: 5.00e28   # atoms/m^3; rho/M * N_A, M = 28.085 g/mol
   Hv: 11.0e9            # Pa, rough; brittle, indentation-size dependent
@@ -42,12 +43,25 @@ Si:
     Elastic constants are direction dependent; the single E/nu pair here is an
     approximation adequate for a plasticity-index screen, not for a stress
     analysis.
+  sources:
+    k: >-
+      Thermal conductivities of the elements (Wikipedia data page; CRC/WebElements columns), usable value at ~300 K
+    E: >-
+      A. George, 'Elastic constants and moduli of diamond cubic Si', EMIS Datareview (1997), Hall's C11 165.64, C12 63.94, C44 79.51 GPa at 298 K; E, nu = Hill mean of the Voigt and Reuss averages given there
+    nu: >-
+      A. George, 'Elastic constants and moduli of diamond cubic Si', EMIS Datareview (1997), Hall's C11 165.64, C12 63.94, C44 79.51 GPa at 298 K
+    v_long: >-
+      A. George, 'Elastic constants and moduli of diamond cubic Si', EMIS Datareview (1997), Hall's C11 165.64, C12 63.94, C44 79.51 GPa at 298 K; sqrt(C11/rho) = 8433 m/s
+    v_trans: >-
+      A. George, 'Elastic constants and moduli of diamond cubic Si', EMIS Datareview (1997), Hall's C11 165.64, C12 63.94, C44 79.51 GPa at 298 K; sqrt(C44/rho) = 5843 m/s
+    theta_debye: >-
+      Kittel, Introduction to Solid State Physics, 8th ed. (2004), Debye temperature table (as reproduced on Wikipedia 'Debye model')
 
 Ge:
   name: Germanium (single crystal)
   phase: crystalline
   verified: false
-  k: 60.0
+  k: 60.2
   rho: 5323.0
   E: 103.0e9
   nu: 0.26
@@ -59,25 +73,45 @@ Ge:
   c1: null
   c2: null
   notes: Anisotropic elastic constants reduced to one pair, as for Si.
+  sources:
+    k: >-
+      Thermal conductivities of the elements (Wikipedia data page; CRC/WebElements columns), usable value at ~300 K
+    theta_debye: >-
+      Kittel, Introduction to Solid State Physics, 8th ed. (2004), Debye temperature table (as reproduced on Wikipedia 'Debye model')
 
 Al:
   name: Aluminium (pure, annealed)
   phase: crystalline
   verified: false
   k: 237.0
-  rho: 2700.0
+  rho: 2710.0
   E: 70.0e9
   nu: 0.35
-  v_long: 6420.0
-  v_trans: 3040.0
+  v_long: 6350.0
+  v_trans: 3100.0
   theta_debye: 428.0
-  number_density: 6.03e28   # atoms/m^3; rho/M * N_A, M = 26.982 g/mol
+  number_density: 6.05e28   # atoms/m^3; rho/M * N_A, M = 26.982 g/mol, rho 2710
   Hv: 0.35e9            # Pa; VERY processing dependent, 0.2-1.2 GPa range
   c1: null
   c2: null
   notes: >
     Work-hardens heavily under indentation, so a single Hv is a poor summary.
     Alloys (6061, 2024) are several times harder than pure annealed Al.
+  sources:
+    k: >-
+      Thermal conductivities of the elements (Wikipedia data page; CRC/WebElements columns), usable value at ~300 K
+    rho: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957)
+    nu: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957) (computed there from the speeds: 0.35)
+    v_long: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957)
+    v_trans: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957)
+    theta_debye: >-
+      Kittel, Introduction to Solid State Physics, 8th ed. (2004), Debye temperature table (as reproduced on Wikipedia 'Debye model')
+    Hv: >-
+      Hardnesses of the elements (Wikipedia data page; primary reference Samsonov, Handbook of the physicochemical properties of the elements, 1968): Vickers 160-350 MPa for Al; the value here is the top of that range and pretreatment moves it by several hundred percent
 
 Cu:
   name: Copper (pure, annealed)
@@ -85,50 +119,80 @@ Cu:
   verified: false
   k: 401.0
   rho: 8960.0
-  E: 120.0e9
-  nu: 0.34
-  v_long: 4760.0
-  v_trans: 2325.0
+  E: 117.0e9
+  nu: 0.35
+  v_long: 4680.0
+  v_trans: 2260.0
   theta_debye: 343.0
   number_density: 8.49e28   # atoms/m^3; rho/M * N_A, M = 63.546 g/mol
-  Hv: 0.6e9             # Pa; 0.4-1.2 GPa depending on temper
+  Hv: 0.36e9  # Pa; annealed; Samsonov 343-369 MPa, OFE soft temper >= 35 HV
   c1: null
   c2: null
   notes: As with Al, temper dominates the hardness.
+  sources:
+    k: >-
+      Thermal conductivities of the elements (Wikipedia data page; CRC/WebElements columns), usable value at ~300 K
+    E: >-
+      Aurubis, 'Technical Datasheet C10100' (Cu-OFE): 17 x 10^3 ksi (117 GPa); also k 391 W/mK at 20 C for OFE
+    nu: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957) (computed there from the speeds: 0.35)
+    v_long: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957)
+    v_trans: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957)
+    theta_debye: >-
+      Kittel, Introduction to Solid State Physics, 8th ed. (2004), Debye temperature table (as reproduced on Wikipedia 'Debye model')
+    Hv: >-
+      Hardnesses of the elements (Wikipedia data page; primary reference Samsonov, Handbook of the physicochemical properties of the elements, 1968): Vickers 343-369 MPa for Cu; Aurubis C10100 soft temper 35 HV min
 
 SiO2:
   name: Silica (fused / amorphous)
   phase: amorphous
   verified: false
-  k: 1.38
-  rho: 2200.0
-  E: 73.0e9
-  nu: 0.17
-  v_long: 5968.0
-  v_trans: 3764.0
+  k: 1.30
+  rho: 2201.0
+  E: 72.7e9
+  nu: 0.16
+  v_long: 5934.0  # m/s; from Corning E, G and rho: sqrt((K + 4G/3)/rho)
+  v_trans: 3777.0  # m/s; sqrt(G/rho), G = 31.4 GPa
   theta_debye: 470.0    # K; ill-defined for a glass, used only for the
   number_density: 6.61e28   # atoms/m^3; 3 atoms per SiO2 unit, M = 60.08 g/mol
                         # quantum-effects screen, never for transport
-  Hv: 8.9e9
+  Hv: 5.12e9  # Pa; KNOOP 522 kg/mm^2 at 100 g (no Vickers value in the source); was 8.9 GPa, a nanoindentation-scale number
   c1: null
   c2: null
   notes: >
     Debye temperature is not strictly meaningful for an amorphous solid. It is
     retained only as a rough scale for the low-temperature quantum warning, and
     any model that uses it for transport should be treated as unreliable.
+  sources:
+    k: >-
+      Corning, 'HPFS Fused Silica Industrial Grade' (Oct 2008), values at 25 C
+    rho: >-
+      Corning, 'HPFS Fused Silica Industrial Grade' (Oct 2008), values at 25 C
+    E: >-
+      Corning, 'HPFS Fused Silica Industrial Grade' (Oct 2008), values at 25 C
+    nu: >-
+      Corning, 'HPFS Fused Silica Industrial Grade' (Oct 2008), values at 25 C
+    v_long: >-
+      Corning, 'HPFS Fused Silica Industrial Grade' (Oct 2008), values at 25 C; derived from E 72.7, G 31.4 GPa, rho 2201
+    v_trans: >-
+      Corning, 'HPFS Fused Silica Industrial Grade' (Oct 2008), values at 25 C; derived, sqrt(G/rho)
+    Hv: >-
+      Corning, 'HPFS Fused Silica Industrial Grade' (Oct 2008), values at 25 C: Knoop hardness 522 kg/mm^2 (100 g). Knoop, not Vickers
 
 SS304:
   name: Stainless steel 304
   phase: crystalline
   verified: false
   k: 16.2
-  rho: 8000.0
+  rho: 7900.0  # kg/m^3; 304L in the source
   E: 193.0e9
   nu: 0.29
-  v_long: 5790.0
-  v_trans: 3100.0
-  theta_debye: 477.0
-  number_density: 8.65e28   # atoms/m^3; treated as Fe, M = 55.845 g/mol
+  v_long: 5640.0  # m/s; 304L
+  v_trans: 3070.0  # m/s; 304L
+  theta_debye: 470.0  # K; IRON's value (no SS304 value found); was 477
+  number_density: 8.52e28   # atoms/m^3; treated as Fe, M = 55.845 g/mol, rho 7900
   Hv: 2.0e9             # Pa; 1.5-2.5 GPa typical, cold work raises it
   # Fitted Vickers correlation coefficients, HV = c1*(dV/d0)^c2, d0 = 1 um.
   # These are measured fits, not estimates, and are the single biggest
@@ -142,15 +206,26 @@ SS304:
     A common thermal-contact-conductance benchmark material. Published
     Yovanovich-style joint conductance data exists for SS/SS pairs in vacuum
     and in gas, which is why it is included here.
+  sources:
+    rho: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957), stainless steel 304L
+    nu: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957), 304L (0.29)
+    v_long: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957), 304L
+    v_trans: >-
+      Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957), 304L
+    theta_debye: >-
+      Kittel, Introduction to Solid State Physics, 8th ed. (2004), Debye temperature table (as reproduced on Wikipedia 'Debye model'): Fe, used as a proxy
 
 Ni200:
   name: Nickel 200
   phase: crystalline
   verified: false
-  k: 70.0
+  k: 70.3
   rho: 8890.0
-  E: 207.0e9
-  nu: 0.31
+  E: 205.0e9
+  nu: 0.29
   v_long: 5600.0
   v_trans: 2960.0
   theta_debye: 450.0
@@ -162,3 +237,14 @@ Ni200:
     Bahrami, Yovanovich & Culham, "Micro and Macro Hardness Measurements,
     Correlations, and Contact Models", Table 3 (fitted values).
   notes: Another classic contact-conductance benchmark material.
+  sources:
+    k: >-
+      Special Metals, 'Nickel 200 & 201', Publication SMC-061 (2006): 70.3 W/m C at 20 C
+    rho: >-
+      Special Metals, 'Nickel 200 & 201', Publication SMC-061 (2006): 8.89 g/cm^3
+    E: >-
+      Special Metals, 'Nickel 200 & 201', Publication SMC-061 (2006): 29.7 x 10^3 ksi at 78 F
+    nu: >-
+      Special Metals, 'Nickel 200 & 201', Publication SMC-061 (2006)
+    theta_debye: >-
+      Kittel, Introduction to Solid State Physics, 8th ed. (2004), Debye temperature table (as reproduced on Wikipedia 'Debye model'): Ni

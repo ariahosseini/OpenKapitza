@@ -1731,3 +1731,32 @@ die attach). Built as `network/stack.py`; `build_joint(..., fill=tim_fill(...)
 - Output: a `StackResult` and, for existing consumers, a `NetworkResult` view
   (xi = 1, no constriction, no gas path); Monte Carlo over layer t, k, R_c,
   R_measured, h_K with stated uncertainties; report section of its own.
+
+## 10. Material data verification (P0-6, 23 Oct 2026)
+
+`materials.yaml` is now sourced PER FIELD (`sources:` under each entry). What
+was checked, against what, and what changed:
+
+| Material | Field | Old → new | Source |
+|---|---|---|---|
+| Si | E, ν | 160 GPa, 0.22 → 162.5, 0.223 | George, EMIS Datareview 1997, Hall's C_ij: Voigt 165.6/0.218, Reuss 159.4/0.228; Hill mean |
+| Si | v_L, v_T | 8433, 5843 (kept) | = √(C₁₁/ρ), √(C₄₄/ρ): [100] values, not isotropic averages (Hill isotropic would be ~8950 / 5340) |
+| Si, Ge, Al, Cu, Ni | θ_D | kept | Kittel 8th ed.: 645, 374, 428, 343, 450 K |
+| SS304 | θ_D | 477 → 470 | no 304 value found; Fe (Kittel) as proxy |
+| Si, Ge, Al, Cu | k | 148 → 149, 60 → 60.2, kept, kept | elements data page (CRC/WebElements columns) |
+| SiO₂ | k, ρ, E, ν | 1.38 → 1.30, 2200 → 2201, 73 → 72.7, 0.17 → 0.16 | Corning HPFS datasheet, 25 °C |
+| SiO₂ | Hv | 8.9 → 5.12 GPa | Corning: KNOOP 522 kg/mm² at 100 g; 8.9 GPa is a nanoindentation-scale hardness, wrong for a microhardness field |
+| Cu | E, Hv | 120 → 117 GPa, 0.6 → 0.36 GPa | Aurubis C10100 datasheet (117 GPa; soft ≥ 35 HV; k 391 for OFE at 20 °C); Samsonov via data page: 343–369 MPa |
+| Al, Cu, SS304(L) | v_L, v_T, ρ, ν | Al 6420/3040 → 6350/3100, ρ 2710; Cu 4760/2325 → 4680/2260, ν 0.35; SS 5790/3100 → 5640/3070, ρ 7900 | Coppens & Wilson, NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957) |
+| Al | Hv | 0.35 kept | Samsonov 160–350 MPa: top of the range |
+| Ni 200 | k, ρ, E, ν | 70 → 70.3, kept, 207 → 205, 0.31 → 0.29 | Special Metals SMC-061 (2006) |
+
+DMM h_K moved by +5 % (Si/Al), −7 % (Si/Cu), −8 % (Al/Cu); Si/Ge unchanged.
+The contact benchmark is unaffected (it carries its own properties).
+
+Not found in this pass: Vickers hardness of single-crystal Si and Ge as
+numbers (Si: ⟨100⟩ 10–15 % softer than ⟨111⟩, Vabishchevich 2017; instrumented
+indentation unreliable for phase-transforming Si, Haberl et al. 2012); SS304
+and Ni 200 Vickers (datasheets give HRB/HB only, and a conversion would be our
+number, not theirs); SiO₂ θ_D. The rule held: a field gets a citation only if
+the cited page states that number.

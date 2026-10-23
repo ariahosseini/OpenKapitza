@@ -887,3 +887,39 @@ class TestAccommodationBand(unittest.TestCase):
         j = build_joint("SS304", "SS304", sigma_a_um=1.2, sigma_b_um=1.2, pressure_MPa=1.0,
                         temperature_K=300.0, slope_a=0.1, slope_b=0.1)
         self.assertIsNone(run_continuum(j, with_uncertainty=False).accommodation_band)
+
+
+class TestMaterialSources(unittest.TestCase):
+    """P0-6: verification is per field; unsourced fields are named."""
+
+    def test_sourced_fields_carry_their_citation(self):
+        from openkapitza.schema import Confidence, load_material
+        cu = load_material("Cu")
+        self.assertIn("Aurubis", cu.E.citation)
+        self.assertEqual(cu.E.confidence, Confidence.MEDIUM)
+        self.assertEqual(cu.Hv.confidence, Confidence.LOW)      # hardness always LOW
+        self.assertIn("Samsonov", cu.Hv.citation)
+
+    def test_unsourced_fields_named_in_the_flag(self):
+        from openkapitza.schema import load_material
+        from openkapitza.schema.flags import Code
+        f = FlagSet()
+        si = load_material("Si", f)
+        flag = next(x for x in f.flags if x.code == Code.MATERIAL_UNVERIFIED)
+        self.assertIn("Hv", flag.message); self.assertIn("rho", flag.message)
+        self.assertNotIn("theta_debye", flag.message)            # sourced (Kittel)
+        self.assertIn("UNVERIFIED", si.Hv.citation)
+        self.assertFalse(si.verified)
+
+    def test_every_source_entry_names_a_real_field(self):
+        import yaml
+        from openkapitza.schema.db import DATA_DIR
+        data = yaml.safe_load((DATA_DIR / "materials.yaml").read_text())
+        for key, e in data.items():
+            for f in (e.get("sources") or {}):
+                self.assertIn(f, e, f"{key}: source for missing field {f}")
+
+    def test_accommodation_tables_are_not_gases(self):
+        from openkapitza.schema.db import available_gases
+        self.assertNotIn("accommodation_bands", available_gases())
+        self.assertNotIn("accommodation_defaults", available_gases())
