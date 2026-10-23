@@ -55,6 +55,17 @@ SETS = {
     ],
     "sw": [CubicSpec("Si", "diamond", 5.431, 28.0855, "sw", "Si.sw", "Si", "Si")],
     "ni": [CubicSpec("Ni", "fcc", 3.52, 58.6934, "eam", "Ni_u3.eam", None, "Ni")],
+    # Jelinek et al. 2012 MEAM (AlSiMgCuFe.meam): one fit with Al-Si and
+    # Cu-Si cross terms, the candidate for die-level Si/Al and Si/Cu (P1-6).
+    # Needs a LAMMPS build with the MEAM package.
+    "alsicu": [
+        CubicSpec(f"{el}(MEAM)", lat, a0, m, "meam", "library.meam", f"{el}S", el,
+                  extra_files=("AlSiMgCuFe.meam",),
+                  coeff_args=f"library.meam AlS SiS MgS CuS FeS AlSiMgCuFe.meam {el}S")
+        for el, lat, a0, m in (("Si", "diamond", 5.431, 28.0855),
+                               ("Al", "fcc", 4.05, 26.9815),
+                               ("Cu", "fcc", 3.615, 63.546))
+    ],
 }
 
 

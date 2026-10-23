@@ -565,8 +565,17 @@ fix             relax gmobile npt temp {temperature:.2f} {temperature:.2f} {damp
 # in-plane constant is the number everything downstream inherits.
 thermo          {relax_thermo}
 thermo_style    custom step temp press pxx pyy pzz lx ly
+# The in-plane box oscillates under the barostat (period ~ps). It is set to
+# its MEAN over the second half before the barostat comes off; stopping it
+# mid-swing froze a ~0.1 % strain, ~0.2 GPa, into every later stage (open
+# issue P1-13).
+variable        lxv equal lx
+variable        lyv equal ly
+fix             boxav all ave/time 10 {nrep} {relax_steps} v_lxv v_lyv
 {piston_on}run             {relax_steps}
 unfix           relax
+change_box      all x final $(xlo) $(xlo+f_boxav[1]) y final $(ylo) $(ylo+f_boxav[2]) remap units box
+unfix           boxav
 {piston_off}thermo_style    custom step temp press pe ke etotal
 """
 
@@ -687,6 +696,7 @@ def build_input_deck(spec: NEMDSpec) -> str:
             relax_steps=_relax_steps(spec),
             # At least 20 samples, so a drifting box is visible.
             relax_thermo=max(1, _relax_steps(spec) // 20),
+            nrep=_relax_steps(spec) // 20,
             piston_on=(PISTON_ON.format(damp_ps=spec.piston_damp_ps,
                                         gamma=_piston_gamma(spec),
                                         relax_steps=_relax_steps(spec),

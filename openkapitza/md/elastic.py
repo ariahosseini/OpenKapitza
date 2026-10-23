@@ -52,6 +52,11 @@ REFERENCE_CUBIC: dict[str, dict] = {
            "citation": "McSkimin & Andreatch (1963), J. Appl. Phys. 34, 651"},
     "Ni": {"c11": 246.5, "c12": 147.3, "c44": 124.7, "a0": 3.524,
            "citation": "Simmons & Wang (1971), single-crystal elastic constants"},
+    # Room temperature, as tabulated in arXiv:1605.09237 (Table of references).
+    "Al": {"c11": 107.3, "c12": 60.08, "c44": 28.3, "a0": 4.0495,
+           "citation": "Vallin et al. (1964), J. Appl. Phys. 35, 1825"},
+    "Cu": {"c11": 168.4, "c12": 121.4, "c44": 75.4, "a0": 3.6149,
+           "citation": "Ledbetter & Naimon (1974), J. Phys. Chem. Ref. Data 3, 897"},
 }
 
 # A potential passes the elastic gate when every one of C11, C12, C44 is within

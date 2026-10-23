@@ -72,7 +72,8 @@ after Phase 1.
 
 ## Cluster run list
 
-Collected here so the cluster session starts from one list.
+Collected here so the cluster session starts from one list. Step-by-step
+commands: [`cluster-runbook.md`](cluster-runbook.md).
 
 1. P1-11 throughput check (one short run), then P1-12 equilibration time on the base rung.
 2. P1-3 convergence campaign: `python3 scripts/plan_campaign.py write <dir> --potential SiCGe.tersoff --partition ... --account ...` (~350 core-hours), then `... collect <dir>`.
