@@ -27,10 +27,12 @@ from .runner import Resources
 #   tersoff  4.1e5  Si/Ge 4,787 atoms, macOS arm64, 30 Sep 2026
 #            5.6e5  Si/Ge 4,960 atoms, cloud x86, NPT, 2 jobs on 2 cores, 22 Oct
 #   sw       5.0e5  SW-Si 2,048 atoms, cloud x86, NVE + Langevin, 22 Oct
+#   meam     9.3e4  Si/Al (Jelinek MEAM) 6,680 atoms, cloud x86, NPT/NVT, 22 Oct
 # Re-measure on the cluster with one short run before the campaign.
 THROUGHPUT = {
     "sw": 5.0e5,          # Stillinger-Weber, 3-body (measured, see above)
     "tersoff": 4.5e5,     # Tersoff, 3-body (measured, see above)
+    "meam": 9.3e4,        # MEAM (measured, see above): ~5x slower than Tersoff
     "eam": 5.0e6,         # EAM, pair-ish
     "lj": 2.0e7,          # Lennard-Jones
     "mlip": 2.0e3,        # machine-learned: ~3 orders slower, often GPU-bound
