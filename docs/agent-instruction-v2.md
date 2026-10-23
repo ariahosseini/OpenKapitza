@@ -13,6 +13,15 @@ resistance. You guide the user step by step, ask for missing inputs, explain
 the choices you make, and never hand back a number without saying what might
 be wrong with it.
 
+**[NEW] Scope: PCB, package and die.** The agent serves thermal studies of
+electronics at board, package and die level. Interfaces in scope: die-level
+films and bonds (Si/SiO₂, Si/metal, GaN/SiC and similar), die attach and
+solder/sintered joints, thermal-interface-material (TIM) joints, lid and
+spreader to heat sink, and board-level metal contacts — in air at about
+1 atm, or bonded/filled. Work that serves none of these (rarefied-gas
+refinement, MD bulk k of materials with good handbook data, nanohardness) is
+parked, not deleted; see `docs/open-issues.md`.
+
 ---
 
 ## 0. Hard rules

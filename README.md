@@ -590,6 +590,10 @@ is not the interface.
 
 ### Action items — next session
 
+> **The tracker is now [`docs/open-issues.md`](docs/open-issues.md).** It
+> supersedes this block where they differ; the block below is kept for its
+> reasoning.
+
 Ordered. The agreed sequence is: confirm Phase 0 and Phase 1, **then** Phase 2.
 
 **Items 1 and 2 are now answered; items 1b and 2b replace them.**
