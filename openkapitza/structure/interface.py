@@ -47,12 +47,17 @@ FULL_BONDS_PER_NM2 = 2.0 * SI100_SITES_PER_NM2
 # coupled 0.83e-9 m^2K/W vs weakly coupled 4.27e-9 m^2K/W at 300 K, same
 # potential and quench rate). Presets aim at a class; the build reports the
 # coverage it actually reached and flags a miss.
+# Measured on a 1e14 K/s test glass: annealing alone (1.0 A gap, 2000 K
+# oxide-side band, 50 ps) reached only 35 % oxidation -- a stoichiometric glass
+# surface cannot supply two O per surface Si where they are needed. "strong"
+# therefore O-caps the Si surface before joining (an idealised, abrupt, fully
+# bridged interface: every top Si is Si+2); "intermediate" is anneal-only.
+_HOT = {"anneal": True, "anneal_T": 2000.0, "anneal_ps": 50.0, "cool_ps": 50.0,
+        "anneal_band": 6.0, "anneal_band_si": 1.0}
 BONDING_PRESETS = {
     "weak": {"gap": 2.5, "anneal": False},
-    # Hot band mostly on the oxide side: 2000 K reaching deep into the crystal
-    # would start to disorder it.
-    "strong": {"gap": 1.0, "anneal": True, "anneal_T": 2000.0, "anneal_ps": 50.0,
-               "cool_ps": 50.0, "anneal_band": 6.0, "anneal_band_si": 1.0},
+    "intermediate": {"gap": 1.0, **_HOT},
+    "strong": {"gap": 1.6, "o_terminate": True, **_HOT},
 }
 
 
@@ -77,6 +82,7 @@ class InterfaceSpec:
     seed: int = 5531
     potential: str = "SiO.tersoff"
 
+    o_terminate: bool = False      # cap each top Si's two upward bonds with O
     bonding: str | None = None     # requested class, set by from_preset
 
     @property
@@ -136,6 +142,36 @@ class JoinReport:
     meta: dict = field(default_factory=dict)
 
 
+CAP_HEIGHT = 0.9            # A above the top Si plane for a bridging O
+
+
+def capping_oxygen(si: Cell, keep: np.ndarray, a: float, width: float) -> np.ndarray:
+    """One bridging O per vacant upper-neighbour site of the top Si plane.
+
+    On Si(100) every vacant site above the cut is the shared neighbour of TWO
+    top Si atoms, so one O there bridges them (Si-O-Si) and each top Si still
+    gets two O neighbours: full oxidation, every top Si is Si+2. (Capping each
+    dangling bond separately, the first version, put two O ~1.2 A apart at
+    every site.) The two Si are 3.84 A apart, so an in-plane bridge has
+    Si-O >= 1.92 A; the O starts CAP_HEIGHT above the plane and the anneal
+    relaxes it. The coverage measured afterwards is the judge.
+    """
+    top = si.pos[keep, 2].max()
+    top_idx = np.nonzero(keep & (np.abs(si.pos[:, 2] - top) < 1e-6))[0]
+    above = np.nonzero(~keep & (np.abs(si.pos[:, 2] - top - a / 4.0) < 1e-6))[0]
+    nn = math.sqrt(3.0) / 4.0 * a
+    sites = []
+    for k in above:
+        d = si.pos[top_idx] - si.pos[k]
+        d[:, :2] -= width * np.round(d[:, :2] / width)
+        if np.count_nonzero(np.abs(np.linalg.norm(d, axis=1) - nn) < 1e-3) >= 2:
+            sites.append(si.pos[k])
+    caps = np.asarray(sites)
+    caps[:, 2] = top + CAP_HEIGHT
+    caps[:, :2] %= width
+    return caps
+
+
 def join(glass: Cell, spec: InterfaceSpec, flags: FlagSet) -> tuple[Cell, JoinReport]:
     """Si(100) slab from z = 0 to the interface, glass above it, as one cell.
 
@@ -155,6 +191,10 @@ def join(glass: Cell, spec: InterfaceSpec, flags: FlagSet) -> tuple[Cell, JoinRe
     keep = si.pos[:, 2] < iz - 1e-6
     si_pos = si.pos[keep]
     top_si = float(si_pos[:, 2].max())
+    cap = np.zeros((0, 3))
+    if spec.o_terminate:
+        cap = capping_oxygen(si, keep, a, w)
+        top_si = float(cap[:, 2].max())          # the glass sits above the O layer
 
     # Glass types: incoming 1 = Si, 2 = O (amorphous.py convention).
     cut_z, broken = best_cut(glass)
@@ -172,14 +212,15 @@ def join(glass: Cell, spec: InterfaceSpec, flags: FlagSet) -> tuple[Cell, JoinRe
     gpos, gtypes = gpos[inside], gtypes[inside]
     new_types = np.where(gtypes == 1, SI_OX, O_T)
 
-    pos = np.vstack([si_pos, gpos])
-    types = np.r_[np.full(len(si_pos), SI_C), new_types]
+    pos = np.vstack([si_pos, cap, gpos])
+    types = np.r_[np.full(len(si_pos), SI_C), np.full(len(cap), O_T), new_types]
     cell = Cell(pos, types, np.zeros(3), np.array([w, w, total + spec.headroom]),
                 {SI_C: MASS["Si"], SI_OX: MASS["Si"], O_T: MASS["O"]},
                 periodic=(True, True, False))
     area_nm2 = (w / 10.0) ** 2
-    rep = JoinReport(len(si_pos), len(gpos), cut_z, broken, broken / area_nm2, repeats,
-                     meta={"top_si": top_si, "gap": spec.gap})
+    rep = JoinReport(len(si_pos), len(gpos) + len(cap), cut_z, broken, broken / area_nm2,
+                     repeats, meta={"top_si": top_si, "gap": spec.gap,
+                                    "capping_O": len(cap)})
     if repeats > 1:
         flags.add(
             Code.STRUCT_INTERFACE_BONDING, Severity.CAUTION,
@@ -197,7 +238,8 @@ def join(glass: Cell, spec: InterfaceSpec, flags: FlagSet) -> tuple[Cell, JoinRe
 @dataclass
 class InterfaceChemistry:
     si_o_bonds_per_nm2: float
-    suboxide: dict[str, float]            # fraction of top-layer crystal Si with n O
+    suboxide: dict[str, float]            # fraction of crystal Si within `band` of the
+                                          # topmost one with n O neighbours (~3 planes)
     dangling_o: int                       # O with one Si neighbour near the interface
 
     @property
@@ -329,7 +371,7 @@ def build_interface(lmp: Path, glass: Cell, spec: InterfaceSpec, potential_dir: 
         f"glass cut where {rep.broken_bonds} Si-O bonds cross ({rep.broken_per_nm2:.1f} per nm^2); "
         f"gap {spec.gap:.2f} A; {chem.si_o_bonds_per_nm2:.1f} Si(crystal)-O bonds per nm^2 "
         f"({chem.coverage * 100:.0f} % of full oxidation: {chem.bonding_class}); "
-        f"top-layer Si sub-oxides "
+        f"crystal Si within 4 A of the interface: "
         + ", ".join(f"{k} {v * 100:.0f} %" for k, v in sorted(chem.suboxide.items())) + ".",
         remedy=("These choices change h_K more than most others (section 3). Quote them "
                 "with the result; compare annealed and unannealed if h_K is sensitive."),

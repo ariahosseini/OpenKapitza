@@ -77,6 +77,28 @@ class Join(unittest.TestCase):
         self.assertAlmostEqual(sum(ch.suboxide.values()), 1.0, places=9)
 
 
+class Capping(unittest.TestCase):
+    def test_one_bridging_oxygen_per_vacant_site(self):
+        from openkapitza.structure.crystals import diamond
+        from openkapitza.structure.interface import capping_oxygen
+        a, n = 5.4321, 4
+        si = diamond(a, (n, n, 4))
+        keep = si.pos[:, 2] < 2 * a - 1e-6
+        caps = capping_oxygen(si, keep, a, n * a)
+        top = si.pos[keep][si.pos[keep][:, 2] > si.pos[keep][:, 2].max() - 1e-6]
+        self.assertEqual(len(top), 2 * n * n)                # 6.78 per nm^2 on (100)
+        self.assertEqual(len(caps), len(top))                # one O per vacant site
+        c = Cell(np.vstack([top, caps]), np.r_[np.ones(len(top), int), np.full(len(caps), 2)],
+                 np.zeros(3), np.array([n * a, n * a, 30.0]), {1: 28.0, 2: 16.0},
+                 periodic=(True, True, False))
+        it, io = np.arange(len(top)), np.arange(len(top), len(c.types))
+        i, j, r = pair_distances(c, it, io, 2.2)
+        counts = np.bincount(i, minlength=len(top))[:len(top)]
+        self.assertTrue(np.all(counts == 2))                 # every top Si sees two O
+        _, _, roo = pair_distances(c, io, io, 2.4)
+        self.assertEqual(len(roo), 0)                        # no crowded O
+
+
 class Bonding(unittest.TestCase):
     def test_full_oxidation_reference(self):
         from openkapitza.structure.interface import FULL_BONDS_PER_NM2
@@ -91,7 +113,9 @@ class Bonding(unittest.TestCase):
     def test_presets(self):
         g = NEMDGeometry()
         s = InterfaceSpec.from_preset("strong", g, lateral_cells=4)
-        self.assertEqual((s.bonding, s.gap, s.anneal, s.anneal_T), ("strong", 1.0, True, 2000.0))
+        self.assertEqual((s.bonding, s.o_terminate, s.anneal, s.anneal_T),
+                         ("strong", True, True, 2000.0))
+        self.assertFalse(InterfaceSpec.from_preset("intermediate", g).o_terminate)
         self.assertFalse(InterfaceSpec.from_preset("weak", g).anneal)
         with self.assertRaises(ValueError):
             InterfaceSpec.from_preset("medium", g)

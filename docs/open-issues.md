@@ -69,7 +69,7 @@ heterostructures (fcc on diamond) live in `md/nemd.py`. Script:
 | P2-3 | **Si/a-SiO₂ h_K.** Targets (300 K): Lampin et al. 2012, same potential and rate — strong bonding 0.83 ± 0.25 × 10⁻⁹ m²K/W (≈1.2 GW/m²K), weak 4.27 ± 1.78 × 10⁻⁹ (≈0.23 GW/m²K); experiment > 0.6 GW/m²K (Kimling et al., TR-MOKE). | open | Converged h_K with bonding descriptors stated, inside the bracket for its bonding class. |
 | P2-4 | **Si in `SiO.tersoff` fails the elastic gate** (−14/+18/−13 %): same Tersoff Si(D) as `SiCGe.tersoff`. | open | Reported with every Si/SiO₂ h_K; or a gated Si–O potential. |
 | P2-5 | **Quench-rate sensitivity.** One rate is one sample of the rate-dependent glass. | **cluster** | h_K at two rates (10¹³ and 10¹² K/s). |
-| P2-6 | **Interface bonding sensitivity** (annealed vs as-joined; gap). Lampin: 5x spread between strong and weak coupling. | open | h_K for both bonding choices on the same glass. |
+| P2-6 | **Interface bonding sensitivity.** Presets now reach distinct classes, measured on a test glass: weak (2.5 Å gap, no anneal), intermediate (anneal only: 35 % of full Si(100) oxidation), strong (bridging-O capped Si surface + 2000 K oxide-side anneal: 15.5 bonds/nm², 114 %, Si⁺¹/⁺²/⁺³ 6/22/10 % — a short sub-oxide transition). Lampin: 5x h_K spread between strong and weak. | open | h_K for strong and weak on the same validated glass. |
 | P2-1 | General crystalline supercell matching beyond (100) cube-on-cube (other orientations, hexagonal GaN/SiC). | open | — |
 
 ## Later phases

@@ -12,7 +12,7 @@ caveat and the interface-bonding flag are printed with the build.
 
 Usage:
     python3 scripts/build_si_sio2.py --lmp <lmp> --potentials <dir> --out <dir>
-        [--glass glass.data] [--quench-rate 1e13] [--bonding strong|weak]
+        [--glass glass.data] [--quench-rate 1e13] [--bonding strong|intermediate|weak]
         [--bulk-nm 4] [--cells 5]
 """
 
@@ -44,7 +44,7 @@ def main(argv=None) -> int:
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--glass", type=Path, help="reuse a quenched glass.data")
     ap.add_argument("--quench-rate", type=float, default=1e13)
-    ap.add_argument("--bonding", choices=["strong", "weak"], default="strong",
+    ap.add_argument("--bonding", choices=["strong", "intermediate", "weak"], default="strong",
                     help="interface bonding preset; the build reports what it reached")
     ap.add_argument("--bulk-nm", type=float, default=4.0)
     ap.add_argument("--cells", type=int, default=5, help="lateral Si cells")
