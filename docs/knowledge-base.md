@@ -1402,6 +1402,40 @@ above. The LAMMPS examples are bulk-only.
    cluster-size cell; here only plumbing.
 4. Cross-interface coupling: not modelled; raise a flag with every metal h_K.
 
+
+### 7.x TTM-NEMD as built (`md/ttm.py`, 23 Oct 2026)
+
+- **Deck.** `NEMDSpec(ttm=TTMSpec("Al"))`: `boundary p p p`; headroom gets the
+  vacuum guard (default 12 Å) on top of the piston's travel; after relaxation
+  the deck prints `OPENKAPITZA_VACUUM_GAP` and `quit`s if the gap is below the
+  guard. `fix twotemp gmetal ttm/thermal` is defined after equilibration (box
+  final), on the mobile metal atoms including those in the reservoir.
+  `ttm_props.in` (written by `nemd.ttm_properties`, and by `write_campaign`):
+  1×1×Nz grid, metal cells with C_vol, κ_e, γ_p; others κ_e = γ_p = 0.
+- **Parameters (Al, 300 K):** C_e = 135 J/m³K² × T (Kittel), κ_e 225.8 W/mK,
+  g 2.45e17 → γ_p = 2.65 g/mol/ps (electron–lattice time 10 ps). Cooling length
+  √(κ_p/g) with the p-p-only κ_p (10.7): 6.6 nm; fit exclusion 3 l_c = 20 nm.
+  Cu: 46 nm. **A converged Al cell needs ≳ 30 nm of metal; Cu ≳ 60 nm.**
+- **Electron temperature is thermodynamically noisy; never read a snapshot.**
+  Equilibrium bulk-Al check (1024 atoms, periodic, no gradient): lattice
+  ~292 K, electron snapshots every 2 ps ranged 243–369 K with mean 289 K — no
+  bias, but δT_e ≈ T/√(C_e V/k_B) ≈ 40 K, because the electrons' heat capacity
+  is ~60x the lattice's smaller and k_e couples the whole metal into one small
+  reservoir. In an interface cell with ~20 nm³ of metal that is ~±27 K per
+  snapshot, larger than the whole metal-side gradient. The first interface run
+  read its snapshots as "electrons 20–40 K hot" before this check. The deck
+  now averages the metal's mean T_e in production (`T_e_mean.dat`, from
+  `f_twotemp[1]` minus the fixed electron-free cells) on the same windows as
+  the lattice profile.
+- **Measurement.** `measure_kapitza` starts the metal-side bulk fit
+  `exclusion_lc` cooling lengths from the interface. `compare_runs` turns a
+  phonon-only/TTM pair of the same cell into h_ep = 1/(1/h_TTM − 1/h_pp) with
+  errors in quadrature, and declines to quote it when not resolved.
+- **Checks raised by `check_spec`:** cross-interface channel not modelled
+  (always); metal shorter than 2·exclusion; < 1000 metal atoms per electron
+  cell (Wang et al.); electron cell longer than the cooling length; reduced
+  exclusion.
+
 ### Lessons
 
 - **Check a citation's author list against the paper.** arXiv:1401.5550 is

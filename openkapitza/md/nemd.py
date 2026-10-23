@@ -23,6 +23,7 @@ guess that silently biases the jump low (see md.profile).
 from __future__ import annotations
 
 import math
+import re
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -385,6 +386,9 @@ class NEMDSpec:
     # relaxed interface, so a side type missing here moves the reported plane.
     types_a: tuple[int, ...] = (1,)
     types_b: tuple[int, ...] = (2,)
+    # Electrons on a metal side (md.ttm.TTMSpec): two-temperature NEMD, open
+    # issue P1-14. Switches the deck to periodic z with a vacuum gap.
+    ttm: object | None = None
     extra: dict = field(default_factory=dict)
 
     @property
@@ -468,11 +472,11 @@ DECK = """\
 #
 # Layout along z:
 #   [wall][hot Langevin][ bulk {element_a} ]|[ bulk {element_b} ][cold Langevin][wall]
-# z is NON-PERIODIC so heat cannot short-circuit around the box.
+# {boundary_note}
 
 units           metal
 dimension       3
-boundary        p p f
+boundary        {boundary}
 atom_style      atomic
 timestep        {timestep_ps:.6f}
 
@@ -510,7 +514,7 @@ thermo          10000
 thermo_style    custom step temp pe etotal press
 run             {equilibrate_steps}
 unfix           equil
-
+{ttm_block}
 # ---- impose the gradient --------------------------------------------------
 # Langevin reservoirs on the ends only; the bulk runs NVE so the profile
 # between them is physical and not thermostatted into a straight line.
@@ -543,7 +547,7 @@ fix             cold gcold langevin {t_cold:.2f} {t_cold:.2f} {damp_ps:.4f} {see
 compute         layers gmobile chunk/atom bin/1d z lower {bin_width:.4f} units box
 fix             profile gmobile ave/chunk {profile_every} {n_profile_samples} \
 {profile_window} layers temp file temperature_profile.dat
-
+{ttm_production}
 variable        ehot  equal f_hot
 variable        ecold equal f_cold
 variable        tnow  equal time
@@ -844,8 +848,9 @@ def headroom(spec: NEMDSpec) -> float:
     lattice constant to its own: |a_b/a_used - 1| of its length. Twice that,
     and never less than 0.5 nm.
     """
+    vacuum = spec.ttm.vacuum_min_ang * 1e-10 if spec.ttm is not None else 0.0
     if not spec.relax_z:
-        return 0.0
+        return vacuum
     g = spec.geometry
     if spec.heterostructure:
         sa, sb = spec.lattice_strain
@@ -853,7 +858,8 @@ def headroom(spec: NEMDSpec) -> float:
     else:
         strain = abs(spec.lattice_b / spec.lattice_used - 1.0) + abs(
             spec.lattice_a / spec.lattice_used - 1.0)
-    return max(0.5e-9, 2.0 * strain * (g.bulk_a_length + g.bulk_b_length))
+    # Periodic z (TTM): the vacuum guard comes on top of the piston's travel.
+    return max(0.5e-9, 2.0 * strain * (g.bulk_a_length + g.bulk_b_length)) + vacuum
 
 
 def _relax_steps(spec: NEMDSpec) -> int:
@@ -1070,7 +1076,48 @@ def build_input_deck(spec: NEMDSpec) -> str:
         interface_ang=g.interface_z * a,
         pressure_block=pressure_block,
         relax_block=relax_block,
+        boundary="p p p" if spec.ttm is not None else "p p f",
+        boundary_note=("z is PERIODIC for fix ttm/thermal; a vacuum gap above the top wall "
+                       "(checked below) stops heat crossing the z-boundary."
+                       if spec.ttm is not None else
+                       "z is NON-PERIODIC so heat cannot short-circuit around the box."),
+        ttm_block=_ttm_block(spec, window),
+        ttm_production=_ttm_production(spec, window, n_samples),
     )
+
+
+def ttm_box_z(spec: NEMDSpec) -> float:
+    """Box height in A that the electron grid divides (fixed after relaxation)."""
+    if spec.structure_mode == "build":
+        return (spec.geometry.total_length + headroom(spec)) * M_TO_ANG
+    if spec.ttm.box_z_ang is None:
+        raise ValueError("a read_data TTM cell needs ttm.box_z_ang (the data file's z extent)")
+    return spec.ttm.box_z_ang
+
+
+def _ttm_block(spec: NEMDSpec, window: int) -> str:
+    if spec.ttm is None:
+        return ""
+    from . import ttm as ttm_mod
+    if not spec.relax_structure:
+        raise ValueError("TTM needs the relaxation stage: the box must be final before "
+                         "fix ttm/thermal is defined")
+    spec.ttm.resolved()
+    return ttm_mod.deck_block(spec, spec.ttm, ttm_box_z(spec), out_every=window) + "\n"
+
+
+def _ttm_production(spec: NEMDSpec, window: int, n_samples: int) -> str:
+    if spec.ttm is None:
+        return ""
+    from . import ttm as ttm_mod
+    return ttm_mod.production_block(spec, spec.ttm, ttm_box_z(spec), spec.profile_every,
+                                    n_samples, window)
+
+
+def ttm_properties(spec: NEMDSpec) -> str:
+    """Contents of ttm_props.in for a TTM deck (write it beside nemd.in)."""
+    from . import ttm as ttm_mod
+    return ttm_mod.properties_file(spec, spec.ttm, ttm_box_z(spec))
 
 
 def validate_deck(deck: str) -> list[str]:
@@ -1160,7 +1207,12 @@ def validate_deck(deck: str) -> list[str]:
     for ln in lines:
         if ln.startswith("boundary"):
             parts = ln.split()
-            if len(parts) >= 4 and parts[3] != "f":
+            ttm_ok = (len(parts) >= 4 and parts[3] == "p" and "ttm/thermal" in deck
+                      and "OPENKAPITZA_VACUUM_GAP" in deck
+                      and re.search(r'^if "\$\(v_zgap\) <', deck, re.MULTILINE))
+            if len(parts) >= 4 and parts[3] != "f" and not ttm_ok:
+                # Periodic z is allowed only for fix ttm/thermal (which requires
+                # it) and only with the deck's own vacuum-gap guard.
                 problems.append(
                     f"z boundary is {parts[3]!r}, not 'f'; a periodic "
                     f"transport direction lets heat bypass the interface"
@@ -1175,6 +1227,9 @@ def validate_deck(deck: str) -> list[str]:
 def check_spec(spec: NEMDSpec, flags: FlagSet) -> None:
     """Pre-flight checks that catch the usual ways a NEMD run is wasted."""
     g = spec.geometry
+    if spec.ttm is not None:
+        from . import ttm as ttm_mod
+        ttm_mod.check(spec, spec.ttm, flags)
 
     if spec.spot_pressure_GPa:
         flags.add(

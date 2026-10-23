@@ -102,8 +102,13 @@ def audit_one(spec: NEMDSpec, label: str) -> list[str]:
 
     # --- z is non-periodic, or heat short-circuits -------------------------
     def _boundary():
-        _check(re.search(r"^boundary\s+p p f\s*$", deck, re.MULTILINE) is not None,
-               "z must be non-periodic (boundary p p f)")
+        if spec.ttm is not None:
+            _check(re.search(r"^boundary\s+p p p\s*$", deck, re.MULTILINE) is not None
+                   and "OPENKAPITZA_VACUUM_GAP" in deck,
+                   "TTM deck must be periodic in z with the vacuum-gap guard")
+        else:
+            _check(re.search(r"^boundary\s+p p f\s*$", deck, re.MULTILINE) is not None,
+                   "z must be non-periodic (boundary p p f)")
     run(_boundary, "boundary")
 
     # --- regions, recomputed from the geometry in Angstrom ----------------

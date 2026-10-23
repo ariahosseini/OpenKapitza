@@ -142,6 +142,20 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
         bulk_b = (interface_z, g.bulk_b[1] + wall_shift)
         profile = replace(profile, interface_z=interface_z)
     frames_interface = interface_z
+    if spec.ttm is not None:
+        # Two-temperature run: next to the interface the metal lattice and its
+        # electrons are out of equilibrium over a few cooling lengths, so the
+        # metal's bulk fit starts beyond them (md.ttm.fit_exclusion).
+        from .ttm import fit_exclusion
+        cut = fit_exclusion(spec.ttm)
+        if spec.ttm.side == "b":
+            bulk_b = (bulk_b[0] + cut, bulk_b[1])
+        else:
+            bulk_a = (bulk_a[0], bulk_a[1] - cut)
+        if (bulk_b if spec.ttm.side == "b" else bulk_a)[1] <= \
+                (bulk_b if spec.ttm.side == "b" else bulk_a)[0]:
+            raise ValueError("metal slab shorter than the TTM fit exclusion "
+                             f"({cut * 1e9:.1f} nm): lengthen the metal side")
 
     e_hot, e_cold, duration = parse_reservoir_energy(energy)
     flux = flux_from_reservoirs(e_hot, e_cold, duration, area, flags)

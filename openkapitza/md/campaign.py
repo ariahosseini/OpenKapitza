@@ -20,6 +20,8 @@ reported as such rather than as "not converged" (same lesson as P1-1).
 
 from __future__ import annotations
 
+import dataclasses
+
 import copy
 import json
 import shutil
@@ -151,6 +153,9 @@ def write_campaign(root: Path | str, rungs: list[Rung], potential: Path | str, *
         shutil.copy(potential, wd / potential.name)
         for extra in r.spec.extra_files:           # e.g. a MEAM parameter file
             shutil.copy(potential.parent / extra, wd / extra)
+        if r.spec.ttm is not None:                 # electron grid for fix ttm/thermal
+            from .nemd import ttm_properties
+            (wd / "ttm_props.in").write_text(ttm_properties(r.spec), encoding="utf-8")
         n_atoms = _atoms(r.spec)
         rung_cores = cores_for(n_atoms, cores)
         est = estimate_cost(n_atoms, _steps(r.spec), r.spec.pair_style,
@@ -197,7 +202,12 @@ def _spec_record(spec: NEMDSpec) -> dict:
             "production_steps", "profile_every", "profile_frames", "damping_fs",
             "seed", "mass_a", "mass_b", "spot_pressure_GPa", "common_lattice",
             "structure_mode", "data_file", "lattice_style_a", "lattice_style_b",
-            "coeff_args", "relax_z", "piston_damp_ps")},
+            "coeff_args", "relax_z", "piston_damp_ps", "spot_pressure_mode",
+            "load_steps", "couple_xy")},
+        "types_a": list(spec.types_a), "types_b": list(spec.types_b),
+        "ttm": (None if spec.ttm is None else
+                {k: (list(v) if isinstance(v, tuple) else v)
+                 for k, v in dataclasses.asdict(spec.ttm).items()}),
         "supercell": list(spec.supercell) if spec.supercell else None,
         "extra_files": list(spec.extra_files),
         "pair_elements": list(spec.pair_elements) if spec.pair_elements else None,
@@ -211,8 +221,15 @@ def spec_from_record(rec: dict) -> NEMDSpec:
     pe = rec.pop("pair_elements")
     sc = rec.pop("supercell", None)
     ef = rec.pop("extra_files", [])
+    ta = tuple(rec.pop("types_a", (1,)))
+    tb = tuple(rec.pop("types_b", (2,)))
+    ttm = rec.pop("ttm", None)
+    if ttm is not None:
+        from .ttm import TTMSpec
+        ttm = TTMSpec(**{k: (tuple(v) if isinstance(v, list) else v) for k, v in ttm.items()})
     return NEMDSpec(geometry=g, pair_elements=tuple(pe) if pe else None,
-                    supercell=tuple(sc) if sc else None, extra_files=tuple(ef), **rec)
+                    supercell=tuple(sc) if sc else None, extra_files=tuple(ef),
+                    types_a=ta, types_b=tb, ttm=ttm, **rec)
 
 
 @dataclass
