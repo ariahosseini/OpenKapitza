@@ -102,6 +102,9 @@ fix             freeze_hi gwall_hi setforce 0.0 0.0 0.0
 group           gside_a type 1
 group           gside_b type 2
 print           "OPENKAPITZA_RELAXED wall_hi_zmin $(bound(gwall_hi,zmin):%.4f) top_a $(bound(gside_a,zmax):%.4f) bottom_b $(bound(gside_b,zmin):%.4f)"
+# The structure actually measured: relaxation can close a gap or form bonds,
+# so the interface chemistry is re-measured on this, not on the input.
+write_data      relaxed.data
 thermo_style    custom step temp press pe ke etotal
 
 # ---- equilibration --------------------------------------------------------

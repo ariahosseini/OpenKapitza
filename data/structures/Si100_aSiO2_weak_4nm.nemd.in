@@ -1,0 +1,175 @@
+# OpenKapitza direct NEMD -- Si/SiO2 interface
+# Generated; do not edit by hand. Units: metal (Angstrom, ps, eV, bar).
+#
+# Layout along z:
+#   [wall][hot Langevin][ bulk Si ]|[ bulk SiO2 ][cold Langevin][wall]
+# z is NON-PERIODIC so heat cannot short-circuit around the box.
+
+units           metal
+dimension       3
+boundary        p p f
+atom_style      atomic
+timestep        0.000500
+
+read_data       interface.data
+
+pair_style      tersoff
+pair_coeff      * * SiO.tersoff Si Si O
+
+# ---- regions, in Angstrom -------------------------------------------------
+region          wall_lo  block INF INF INF INF INF 8.0000 units box
+region          hot      block INF INF INF INF 8.0000 18.0000 units box
+region          cold     block INF INF INF INF 98.0000 108.0000 units box
+region          wall_hi  block INF INF INF INF 108.0000 INF units box
+
+group           gwall_lo region wall_lo
+group           gwall_hi region wall_hi
+group           ghot     region hot
+group           gcold    region cold
+group           gwalls   union gwall_lo gwall_hi
+group           gmobile  subtract all gwalls
+
+velocity        gwalls set 0.0 0.0 0.0 units box
+fix             freeze gwalls setforce 0.0 0.0 0.0
+# Thermo temperature over MOBILE atoms. The default averages every atom, and
+# the frozen walls (about 10 % of a 21 nm cell, at 0 K) pulled the reported
+# mean to ~0.9 of the true one -- read for months as "equilibration did not
+# finish". Re-applied before each stage because a barostat fix overrides it.
+compute         tmobile gmobile temp
+
+# ---- relaxation -----------------------------------------------------------
+# The cell is built on ONE in-plane lattice constant, so the whole lattice
+# mismatch shows up as in-plane strain: 6.4 GPa of internal pressure in the
+# Si/Ge case, against ~0 for a relaxed crystal. That stress shifts phonon
+# frequencies and therefore changes h_K directly, so an unrelaxed cell does
+# not measure the interface it claims to.
+#
+# x and y are PERIODIC and can be barostatted. z cannot -- it is non-periodic
+# (walls), and `fix npt` on a non-periodic dimension is a hard LAMMPS error.
+# That is fine, because the mismatch strain is in-plane by construction.
+# Relaxing x and y at zero pressure lets the shared in-plane constant settle
+# where the net in-plane stress vanishes, splitting the mismatch between the
+# two sides instead of putting all of it on the B side.
+#
+# `couple xy` keeps the cross-section square, which the periodic images
+# require and which the cubic symmetry of both materials justifies.
+minimize        1.0e-6 1.0e-8 10000 100000
+# minimize advances the step counter by its iteration count. Reset it, or any
+# fix ave/time window below never lands on an output step and reads as zero.
+reset_timestep  0
+velocity        gmobile create 600.00 12345 mom yes rot yes dist gaussian
+fix             relax gmobile npt temp 300.00 300.00 0.1000                 couple xy x 0.0 0.0 1.0000 y 0.0 0.0 1.0000
+# Sample often enough to SEE the box converge. Inheriting a coarse interval
+# from an earlier stage left two samples across 30 000 steps, which cannot
+# distinguish a converged box from one still drifting -- and the relaxed
+# in-plane constant is the number everything downstream inherits.
+thermo          5000
+thermo_style    custom step temp press pxx pyy pzz lx ly
+# The in-plane box oscillates under the barostat (period ~ps). It is set to
+# its MEAN over the second half before the barostat comes off; stopping it
+# mid-swing froze a ~0.1 % strain, ~0.2 GPa, into every later stage (open
+# issue P1-13).
+variable        lxv equal lx
+variable        lyv equal ly
+fix             boxav all ave/time 10 5000 100000 v_lxv v_lyv
+unfix           freeze
+fix             freeze_lo gwall_lo setforce 0.0 0.0 0.0
+fix             freeze_hi gwall_hi setforce 0.0 0.0 NULL
+fix             piston gwall_hi aveforce NULL NULL 0.0
+fix             piston_nve gwall_hi nve
+fix             piston_damp gwall_hi viscous 5.821714e-03
+variable        zwall equal bound(gwall_hi,zmin)
+# The cell breathes along z (period ~10 ps for a 20 nm Si/Ge slab), so the
+# wall is frozen at its MEAN position over the second half, not wherever the
+# oscillation leaves it -- the latter left up to +/-0.3 GPa in the first test.
+fix             zav all ave/time 10 5000 100000 v_zwall
+thermo_style    custom step temp press pxx pyy pzz lx ly v_zwall
+run             100000
+unfix           relax
+change_box      all x final $(xlo) $(xlo+f_boxav[1]) y final $(ylo) $(ylo+f_boxav[2]) remap units box
+unfix           boxav
+# The flux is power / area, and relaxation changes the area (Si/Ge: +5 %).
+# The measurement reads THIS line, never the as-built cross-section.
+print           "OPENKAPITZA_BOX lx $(lx:%.6f) ly $(ly:%.6f)"
+displace_atoms  gwall_hi move 0.0 0.0 $(f_zav-v_zwall) units box
+unfix           zav
+unfix           piston_damp
+unfix           piston_nve
+unfix           piston
+unfix           freeze_hi
+velocity        gwall_hi set 0.0 0.0 0.0 units box
+fix             freeze_hi gwall_hi setforce 0.0 0.0 0.0
+group           gside_a type 1
+group           gside_b type 2
+print           "OPENKAPITZA_RELAXED wall_hi_zmin $(bound(gwall_hi,zmin):%.4f) top_a $(bound(gside_a,zmax):%.4f) bottom_b $(bound(gside_b,zmin):%.4f)"
+# The structure actually measured: relaxation can close a gap or form bonds,
+# so the interface chemistry is re-measured on this, not on the input.
+write_data      relaxed.data
+thermo_style    custom step temp press pe ke etotal
+
+# ---- equilibration --------------------------------------------------------
+velocity        gmobile create 600.00 12345 mom yes rot yes dist gaussian
+
+fix             equil gmobile nvt temp 300.00 300.00 0.1000
+thermo_modify   temp tmobile
+thermo          10000
+thermo_style    custom step temp pe etotal press
+run             200000
+unfix           equil
+
+# ---- impose the gradient --------------------------------------------------
+# Langevin reservoirs on the ends only; the bulk runs NVE so the profile
+# between them is physical and not thermostatted into a straight line.
+fix             nve gmobile nve
+fix             hot  ghot  langevin 320.00 320.00 0.1000 12346 tally yes
+fix             cold gcold langevin 280.00 280.00 0.1000 12347 tally yes
+
+# Reach steady state before any averaging starts.
+run             200000
+
+# ---- production -----------------------------------------------------------
+# Restart the clock. fix ave/chunk writes on multiples of Nfreq and averages
+# backwards over Nevery*Nrepeat steps, so on a non-zero starting timestep the
+# window reaches back before the fix existed and NO frame is written at all --
+# the file ends up holding nothing but its header. Resetting makes the
+# averaging windows align exactly with this run.
+reset_timestep  0
+
+# Recreate the reservoirs so their energy accumulators cover the production
+# window only. The flux comes from these, never from a nominal setpoint.
+unfix           hot
+unfix           cold
+fix             hot  ghot  langevin 320.00 320.00 0.1000 12346 tally yes
+fix             cold gcold langevin 280.00 280.00 0.1000 12347 tally yes
+
+# Bin along z and average the temperature in each bin. The chunk ID
+# ("layers") MUST follow Nfreq and precede the values -- omitting it makes
+# LAMMPS read the first value as the chunk ID and fail with "No values from
+# computes, fixes, or variables used in fix ave/chunk command".
+compute         layers gmobile chunk/atom bin/1d z lower 4.0000 units box
+fix             profile gmobile ave/chunk 200 625 125000 layers temp file temperature_profile.dat
+
+variable        ehot  equal f_hot
+variable        ecold equal f_cold
+variable        tnow  equal time
+fix             energy all print 200 "${tnow} ${ehot} ${ecold}" file reservoir_energy.dat screen no title "# time[ps] E_hot[eV] E_cold[eV]"
+
+# Pxx/Pyy/Pzz, not just the scalar Press: `Press` is their mean, which
+# averages away the anisotropy that matters. In-plane relaxation drives
+# Pxx and Pyy to ~0 while Pzz keeps a residual, because z is non-periodic
+# and cannot be barostatted -- and z is the transport direction, so Pzz is
+# the component h_K is most sensitive to. Without these columns in the
+# PRODUCTION block the stress check has nothing to test where it counts.
+# Stress over the SLAB's own extent. LAMMPS divides the virial by the box
+# volume, and with relax_z the box includes empty headroom above the wall, so
+# raw pxx/pyy/pzz read low by slab/box (6 % on a 21 nm Si/Ge cell). The
+# health check prefers these columns.
+variable        slabf equal lz/(bound(all,zmax)-bound(all,zmin))
+variable        sxx equal pxx*v_slabf
+variable        syy equal pyy*v_slabf
+variable        szz equal pzz*v_slabf
+thermo_style    custom step temp press pxx pyy pzz f_hot f_cold v_sxx v_syy v_szz
+thermo_modify   temp tmobile
+run             1000000
+
+print           "OPENKAPITZA_DONE area_m2 7.376928e-18 interface_z_ang 58.0000"

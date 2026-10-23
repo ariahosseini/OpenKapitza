@@ -37,6 +37,25 @@ from openkapitza.structure.interface import InterfaceSpec, build_interface  # no
 SI_A0_SIO_TERSOFF = 5.4321      # A, measured: measure_potential_elastic.py --set sio
 
 
+def nemd_spec(g: NEMDGeometry, production_ps: float = 500.0) -> NEMDSpec:
+    """The read-in NEMD run for a Si/a-SiO2 cell built here (0.5 fs: light O)."""
+    return NEMDSpec(geometry=g, element_a="Si", element_b="SiO2",
+                    lattice_a=SI_A0_SIO_TERSOFF * 1e-10, lattice_b=SI_A0_SIO_TERSOFF * 1e-10,
+                    temperature=300.0, structure_mode="read_data", data_file="interface.data",
+                    pair_style="tersoff", pair_file="SiO.tersoff",
+                    coeff_args="SiO.tersoff Si Si O", mass_a=28.0855, mass_b=28.0855,
+                    timestep_fs=0.5, production_steps=int(production_ps * 2000),
+                    equilibrate_steps=200_000, steady_steps=200_000, relax_steps=100_000,
+                    profile_every=200, profile_frames=8)
+
+
+def geometry(bulk_nm: float, cells: int) -> NEMDGeometry:
+    width = cells * SI_A0_SIO_TERSOFF
+    return NEMDGeometry(wall_thickness=0.8e-9, reservoir_thickness=1.0e-9,
+                        bulk_a_length=bulk_nm * 1e-9, bulk_b_length=bulk_nm * 1e-9,
+                        cross_section=width * 1e-10, bin_width=0.4e-9)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--lmp", required=True, type=Path)
@@ -53,9 +72,7 @@ def main(argv=None) -> int:
 
     flags = FlagSet()
     width = a.cells * SI_A0_SIO_TERSOFF
-    g = NEMDGeometry(wall_thickness=0.8e-9, reservoir_thickness=1.0e-9,
-                     bulk_a_length=a.bulk_nm * 1e-9, bulk_b_length=a.bulk_nm * 1e-9,
-                     cross_section=width * 1e-10, bin_width=0.4e-9)
+    g = geometry(a.bulk_nm, a.cells)
     oxide_len = (g.total_length - g.interface_z) * 1e10
 
     if a.glass:
@@ -86,14 +103,7 @@ def main(argv=None) -> int:
     nemd.mkdir(parents=True, exist_ok=True)
     shutil.copy(res.data_file, nemd / "interface.data")
     shutil.copy(a.potentials / "SiO.tersoff", nemd / "SiO.tersoff")
-    spec = NEMDSpec(geometry=g, element_a="Si", element_b="SiO2",
-                    lattice_a=SI_A0_SIO_TERSOFF * 1e-10, lattice_b=SI_A0_SIO_TERSOFF * 1e-10,
-                    temperature=300.0, structure_mode="read_data", data_file="interface.data",
-                    pair_style="tersoff", pair_file="SiO.tersoff",
-                    coeff_args="SiO.tersoff Si Si O", mass_a=28.0855, mass_b=28.0855,
-                    timestep_fs=0.5, production_steps=int(a.production_ps * 2000),
-                    equilibrate_steps=200_000, steady_steps=200_000, relax_steps=100_000,
-                    profile_every=200, profile_frames=8)
+    spec = nemd_spec(g, a.production_ps)
     (nemd / "nemd.in").write_text(build_input_deck(spec))
     print(f"\nNEMD directory ready: {nemd}")
     print(flags.render())
