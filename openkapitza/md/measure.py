@@ -30,7 +30,7 @@ from ..schema.flags import Code, FlagSet, Severity
 from ..schema.quantities import Quantity
 from .nemd import (
     FS_TO_PS, NEMDSpec, check_flux_stationarity, check_run_health,
-    M_TO_ANG, parse_log_thermo, parse_profile, parse_profile_frames,
+    M_TO_ANG, parse_log_thermo, parse_profile, parse_profile_frames, parse_relaxed_box,
     parse_relaxed_positions, parse_reservoir_energy, parse_reservoir_series,
 )
 from .profile import (KapitzaExtraction, extract_kapitza, flux_from_reservoirs,
@@ -112,6 +112,12 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
     g = spec.geometry
     area = spec.snapped_area if spec.structure_mode == "build" else g.area
     log = wd / "log.lammps"
+    # The relaxed cross-section, not the built one: the in-plane barostat
+    # changes it (Si/Ge +5 %), and every h_K from a relaxed cell used to be
+    # high by that ratio.
+    box = parse_relaxed_box(log)
+    if box:
+        area = box[0] * box[1] / M_TO_ANG ** 2
     if log.exists():
         check_run_health(parse_log_thermo(log), spec.temperature, flags,
                          expected_pzz_GPa=spec.spot_pressure_GPa or 0.0)

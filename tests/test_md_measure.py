@@ -80,6 +80,16 @@ def _write_run(wd: Path, spec: NEMDSpec, *, dT=5.0, k_a=50.0, k_b=30.0,
 
 
 class Measurement(unittest.TestCase):
+    def test_relaxed_area_is_used_for_the_flux(self):
+        """Relaxation changes lx, ly; the flux must use the relaxed area."""
+        spec = _spec()
+        q = _write_run(self.wd, spec, dT=5.0)
+        a_built = spec.snapped_cross_section * 1e10
+        lx = a_built * 1.03                               # 3 % wider after relaxation
+        (self.wd / "log.lammps").write_text(f"OPENKAPITZA_BOX lx {lx:.6f} ly {lx:.6f}\n")
+        m = measure_kapitza(self.wd, spec, FlagSet())
+        self.assertAlmostEqual(m.flux / (q / 1.03 ** 2), 1.0, places=5)
+
     def test_negative_frame_jump_is_averaged_not_fatal(self):
         """A noisy slice can give dT < 0; the block error must survive it."""
         spec = _spec()

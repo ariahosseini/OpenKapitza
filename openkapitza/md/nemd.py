@@ -737,6 +737,9 @@ fix             boxav all ave/time 10 {nrep} {relax_steps} v_lxv v_lyv
 unfix           relax
 change_box      all x final $(xlo) $(xlo+f_boxav[1]) y final $(ylo) $(ylo+f_boxav[2]) remap units box
 unfix           boxav
+# The flux is power / area, and relaxation changes the area (Si/Ge: +5 %).
+# The measurement reads THIS line, never the as-built cross-section.
+print           "OPENKAPITZA_BOX lx $(lx:%.6f) ly $(ly:%.6f)"
 {piston_off}thermo_style    custom step temp press pe ke etotal
 """
 
@@ -1360,6 +1363,21 @@ def parse_relaxed_positions(path: Path | str) -> dict[str, float] | None:
                 if m:
                     return {"wall_hi_zmin": float(m.group(1)), "top_a": float(m.group(2)),
                             "bottom_b": float(m.group(3))}
+    except OSError:
+        return None
+    return None
+
+
+def parse_relaxed_box(path: Path | str) -> tuple[float, float] | None:
+    """(lx, ly) in Angstrom after relaxation, or None if the deck did not relax."""
+    import re
+    pat = re.compile(r"^OPENKAPITZA_BOX lx (\S+) ly (\S+)")
+    try:
+        with open(Path(path), "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = pat.match(line.strip())
+                if m:
+                    return float(m.group(1)), float(m.group(2))
     except OSError:
         return None
     return None
