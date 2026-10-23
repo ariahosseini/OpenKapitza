@@ -27,11 +27,39 @@ class StartCell(unittest.TestCase):
 
 class Deck(unittest.TestCase):
     def test_rate_sets_quench_length(self):
-        s = QuenchSpec(t_melt=6000, t_final=300, quench_rate=1e13)
+        s = QuenchSpec(t_melt=6000, t_final=300, quench_rate=1e13, n_segments=10)
         self.assertAlmostEqual(s.quench_ps, 570.0)
         deck = build_quench_deck(s)
-        self.assertIn(f"run             {s.steps(570.0)}", deck)
+        self.assertEqual(deck.count(f"run             {s.steps(57.0)}"), 10)
         self.assertIn("Quench rate 1e+13 K/s", deck)
+
+    def test_segments_tile_the_ramp(self):
+        s = QuenchSpec(t_melt=6000, t_final=300, n_segments=4)
+        deck = build_quench_deck(s)
+        for t0, t1 in ((6000, 4575), (4575, 3150), (3150, 1725), (1725, 300)):
+            self.assertIn(f"nvt temp {t0:.2f} {t1:.2f}", deck)
+        self.assertEqual(deck.count("write_restart"), 5)        # melt + 4 segments
+
+    def test_resume_continues_the_schedule(self):
+        s = QuenchSpec(t_melt=6000, t_final=300, n_segments=4)
+        deck = build_quench_deck(s, resume_from=2)
+        self.assertIn("read_restart    seg02.restart", deck)
+        self.assertNotIn("read_data", deck)
+        self.assertNotIn("velocity", deck)                     # keep the restart's velocities
+        self.assertNotIn("nvt temp 4575.00 3150.00", deck)     # segment 2 already done
+        self.assertIn("nvt temp 3150.00 1725.00", deck)
+        self.assertIn("pair_coeff", deck)                      # not stored in a restart
+
+    def test_progress_marker_needs_its_restart_file(self):
+        import tempfile
+        from pathlib import Path
+        from openkapitza.structure.amorphous import last_completed_segment
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(last_completed_segment(Path(d)))
+            Path(d, "progress.txt").write_text("3\n")
+            self.assertIsNone(last_completed_segment(Path(d)))   # restart missing
+            Path(d, "seg03.restart").write_bytes(b"x")
+            self.assertEqual(last_completed_segment(Path(d)), 3)
 
     def test_fixed_lateral_barostats_z_only(self):
         self.assertIn("z 0.0 0.0 0.5", build_quench_deck(QuenchSpec(fix_lateral=True)))

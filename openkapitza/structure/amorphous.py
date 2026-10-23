@@ -76,6 +76,7 @@ class QuenchSpec:
     timestep_fs: float = 0.5
     seed: int = 81235
     potential: str = "SiO.tersoff"
+    n_segments: int = 10                           # restart checkpoints along the quench
 
     @property
     def quench_ps(self) -> float:
@@ -103,31 +104,49 @@ def start_cell(spec: QuenchSpec) -> Cell:
     return Cell(c.pos * scale, c.types, np.zeros(3), target, dict(c.masses))
 
 
-DECK = """\
+# The deck is built from stages so a killed run can resume. The melt and each
+# quench segment end with `write_restart` and a progress marker; a resumed
+# deck reads the last completed segment and carries on. Each segment ramps
+# only between its own end temperatures, so a resumed quench follows exactly
+# the schedule an uninterrupted one would. (A 3-hour quench was lost at 68 %
+# to a container restart before this existed; cluster walltime limits are
+# the same risk.)
+HEAD = """\
 # OpenKapitza melt-quench a-SiO2. Generated; see openkapitza/structure/amorphous.py.
-# Quench rate {rate:.3g} K/s ({t_melt:.0f} -> {t_final:.0f} K over {quench_ps:.1f} ps).
+# Quench rate {rate:.3g} K/s ({t_melt:.0f} -> {t_final:.0f} K over {quench_ps:.1f} ps,
+# {n_seg} segments).
 units           metal
 boundary        p p p
 atom_style      atomic
-read_data       start.data
+{structure}
 pair_style      tersoff
 pair_coeff      * * {potential} Si O
 timestep        {dt_ps:.6f}
 neighbor        2.0 bin
 thermo          {thermo}
 thermo_style    custom step temp pe press lx ly lz density
+"""
 
+MELT = """\
 velocity        all create {t_init:.1f} {seed} mom yes rot yes dist gaussian
 fix             md all nvt temp {t_melt:.1f} {t_melt:.1f} 0.05
 run             {melt_steps}
 unfix           md
 print           "QUENCH_MELTED"
+write_restart   seg00.restart
+print           "0" file progress.txt screen no
+"""
 
-fix             md all nvt temp {t_melt:.1f} {t_final:.1f} 0.05
-run             {quench_steps}
+SEGMENT = """\
+fix             md all nvt temp {t0:.2f} {t1:.2f} 0.05
+run             {steps}
 unfix           md
-print           "QUENCH_QUENCHED"
+write_restart   seg{k:02d}.restart
+print           "{k}" file progress.txt screen no
+"""
 
+ANNEAL = """\
+print           "QUENCH_QUENCHED"
 # Anneal at zero pressure; set the box to its second-half mean before the
 # barostat comes off, then minimise.
 reset_timestep  0
@@ -146,17 +165,45 @@ print           "QUENCH_DONE density $(density:%.5f) lx $(lx:%.4f) ly $(ly:%.4f)
 """
 
 
-def build_quench_deck(spec: QuenchSpec) -> str:
+def segment_temperatures(spec: QuenchSpec) -> list[float]:
+    return [spec.t_melt + (spec.t_final - spec.t_melt) * k / spec.n_segments
+            for k in range(spec.n_segments + 1)]
+
+
+def build_quench_deck(spec: QuenchSpec, *, resume_from: int | None = None) -> str:
+    """The whole schedule, or its remainder after completed segment `resume_from`."""
     anneal = spec.steps(spec.anneal_ps)
     baro = "z 0.0 0.0 0.5" if spec.fix_lateral else "iso 0.0 0.0 0.5"
-    return DECK.format(
-        rate=spec.quench_rate, t_melt=spec.t_melt, t_final=spec.t_final,
-        quench_ps=spec.quench_ps, potential=spec.potential,
-        dt_ps=spec.timestep_fs * 1e-3, thermo=max(100, spec.steps(1.0)),
-        t_init=2.0 * spec.t_melt, seed=spec.seed, melt_steps=spec.steps(spec.melt_ps),
-        quench_steps=spec.steps(spec.quench_ps), baro=baro, nrep=anneal // 20,
-        anneal_steps=anneal,
-    )
+    structure = ("read_data       start.data" if resume_from is None
+                 else f"read_restart    seg{resume_from:02d}.restart")
+    out = [HEAD.format(rate=spec.quench_rate, t_melt=spec.t_melt, t_final=spec.t_final,
+                       quench_ps=spec.quench_ps, n_seg=spec.n_segments, structure=structure,
+                       potential=spec.potential, dt_ps=spec.timestep_fs * 1e-3,
+                       thermo=max(100, spec.steps(1.0)))]
+    if resume_from is None:
+        out.append(MELT.format(t_init=2.0 * spec.t_melt, seed=spec.seed,
+                               t_melt=spec.t_melt, melt_steps=spec.steps(spec.melt_ps)))
+        start = 1
+    else:
+        out.append(f"print           \"QUENCH_RESUMED after segment {resume_from}\"\n")
+        start = resume_from + 1
+    temps = segment_temperatures(spec)
+    seg_steps = spec.steps(spec.quench_ps / spec.n_segments)
+    for k in range(start, spec.n_segments + 1):
+        out.append(SEGMENT.format(t0=temps[k - 1], t1=temps[k], steps=seg_steps, k=k))
+    out.append(ANNEAL.format(t_final=spec.t_final, baro=baro, nrep=anneal // 20,
+                             anneal_steps=anneal))
+    return "".join(out)
+
+
+def last_completed_segment(workdir: Path) -> int | None:
+    """The progress marker, if it points at a restart file that exists."""
+    marker = Path(workdir) / "progress.txt"
+    try:
+        k = int(marker.read_text().strip().splitlines()[-1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return k if (Path(workdir) / f"seg{k:02d}.restart").is_file() else None
 
 
 # --------------------------------------------------------------------------
@@ -259,14 +306,21 @@ class QuenchResult:
 
 def run_quench(lmp: Path, spec: QuenchSpec, potential_dir: Path, workdir: Path,
                flags: FlagSet, *, timeout: int = 36000) -> QuenchResult:
-    """Run the melt-quench in `workdir` (kept: glass.data, log.lammps)."""
+    """Run the melt-quench in `workdir` (kept: glass.data, logs, restarts).
+
+    Resumes automatically from the last completed segment if `workdir` holds
+    one, so calling this again after an interruption continues the run.
+    """
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     (workdir / spec.potential).write_bytes((Path(potential_dir) / spec.potential).read_bytes())
-    write_lammps_data(start_cell(spec), workdir / "start.data",
-                      comment="beta-cristobalite scaled to glass density")
-    (workdir / "quench.in").write_text(build_quench_deck(spec))
-    run = subprocess.run([str(lmp), "-in", "quench.in", "-log", "log.lammps"], cwd=workdir,
+    done = last_completed_segment(workdir)
+    if done is None:
+        write_lammps_data(start_cell(spec), workdir / "start.data",
+                          comment="beta-cristobalite scaled to glass density")
+    (workdir / "quench.in").write_text(build_quench_deck(spec, resume_from=done))
+    log = "log.lammps" if done is None else f"log.resume{done:02d}.lammps"
+    run = subprocess.run([str(lmp), "-in", "quench.in", "-log", log], cwd=workdir,
                          capture_output=True, text=True, timeout=timeout)
     if run.returncode != 0:
         errors = [l for l in run.stdout.splitlines() if "ERROR" in l]
