@@ -299,6 +299,17 @@ tests/
 
 ## Phase 1 — direct NEMD and the compute layer
 
+> **Status, 22 Oct 2026.** The pipeline is ready for the cluster; no h_K is
+> validated yet. Fixed today: the stationarity test now judges drift
+> against its own noise (P1-1); the clamped-cell stress is removed by a
+> piston z-relaxation (P1-2, P1-7); the profile uses every frame and h_K
+> carries a jackknife block error; convergence verdicts take errors; spot
+> pressure works as a loaded piston (P1-9); heterostructures (fcc on
+> diamond) and MEAM build, and the Jelinek MEAM passes the elastic gate for
+> Si, Al and Cu (P1-6). Tracker: [`docs/open-issues.md`](docs/open-issues.md).
+> Cluster procedure: [`docs/cluster-runbook.md`](docs/cluster-runbook.md).
+> The history below is kept for its reasoning.
+
 **The pipeline has run end to end against real LAMMPS** (30 Sep 2026,
 macOS/arm64, Si/Ge with SiCGe.tersoff): deck generation, execution, profile
 parsing, reservoir-energy parsing and extraction all completed, exit 0.
