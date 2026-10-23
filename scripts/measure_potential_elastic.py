@@ -55,6 +55,9 @@ SETS = {
     ],
     "sw": [CubicSpec("Si", "diamond", 5.431, 28.0855, "sw", "Si.sw", "Si", "Si")],
     "ni": [CubicSpec("Ni", "fcc", 3.52, 58.6934, "eam", "Ni_u3.eam", None, "Ni")],
+    # Si as described by the Munetoh SiO2 Tersoff (the crystal side of Si/SiO2).
+    "sio": [CubicSpec("Si(SiO)", "diamond", 5.431, 28.0855, "tersoff", "SiO.tersoff",
+                      "Si", "Si")],
     # Jelinek et al. 2012 MEAM (AlSiMgCuFe.meam): one fit with Al-Si and
     # Cu-Si cross terms, the candidate for die-level Si/Al and Si/Cu (P1-6).
     # Needs a LAMMPS build with the MEAM package.

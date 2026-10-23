@@ -854,7 +854,9 @@ def build_input_deck(spec: NEMDSpec) -> str:
     a = M_TO_ANG
 
     relax_block = ""
-    if spec.relax_structure and spec.structure_mode == "build":
+    # Read-in structures (e.g. Si/a-SiO2 from md.structure.interface) relax the
+    # same way; the data file must carry the piston headroom in its box.
+    if spec.relax_structure:
         relax_block = RELAX_BLOCK.format(
             temperature=spec.temperature,
             t_init=2.0 * spec.temperature,
@@ -875,14 +877,13 @@ def build_input_deck(spec: NEMDSpec) -> str:
         )
 
     pressure_block = ""
-    if spec.spot_pressure_GPa and not (spec.relax_structure and spec.relax_z
-                                       and spec.structure_mode == "build"):
+    if spec.spot_pressure_GPa and not (spec.relax_structure and spec.relax_z):
         # The load is applied by the piston, so it needs the piston. (The
         # first implementation barostatted z with `fix npt`, which LAMMPS
         # rejects on a non-periodic dimension; it had never been run.)
         raise ValueError(
-            "spot_pressure_GPa needs relax_structure=True, relax_z=True and "
-            "structure_mode='build': the load is the force on the piston wall."
+            "spot_pressure_GPa needs relax_structure=True and relax_z=True: the "
+            "load is the force on the piston wall."
         )
     if spec.structure_mode == "build" and spec.heterostructure:
         na, nb = spec.lateral_cells
