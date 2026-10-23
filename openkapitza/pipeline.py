@@ -24,6 +24,7 @@ from .contact import (
     contact_conductance_elastic,
     contact_conductance_plastic,
     contact_hardness,
+    hot_hardness_note,
     effective_modulus,
     harmonic_conductivity,
     light_load_check,
@@ -112,26 +113,36 @@ def run_continuum(
     k_s = harmonic_conductivity(a.k, b.k)
 
     # -- hardness and regime ------------------------------------------------
-    hardness = contact_hardness(a, b, inputs.pressure, sigma_eff, m_eff, flags)
+    z_t = inputs.z_trunc
+    hardness = contact_hardness(a, b, inputs.pressure, sigma_eff, m_eff, flags, z_trunc=z_t)
+    hot_hardness_note(hardness.softer, inputs.temperature.si, flags)
     E_eff = effective_modulus(a, b)
     regime = select_regime(
         E_eff, m_eff, hardness.H_c, flags, override=inputs.regime_override
     )
 
     # -- contact branches ---------------------------------------------------
-    light_load_check(hardness.P_over_Hc, flags)       # P0-7: truncation at light load
+    if z_t is None:
+        light_load_check(hardness.P_over_Hc, flags)   # P0-7: CMY under-predicts here
     contacts: dict[str, ContactResult] = {}
     if regime.regime in (Regime.PLASTIC, Regime.BOTH):
         contacts["plastic"] = contact_conductance_plastic(
-            k_s, sigma_eff, m_eff, hardness.P_over_Hc, flags
+            k_s, sigma_eff, m_eff, hardness.P_over_Hc, flags, z_trunc=z_t
         )
+    if z_t is not None and regime.regime in (Regime.ELASTIC, Regime.BOTH):
+        flags.add(Code.TG_TRUNCATION_SOURCE, Severity.CAUTION,
+                  "z_trunc applies to the plastic branch only; the elastic (Mikic) branch "
+                  "is still fully Gaussian.",
+                  remedy="Milanez, Yovanovich & Mantelli built the truncated model on the "
+                         "plastic CMY model. At light load the elastic branch will read low "
+                         "for the same reason plain CMY does.")
     if regime.regime in (Regime.ELASTIC, Regime.BOTH):
         contacts["elastic"] = contact_conductance_elastic(
             k_s, sigma_eff, m_eff, inputs.pressure, E_eff, flags
         )
 
     # -- gap ----------------------------------------------------------------
-    Y = mean_plane_separation(sigma_eff, hardness.P_over_Hc, flags)
+    Y = mean_plane_separation(sigma_eff, hardness.P_over_Hc, flags, z_trunc=z_t)
     gap: GapResult | None = None
     h_g_override: Quantity | None = None
     if inputs.is_vacuum:
@@ -321,6 +332,10 @@ def _perturb(inputs: JointInputs, rng: random.Random, kapitza: KapitzaEstimate):
             si=sample_lognormal(inputs.surface_b.m, rng)
         )
     sub.pressure = inputs.pressure.with_(si=sample_lognormal(inputs.pressure, rng))
+    if inputs.z_trunc is not None and inputs.z_trunc.uncertainty:
+        # Additive spread on z_t, kept above 2.5 sigma (below that no CMY-family model holds)
+        z = rng.gauss(inputs.z_trunc.si, inputs.z_trunc.uncertainty)
+        sub.z_trunc = inputs.z_trunc.with_(si=max(z, 2.5))
     sub.material_a.Hv = inputs.material_a.Hv.with_(
         si=sample_lognormal(inputs.material_a.Hv, rng)
     )

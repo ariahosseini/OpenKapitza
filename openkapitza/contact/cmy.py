@@ -58,6 +58,7 @@ class ContactResult:
     m_eff: Quantity
     k_s: Quantity
     dimensionless_pressure: Quantity   # P/H_c or sqrt(2)P/(mE')
+    model: str = "cmy"                 # "cmy" | "truncated_gaussian" | "mikic"
 
 
 def combined_roughness(sigma_a: Quantity, sigma_b: Quantity) -> Quantity:
@@ -107,8 +108,9 @@ def contact_conductance_plastic(
     m_eff: Quantity,
     p_over_hc: Quantity,
     flags: FlagSet,
+    z_trunc: Quantity | None = None,
 ) -> ContactResult:
-    """Plastic CMY branch."""
+    """Plastic CMY branch; truncated Gaussian (Eq. 10) when z_trunc is given."""
     x = p_over_hc.si
     cap = None
 
@@ -129,14 +131,23 @@ def contact_conductance_plastic(
             p_over_hc=x,
         )
 
-    h = _CMY_PREFACTOR * k_s.si * (m_eff.si / sigma_eff.si) * (x ** _CMY_EXPONENT)
-    xi_raw = x                       # plastic: A_r/A_a = P/H_c
-    xi_val = _check_area_fraction(xi_raw, flags, "plastic")
+    xi_raw = x                       # plastic: A_r/A_a = P/H_c (a force balance:
+    xi_val = _check_area_fraction(xi_raw, flags, "plastic")   # holds for TG too)
 
     inputs = [k_s, sigma_eff, m_eff, p_over_hc]
+    if z_trunc is not None:
+        from .truncated import check_truncation, tg_quantity
+        check_truncation(z_trunc.si, x, flags)
+        h_q = tg_quantity(k_s, sigma_eff, m_eff, p_over_hc, z_trunc, cap)
+        model = "truncated_gaussian"
+    else:
+        h = _CMY_PREFACTOR * k_s.si * (m_eff.si / sigma_eff.si) * (x ** _CMY_EXPONENT)
+        h_q = make_derived(h, unit="W/m2K", inputs=inputs, confidence=cap, name="h_c")
+        model = "cmy"
     return ContactResult(
         branch="plastic",
-        h_c=make_derived(h, unit="W/m2K", inputs=inputs, confidence=cap, name="h_c"),
+        model=model,
+        h_c=h_q,
         xi=make_derived(xi_val, unit="-", inputs=inputs, confidence=cap, name="xi"),
         sigma_eff=sigma_eff,
         m_eff=m_eff,
@@ -190,6 +201,7 @@ def contact_conductance_elastic(
         m_eff=m_eff,
         k_s=k_s,
         dimensionless_pressure=group_q,
+        model="mikic",
     )
 
 
@@ -221,10 +233,12 @@ def light_load_check(p_over_hc: Quantity, flags: FlagSet) -> float:
         f"under-predicts here: measured/predicted 1.05 at Y/sigma 3.2-3.4 and 1.23 "
         f"above 3.4 in this package's benchmark; 40-70 % at the lightest loads "
         f"in Milanez, Culham & Yovanovich (2002).",
-        remedy=("Treat h_c as a LOWER estimate. A truncated-Gaussian model "
-                "(Milanez, Yovanovich & Mantelli 2003: RMS error 21-48 % -> 5-18 %) "
-                "needs the truncation level, which profilometer R_p/sigma does not "
-                "give reliably; a measured h_c at the working pressure is better. "
+        remedy=("Treat h_c as a LOWER estimate, or pass z_trunc to use the truncated-"
+                "Gaussian model (Milanez, Yovanovich & Mantelli 2004: RMS error "
+                "21-48 % -> 5-18 %). z_trunc is fitted to light-load thermal data "
+                "(profilometer R_p/sigma is not reliable); z_trunc=\"reference\" uses "
+                "their bead-blasted SS 304 / Ni 200 values. On this package's benchmark "
+                "it cuts the >3.4 bias from 1.23 to 1.14. A measured h_c is better still. "
                 "Heat-sink mounting pressures (0.07-0.17 MPa) usually land here."),
         y_over_sigma=y_over_sigma,
     )
@@ -232,7 +246,8 @@ def light_load_check(p_over_hc: Quantity, flags: FlagSet) -> float:
 
 
 def mean_plane_separation(
-    sigma_eff: Quantity, p_over_hc: Quantity, flags: FlagSet
+    sigma_eff: Quantity, p_over_hc: Quantity, flags: FlagSet,
+    z_trunc: Quantity | None = None,
 ) -> Quantity:
     """Mean separation of the two mean planes, Y, for the gap model.
 
@@ -241,13 +256,24 @@ def mean_plane_separation(
     This is the Yovanovich correlation. The exponent is small, so Y stays
     within a factor of about two of 1.5*sigma across the whole useful pressure
     range -- which is a useful sanity check on the output.
+
+    With z_trunc, Y is scaled by the exact truncated/Gaussian separation ratio
+    (Milanez et al. Eq. 9 over Eq. 4), so z_trunc -> infinity returns the
+    correlation unchanged. Carrying the TG separation into the GAP model is
+    this package's extension: the paper is vacuum-only. It is the consistent
+    choice -- the same truncation that raises h_c closes the gap -- and it
+    raises h_g.
     """
     x = max(p_over_hc.si, 1e-12)
     y = 1.53 * sigma_eff.si * (x ** -0.097)
-    return make_derived(
-        y, unit="um", inputs=[sigma_eff, p_over_hc], name="Y",
-        note="Yovanovich mean-plane-separation correlation",
-    )
+    inputs = [sigma_eff, p_over_hc]
+    note = "Yovanovich mean-plane-separation correlation"
+    if z_trunc is not None and x < 0.5:
+        from .truncated import tg_separation
+        y *= tg_separation(x, z_trunc.si) / tg_separation(x, None)
+        inputs.append(z_trunc)
+        note += ", scaled by the truncated-Gaussian separation ratio (Eq. 9 / Eq. 4)"
+    return make_derived(y, unit="um", inputs=inputs, name="Y", note=note)
 
 
 def regime_branches(regime: Regime) -> list[AreaModel]:

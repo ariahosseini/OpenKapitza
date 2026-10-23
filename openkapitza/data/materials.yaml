@@ -113,6 +113,37 @@ Al:
     Hv: >-
       Hardnesses of the elements (Wikipedia data page; primary reference Samsonov, Handbook of the physicochemical properties of the elements, 1968): Vickers 160-350 MPa for Al; the value here is the top of that range and pretreatment moves it by several hundred percent
 
+Al6061:
+  name: Aluminium alloy 6061-T6
+  phase: crystalline
+  verified: false
+  # Heat sinks, cold plates and enclosures. k, rho, E, nu are typical handbook
+  # values NOT yet checked against a source here; sound speeds, Debye
+  # temperature and number density are pure Al's (proxy for the DMM only).
+  k: 167.0
+  rho: 2700.0
+  E: 68.9e9
+  nu: 0.33
+  v_long: 6350.0
+  v_trans: 3100.0
+  theta_debye: 428.0
+  number_density: 6.03e28   # atoms/m^3; treated as Al, M = 26.982 g/mol, rho 2700
+  Hv: 0.915e9           # Pa; BRINELL 915 MPa at 22 C (no Vickers bulk value in the source)
+  c1: 1.123e9           # Pa
+  c2: -0.0079           # almost no size effect: Al 6061-T6 does not work-harden like SS/Ni
+  hardness_coefficients_source: >
+    Bahrami, Yovanovich & Culham, 'Micro and Macro Hardness Measurements, Correlations, and Contact Models', AIAA 2004-0989, Table 10 (after Nho 1990): c1(23.7 C) = 1123 MPa with c2 = -0.0079. Bahrami's 2004 thesis Table A.39 uses 0.9 GPa / -0.006 for Nho's own specimens.
+  # Hot Vickers (Nho), 24-183 C; not applied by default (see SS304).
+  c1_temperature: {C_T: -1.190e-3, T_ref: 296.85, T_max: 456.15}
+  notes: >
+    Nho's vacuum joint data (Al 6061-T6 and Al 6061-T6 / Ni 200, Bahrami 2004
+    thesis Tables A.66-A.71) are in tests/benchmarks/joint_conductance_ext.csv.
+  sources:
+    Hv: >-
+      Bahrami, Yovanovich & Culham, AIAA 2004-0989, Table 9 (after Nho): Brinell 915 MPa at 22.3 C, 500 kg, 10 mm ball; used as the bulk-hardness proxy
+    c1_temperature: >-
+      Bahrami, Yovanovich & Culham, AIAA 2004-0989, Table 10 (after Nho 1990): 10^3 C_T = -1.190 /C, T_max 183 C
+
 Cu:
   name: Copper (pure, annealed)
   phase: crystalline
@@ -200,8 +231,11 @@ SS304:
   c1: 6.271e9           # Pa
   c2: -0.229
   hardness_coefficients_source: >
-    Bahrami, Yovanovich & Culham, "Micro and Macro Hardness Measurements,
-    Correlations, and Contact Models", Table 3 (fitted values).
+    Bahrami, Yovanovich & Culham, 'Micro and Macro Hardness Measurements, Correlations, and Contact Models', AIAA 2004-0989, Table 3 (fitted values; checked against the paper 23 Oct 2026).
+  # Hot Vickers (Nho): c1(T)/c1(T_rm) = exp[C_T (T - T_rm)], 25 C <= T <= 190 C.
+  # NOT applied by default: on Hegazy's 125-145 C joints (our benchmark) room-
+  # temperature c1 matches (pred/meas 1.03) and the softened c1 over-predicts (1.23).
+  c1_temperature: {C_T: -1.675e-3, T_ref: 298.35, T_max: 463.15}
   notes: >
     A common thermal-contact-conductance benchmark material. Published
     Yovanovich-style joint conductance data exists for SS/SS pairs in vacuum
@@ -217,6 +251,8 @@ SS304:
       Coppens & Wilson, 'Elements of Sound Transmission in Beams', NPS-61-79-004 (1978), Table 1, after Ewing, Jardetzky & Press (1957), 304L
     theta_debye: >-
       Kittel, Introduction to Solid State Physics, 8th ed. (2004), Debye temperature table (as reproduced on Wikipedia 'Debye model'): Fe, used as a proxy
+    c1_temperature: >-
+      Bahrami, Yovanovich & Culham, AIAA 2004-0989, Table 10 (after Nho 1990): c1(25.2 C) = 7339 MPa, 10^3 C_T = -1.675 /C, T_max 190 C, fitted with c2 = -0.279
 
 Ni200:
   name: Nickel 200
@@ -234,8 +270,9 @@ Ni200:
   c1: 6.304e9           # Pa
   c2: -0.264
   hardness_coefficients_source: >
-    Bahrami, Yovanovich & Culham, "Micro and Macro Hardness Measurements,
-    Correlations, and Contact Models", Table 3 (fitted values).
+    Bahrami, Yovanovich & Culham, 'Micro and Macro Hardness Measurements, Correlations, and Contact Models', AIAA 2004-0989, Table 3 (fitted values; checked against the paper 23 Oct 2026).
+  # Hot Vickers (Nho), 23-186 C; not applied by default (see SS304).
+  c1_temperature: {C_T: -1.372e-3, T_ref: 296.05, T_max: 459.15}
   notes: Another classic contact-conductance benchmark material.
   sources:
     k: >-
@@ -248,3 +285,5 @@ Ni200:
       Special Metals, 'Nickel 200 & 201', Publication SMC-061 (2006)
     theta_debye: >-
       Kittel, Introduction to Solid State Physics, 8th ed. (2004), Debye temperature table (as reproduced on Wikipedia 'Debye model'): Ni
+    c1_temperature: >-
+      Bahrami, Yovanovich & Culham, AIAA 2004-0989, Table 10 (after Nho 1990): c1(22.9 C) = 6636 MPa, 10^3 C_T = -1.372 /C, T_max 186 C, fitted with c2 = -0.226

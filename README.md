@@ -238,8 +238,10 @@ each entry; knowledge base §10). A sourced field loads with MEDIUM confidence
 and its citation; an unsourced one with LOW confidence, and the load-time flag
 names it. Hardness is LOW even when sourced: temper and surface preparation
 move it by a factor of two or more, so supply your own indentation data.
-Still unsourced: hardness of Si, Ge, SS304 and Ni 200, and a few densities,
-moduli and sound speeds (listed in the tracker, P0-6).
+Vickers coefficients c1/c2 are sourced for SS 304, Ni 200 and Al 6061-T6
+(Bahrami, Yovanovich & Culham). Still unsourced: bulk hardness of Si, Ge,
+SS304 and Ni 200, Al 6061-T6's k, ρ, E and ν, and a few densities, moduli and
+sound speeds (listed in the tracker, P0-6).
 
 - **Gas properties look right.** Air at 300 K / 1 atm comes out at 67.0 nm
   mean free path and 0.0262 W/m·K — both match textbook values. Accommodation
@@ -625,7 +627,14 @@ termination listing, and registry chosen by relaxed energy
   and costed; [`docs/cluster-runbook.md`](docs/cluster-runbook.md) says what to
   run in what order.
 - **Knowledge base:** [`docs/knowledge-base.md`](docs/knowledge-base.md) —
-  errors, silent failures, physics corrections, the literature survey (§7–§10).
+  errors, silent failures, physics corrections, the literature survey (§7–§11),
+  and what the user-supplied papers changed (§12).
+- **Benchmarks:** [`tests/benchmarks/SOURCES.md`](tests/benchmarks/SOURCES.md) —
+  207 Hegazy points (headline) plus 158 from the rest of Bahrami's appendix
+  (incl. Al 6061-T6), Al/Si TDTR interface conductances, NREL grease TIMs.
+- **Light loads:** `build_joint(..., z_trunc=...)` switches the plastic branch
+  to the truncated-Gaussian model (Milanez et al. 2004); `z_trunc="reference"`
+  uses their bead-blasted SS 304 / Ni 200 values (fitted with their c1/c2).
 - **Next phases:** Phase 3, the agent layer that guides the user and runs all
   of this; Phase 4, Tier-2 machine-learned potentials trained or fine-tuned on
   the interface, behind the elastic / phonon / bulk-k gate.

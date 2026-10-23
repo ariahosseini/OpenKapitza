@@ -18,9 +18,18 @@ from .hardness import (
     HardnessResult,
     contact_hardness,
     effective_modulus,
+    hot_hardness_factor,
+    hot_hardness_note,
     softer_material,
 )
 from .regime import Regime, RegimeResult, select_regime
+from .truncated import (
+    REFERENCE_TRUNCATION,
+    p_over_hc_truncated,
+    reference_truncation,
+    tg_conductance,
+    tg_conductance_exact,
+)
 
 __all__ = [
     "CMY_PRESSURE_MAX",
@@ -37,9 +46,16 @@ __all__ = [
     "regime_branches",
     "HardnessResult",
     "contact_hardness",
+    "hot_hardness_factor",
+    "hot_hardness_note",
     "effective_modulus",
     "softer_material",
     "Regime",
     "RegimeResult",
     "select_regime",
+    "REFERENCE_TRUNCATION",
+    "p_over_hc_truncated",
+    "reference_truncation",
+    "tg_conductance",
+    "tg_conductance_exact",
 ]

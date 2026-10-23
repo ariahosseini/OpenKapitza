@@ -42,6 +42,13 @@ def render(result: JointResult, *, show_samples: bool = False) -> str:
     add(f"  psi (plasticity index)     {result.regime.psi.si:10.4g}"
         f"   -> {result.regime.regime.value}")
     add(f"  Y (mean plane separation)  {result.Y.to('um'):10.4g} um")
+    z_t = result.inputs.z_trunc
+    if z_t is not None:
+        from .contact.truncated import tg_factor, truncation_function
+        x = result.hardness.P_over_Hc.si
+        add(f"  z_trunc (height cut-off)   {z_t.si:10.4g} sigma"
+            f"   f = {truncation_function(x, z_t.si):.3g}, h_c = "
+            f"{tg_factor(x, z_t.si):.3g} x CMY (truncated Gaussian)")
     add("")
 
     if result.gap is not None:

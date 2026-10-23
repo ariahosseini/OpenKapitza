@@ -1,0 +1,9 @@
+case_id,material_a,material_b,temperature_K,method,native_oxide,treatment,roughness_rms_nm,roughness_sd_nm,h_MW_m2K,h_sd_MW_m2K,source
+HOP10-1,Al,Si,295,TDTR,yes,as received,1.96,0.7,143.6,6.35,"Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I"
+HOP10-1a,Al,Si,295,TDTR,no,BOE,1.4,0.5,193,17.7,"Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I"
+HOP10-2,Al,Si,295,TDTR,yes,"BOE, 3 min 30 s TMAH at 80 C, regrow native SiO2",10.6,1.3,124.2,2.17,"Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I"
+HOP10-2a,Al,Si,295,TDTR,no,"BOE, 3 min 30 s TMAH at 80 C, BOE",10.1,1.5,160.6,5.60,"Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I"
+HOP10-3,Al,Si,295,TDTR,yes,"BOE, 5 min TMAH at 80 C, regrow native SiO2",8.56,1.0,133.4,9.42,"Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I"
+HOP10-3a,Al,Si,295,TDTR,no,"BOE, 5 min TMAH at 80 C, BOE",6.62,1.1,158,7,"Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I"
+HOP10-4,Al,Si,295,TDTR,yes,"BOE, 20 min TMAH at 80 C",6.71,2.7,114.6,2.3,"Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I"
+HOP10-4a,Al,Si,295,TDTR,no,"BOE, 20 min TMAH at 80 C, BOE",5.56,2.4,170.4,3.36,"Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I"

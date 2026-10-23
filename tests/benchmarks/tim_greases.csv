@@ -1,0 +1,6 @@
+grease,slope_mm2K_W_per_um,intercept_mm2K_W,r_squared,k_W_mK,R_contact_mm2K_W,pressure_kPa,blt_min_um,blt_max_um,source
+A,0.270,4.201,0.992,3.7,4.2,139,29.0,266.0,"DeVoto, Major, Paret, Blackman, Wong & Meth, NREL/CP-5400-68014 (ITherm 2017), Tables 1-3"
+B,0.761,14.078,0.993,1.3,14.1,139,29.0,266.0,"DeVoto, Major, Paret, Blackman, Wong & Meth, NREL/CP-5400-68014 (ITherm 2017), Tables 1-3"
+C,0.262,6.588,0.998,3.8,6.6,139,29.0,266.0,"DeVoto, Major, Paret, Blackman, Wong & Meth, NREL/CP-5400-68014 (ITherm 2017), Tables 1-3"
+D,1.494,28.345,0.991,0.7,28.3,139,29.0,266.0,"DeVoto, Major, Paret, Blackman, Wong & Meth, NREL/CP-5400-68014 (ITherm 2017), Tables 1-3"
+E,0.280,12.185,0.996,3.6,12.2,139,29.0,266.0,"DeVoto, Major, Paret, Blackman, Wong & Meth, NREL/CP-5400-68014 (ITherm 2017), Tables 1-3"

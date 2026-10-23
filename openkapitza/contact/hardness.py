@@ -56,6 +56,7 @@ def contact_hardness(
     sigma_eff: Quantity,
     m_eff: Quantity,
     flags: FlagSet,
+    z_trunc: Quantity | None = None,
 ) -> HardnessResult:
     """Compute H_c and P/H_c for the joint.
 
@@ -63,6 +64,11 @@ def contact_hardness(
     ----------
     sigma_eff, m_eff
         The *combined* roughness and slope of the pair, as used by CMY.
+    z_trunc
+        Truncation level (units of sigma). Given, P/H_c follows the
+        truncated-Gaussian blend (Milanez, Yovanovich & Mantelli Eq. 14), which
+        RAISES H_c at light load: the truncated asperities give fewer, smaller
+        spots, and c2 < 0 makes small spots harder.
     """
     soft = softer_material(material_a, material_b)
     P = pressure.si
@@ -74,11 +80,23 @@ def contact_hardness(
         denom = c1 * (_SY_SIGMA_COEFF * sigma_over_m_um) ** c2
         exponent = 1.0 / (1.0 + _SY_EXPONENT_COEFF * c2)
         p_over_hc = (P / denom) ** exponent
-        H_c_si = P / p_over_hc
         method = "song_yovanovich"
         inputs = [pressure, soft.c1, soft.c2, sigma_eff, m_eff]
+        if z_trunc is not None:
+            from .truncated import p_over_hc_truncated
+            p_over_hc = p_over_hc_truncated(P, sigma_over_m_um, c1, c2, z_trunc.si)
+            method = "truncated_gaussian"
+            inputs = inputs + [z_trunc]
+        H_c_si = P / p_over_hc
         cap = None
     else:
+        if z_trunc is not None:
+            flags.add(Code.TG_HARDNESS, Severity.CAUTION,
+                      "Truncated-Gaussian P/H_c (Eq. 14) needs the Vickers coefficients "
+                      f"c1, c2 of '{soft.key}'; using the bulk Vickers number instead.",
+                      remedy="The truncated model raises H_c at light load (their SS 304: "
+                             "6.2 GPa at 16 kPa against 3.8 GPa at 2.8 MPa). Without c1, c2 "
+                             "that rise is missing and h_c is OVER-estimated at light load.")
         H_c_si = soft.Hv.si
         p_over_hc = P / H_c_si
         method = "vickers_fallback"
@@ -110,6 +128,40 @@ def contact_hardness(
         p_over_hc, unit="-", inputs=inputs, confidence=cap, name="P_over_Hc",
     )
     return HardnessResult(H_c=H_c, P_over_Hc=ratio, softer=soft, method=method)
+
+
+def hot_hardness_factor(material: MaterialSpec, temperature_K: float) -> float | None:
+    """c1(T)/c1(T_ref) from the material's hot-Vickers fit, or None.
+
+    Bahrami, Yovanovich & Culham (AIAA 2004-0989) Table 10, after Nho:
+    exp[C_T (T - T_ref)], C_T about -1.4e-3 to -1.7e-3 /K for Ni 200 and SS 304.
+    Deliberately NOT applied in the pipeline: on this package's benchmark
+    (Hegazy, interfaces at 110-145 C) room-temperature c1 gives pred/meas 1.03
+    and the softened c1 gives 1.19. contact_hardness only reports the size.
+    """
+    fit = material.c1_temperature
+    if not fit:
+        return None
+    return math.exp(fit["C_T"] * (min(temperature_K, fit["T_max"]) - fit["T_ref"]))
+
+
+def hot_hardness_note(material: MaterialSpec, temperature_K: float, flags: FlagSet) -> None:
+    """INFO flag above 75 C when a hot-hardness fit exists for the softer solid."""
+    fac = hot_hardness_factor(material, temperature_K)
+    if fac is None or temperature_K < 348.15:
+        return
+    t_max = material.c1_temperature["T_max"]
+    held = (f" (fit ends at {t_max - 273.15:.0f} C; held there)"
+            if temperature_K > t_max else "")
+    flags.add(Code.HARDNESS_TEMPERATURE, Severity.INFO,
+              f"H_c uses room-temperature c1 for '{material.key}'. Measured hot hardness "
+              f"is {fac:.2f}x that at {temperature_K - 273.15:.0f} C{held}, which would "
+              f"raise h_c by about {100 * (fac ** -0.95 - 1):.0f} %.",
+              remedy="Not applied: on Hegazy's 110-145 C SS 304 / Ni 200 joints, room-"
+                     "temperature c1 matches measurement (pred/meas 1.03) and the softened "
+                     "value over-predicts (1.19). Treat the difference as a model "
+                     "uncertainty at high temperature, not a correction.",
+              factor=fac)
 
 
 def _erfcinv(y: float, tol: float = 1e-14) -> float:

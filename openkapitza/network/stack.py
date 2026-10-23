@@ -36,8 +36,12 @@ from ..schema.quantities import Confidence, Quantity, make_derived
 MM2K_W = 1e-6                    # m^2 K/W per mm^2 K/W
 
 # Blazej 2003, total R_TIM per class, converted from K cm^2/W to m^2 K/W.
+# Grease lower bound lowered 20 -> 10 mm^2K/W: DeVoto et al. (NREL/CP-5400-68014,
+# ITherm 2017, Tables 2-3, ASTM D5470 at 139 kPa) measured R = BLT/k + R_c with
+# k 3.6-3.8 W/mK and R_c 4.2-12.2 mm^2K/W for three commercial greases, i.e.
+# 12-18 mm^2K/W at 29-50 um BLT -- good current greases sit below Blazej's 20.
 TIM_CLASS_RANGE = {
-    "grease": (0.2e-4, 1.0e-4),
+    "grease": (0.1e-4, 1.0e-4),
     "pad": (1.0e-4, 3.0e-4),
     "pcm": (0.3e-4, 0.7e-4),
     "gel": (0.4e-4, 0.8e-4),

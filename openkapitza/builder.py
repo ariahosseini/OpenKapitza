@@ -42,6 +42,8 @@ def build_joint(
     label: str = "",
     flags: FlagSet | None = None,
     fill=None,
+    z_trunc: float | str | None = None,
+    z_trunc_unc: float | None = None,
 ) -> JointInputs:
     """Assemble a JointInputs from values in laboratory units.
 
@@ -50,6 +52,14 @@ def build_joint(
     load cell to ~5 %, and microhardness to ~30 % because it varies with
     indentation load and surface preparation. Pass None for any of them to
     hold that quantity fixed instead.
+
+    `z_trunc` switches the plastic branch to the truncated-Gaussian light-load
+    model (open issue P0-7): a number is the truncation level in units of
+    sigma, fitted to light-load data on your surfaces; "reference" takes the
+    published bead-blasted SS 304 / Ni 200 value at this sigma/m (needs both
+    slopes; it was fitted with THEIR c1/c2, so it can over-correct with a
+    different hardness fit -- see contact.truncated). `z_trunc_unc` is its
+    1-sigma, propagated in the Monte Carlo.
     """
     flags = flags or FlagSet()
     a = load_material(material_a, flags)
@@ -89,6 +99,26 @@ def build_joint(
             v, "-", provenance=Provenance.USER_MEASURED, name="accommodation"
         )
 
+    z_q = None
+    if z_trunc == "reference":
+        if slope_a is None or slope_b is None:
+            raise ValueError('z_trunc="reference" needs slope_a and slope_b: the '
+                             "published truncation levels are tabulated against sigma/m")
+        from .contact.truncated import reference_truncation
+        som = (sigma_a_um ** 2 + sigma_b_um ** 2) ** 0.5 / (slope_a ** 2 + slope_b ** 2) ** 0.5
+        look = reference_truncation(material_a, som, flags) or reference_truncation(
+            material_b, som, flags)
+        if look is None:
+            raise ValueError(f"No published truncation level for {material_a} or "
+                             f"{material_b} (only bead-blasted SS304, Ni200); pass a "
+                             "number fitted to your own light-load data")
+        z_q = look.z_trunc
+        if z_trunc_unc is not None:
+            z_q = z_q.with_(uncertainty=z_trunc_unc)
+    elif z_trunc is not None:
+        z_q = Quantity.parse(float(z_trunc), "-", uncertainty=z_trunc_unc,
+                             provenance=Provenance.USER_MEASURED, name="z_trunc")
+
     return JointInputs(
         material_a=a,
         material_b=b,
@@ -106,6 +136,7 @@ def build_joint(
         accommodation_b=acc(accommodation_b),
         regime_override=regime_override,
         fill=fill,
+        z_trunc=z_q,
         label=label or f"{material_a}/{material_b}",
     )
 

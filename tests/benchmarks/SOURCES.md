@@ -44,6 +44,42 @@ measurement prefers plastic (gm 0.988, RMS 7.0 %) over elastic (gm 0.906,
 RMS 10.5 %) — but the elastic branch is not absurd there, which is what the
 band is supposed to mean.
 
+## Extended set — `joint_conductance_ext.csv` (23 Oct 2026)
+
+174 points (158 usable) from the same thesis appendix, built by
+`scripts/build_benchmark_ext_csv.py` and tested in `tests/test_benchmarks_ext.py`:
+
+| set | table | pairs | pred/meas (gm) |
+|---|---|---|---|
+| Antonetti | A.40–A.43 | Ni 200 ×4 | 0.92–1.02 |
+| Milanez et al. | A.63 | SS 304 bead-blasted/lapped, from 16 kPa | 0.96 |
+| McWaid | A.64–A.65 | SS 304 ×2 (c₂ = 0) | 1.07–1.12 |
+| Nho | A.72–A.73 | Ni 200 ground/lapped | 0.83–0.87 |
+| Nho | A.68–A.69 | Al 6061-T6 ground/lapped | 0.87–0.98 |
+| Nho | A.66, A.67, A.70, A.71 | Al 6061-T6 / Ni 200 | 0.92–1.01 |
+
+All 158: 0.950, RMS 13.3 %, 100 % within 2×. Al-containing: 0.951, 11.1 %.
+Rows with R_exp printed too coarsely (0.005/R_exp > 10 %) are excluded.
+Our CMY matches Bahrami's own model column within 3 % on every same-material
+set, so the transcription and area are confirmed independently of the data.
+Zircaloy-4, Zr-2.5Nb and silver-coated Ni are left out (not packaging, or a
+coated contact). Nho's ground surfaces are anisotropic.
+
+## Measured interface conductance — `kapitza_measured.csv`
+
+Al(80 nm)/Si(100) by TDTR at room temperature, eight surface treatments:
+Hopkins, Phinney, Serrano & Beechem, PRB 82, 085307 (2010), Table I.
+158–193 MW/m²K with the native oxide stripped, 115–144 with it. The Debye DMM
+here (321) is 1.66× the best value. Tested in `tests/test_kapitza_measured.py`.
+This is the first measured target for the Kapitza term (the area-scaling
+bridge itself is still untested, below).
+
+## Grease TIMs — `tim_greases.csv`
+
+Five commercial greases, ASTM D5470 at 139 kPa, BLT 29–266 µm: DeVoto et al.,
+NREL/CP-5400-68014 (ITherm 2017), Tables 1–3. R = BLT/k + R_c with
+k 0.7–3.8 W/mK, R_c 4.2–28.3 mm²K/W. Tested in `tests/test_tim_greases.py`.
+
 ## What this does NOT validate
 
 - **The gap model.** Every point in `joint_conductance.csv` is in a vacuum, so
@@ -55,7 +91,9 @@ band is supposed to mean.
   result above.
 - **The area-scaling bridge.** The Kapitza term is negligible at these
   conductances, so `1/(ξ·h_K)` contributes nothing measurable and the central
-  Phase-0 correction is untested against experiment.
+  Phase-0 correction is untested against experiment. (The Al/Si TDTR set tests
+  h_K itself, not its scaling into a rough joint.)
+- **Air.** The extended set adds Al 6061-T6, but every joint is in a vacuum.
 - **The elastic branch.** Eight of nine specimens are plastic and the ninth
   is ambiguous. Mikic's correlation has no clean test here.
 - **`materials.yaml`.** Properties come from the CSV, per row, as the source

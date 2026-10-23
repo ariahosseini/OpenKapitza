@@ -26,6 +26,9 @@ class MaterialSpec:
     number_density: Quantity | None = None  # atoms/m^3
     c1: Quantity | None = None      # Song-Yovanovich coefficient, Pa
     c2: Quantity | None = None      # Song-Yovanovich exponent, -
+    # Hot-hardness fit {C_T [1/K], T_ref [K], T_max [K]}; informational (see
+    # contact.hardness.hot_hardness_factor), never applied by default.
+    c1_temperature: dict | None = None
     notes: str | None = None
     verified: bool = False
 
@@ -121,6 +124,10 @@ class JointInputs:
     # Filled (TIM) or bonded (solder, sinter, die attach) joint: a series stack
     # replaces the contact-spot + gas-gap network (network.stack, open issue P0-1).
     fill: object | None = None
+    # Truncation level of the asperity-height distribution, in units of sigma
+    # (open issue P0-7). None = fully Gaussian CMY. Set, the plastic branch and
+    # P/H_c use the truncated-Gaussian model (contact.truncated).
+    z_trunc: Quantity | None = None
     label: str = ""
     extra: dict = field(default_factory=dict)
 
@@ -141,4 +148,6 @@ class JointInputs:
         ]
         if self.gas is not None and self.gas.pressure is not None:
             lines.append(f"  P_gas        = {self.gas.pressure}")
+        if self.z_trunc is not None:
+            lines.append(f"  z_trunc      = {self.z_trunc.si:g} sigma (truncated Gaussian)")
         return "\n".join(lines)

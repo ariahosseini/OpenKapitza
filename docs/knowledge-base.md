@@ -917,11 +917,11 @@ energy), Maxwell 0.4 → 0.4015 ± 0.0059, Maxwell 0.8 → 0.8062 ± 0.0056.
 Helium (and neon) exchange energy with a surface mainly through elastic and
 single-phonon scattering, which classical dynamics does not reproduce. Fan
 & Manson (arXiv:0804.2269) find classical theory agrees with data for the
-HEAVIER rare gases, where classical physics should hold; an earlier version of
-this entry quoted them as saying classical values are "much too large for He
-and Ne" — that sentence is not in the abstract, and the full text could not be
-retrieved to check it (survey, 23 Oct 2026). A classical He value is therefore an UPPER
-estimate for the clean surface, flagged `MD_ACCOMMODATION_QUANTUM_GAS`.
+HEAVIER rare gases (Ar, Kr, Xe on W), and state in Sec. III that "the present
+calculations predict accommodation coefficient values that are much too large
+for He and Ne" (checked against the full text, 23 Oct 2026 — it is in the body,
+not the abstract). A classical He value is therefore an UPPER estimate for the
+clean surface, flagged `MD_ACCOMMODATION_QUANTUM_GAS`.
 Technical surfaces (oxides, adsorbates) sit higher still: uncleaned W and Pt
 filaments give roughly 0.15–0.2 for He and 0.5–0.7 for Ar (Caltech thesis,
 thesis.caltech.edu/578).
@@ -1373,9 +1373,10 @@ the MEAM Al value (17.0) is 2× the first-principles 8.1, which moves h_ep by
 
 - Al/Si: phonon-only MEAM NEMD 0.47 GW/m²K, series 0.37 (Yang et al.,
   arXiv:1401.5550). TDTR: 0.35 (Minnich et al.), 0.22 (Zhang et al., Carbon 64,
-  61), ≤ ~0.2 falling with roughness (Hopkins et al., PRB 82, 085307, 2010:
-  removing the native oxide raises it). Experiment includes oxide and
-  roughness: a bracket, not a test.
+  61), and Hopkins et al. (PRB 82, 085307, 2010, Table I, now in
+  `tests/benchmarks/kapitza_measured.csv`): 0.158–0.193 with the native oxide
+  stripped, 0.115–0.144 with it, falling with roughness in both classes.
+  Experiment includes oxide and roughness: a bracket, not a test.
 - Al/diamond (no electrons in the model): MTP-NEMD 284 ± 22 MW/m²K; TDTR
   21–390 depending on surface (Adnan, Neupane & Feng, IJHMT 235, 126227, 2024).
 - Cu/Si: TTM-MD only (Wang 2012; Lu 2016), both on an unvalidated Morse
@@ -1679,8 +1680,9 @@ only an abstract was reachable, it says so.
 - **Three citations in this repository were wrong** and two shaped targets:
   "Liang et al." for Yang et al. (§7), "Lampin et al." for Chen, Zhang & Li
   (§8.5), and a verbatim Fan & Manson quote that is not in the abstract and
-  could not be checked. Rule: before a source enters code or a target, check
-  the author list on the abstract page, and quote only text actually read.
+  could not be checked at the time (the full text, read 23 Oct, confirms it:
+  §8.2). Rule: before a source enters code or a target, check the author list
+  on the abstract page, and quote only text actually read.
 
 ## 9. Filled and bonded joints (P0-1, 23 Oct 2026)
 
@@ -1800,3 +1802,125 @@ h = C_r/(A τ), C_r = C_aC_b/(C_a+C_b), C = 3Nk_B.
 - **Comparison.** NEMD and EMD measure different conductances (Merabia &
   Termentzidis): the test is NEMD/EMD inside 1–10 (≈3 expected for Si/Ge),
   not agreement.
+
+## 12. Papers supplied by the user (23 Oct 2026)
+
+Seven full texts that the earlier surveys could not reach. What each changed:
+
+### 12.1 Truncated Gaussian at light load (P0-7) — built
+
+Milanez, Yovanovich & Mantelli, "Thermal Contact Conductance at Low Contact
+Pressures", JTHT 18(1), 2004 (AIAA 2003). Built as `contact/truncated.py`,
+opt-in through `build_joint(z_trunc=...)`. Equations as printed (pages read as
+images; the text layer is garbled):
+
+- h_c = 1.25 k_s (m/σ)(P/H_c)^0.95 (1 + 1/f)^0.9289 √(1 − 1/(1+f)),
+  f = (P/H_c) √(2π) z_t exp(z_t²/2)   (Eqs. 10–11)
+- P/H_c = [(P/H_c)_G^−p + (P/H_c)_TG^−p]^(−1/p), p = 3.9 + 52 exp(10 c₂);
+  (P/H_c)_TG = {P/(c₁(2.178 σ/m)^c₂) · erfc(z_t/√2)^(0.4289 c₂)}^(1/(1+0.5c₂))
+  (Eqs. 14–15). The text says Eq. 15 "goes to zero" as z_t → ∞; with c₂ < 0 it
+  diverges and its −p power goes to zero, which is what makes Eq. 14 → Eq. 12.
+
+Checks: Table 1's twelve H_c values within 2.2 % (using the combined σ, m
+printed on their Figs 3–8 — S3's table values are σ 3.9/m 0.100, its figure
+3.07/0.070; the figure values reproduce the table H_c); Fig. 2 sweep 8.4 →
+22.6 W/m²K against "approximately 8 to 20"; their S1 data, tabulated in
+Bahrami's thesis (A.63), RMS 20.8 → 15.5 % against their 25.3 → 16.1 %.
+
+Findings worth keeping:
+1. The Eq. 10 correlation is within 4 % of the exact model only for
+   P/H_c ≥ 1e-5; at 1e-6 it is 7 % LOW (exact erfc here; they likely compared
+   against Yovanovich's erfc approximations). Their z_t were fitted with Eq. 10,
+   so Eq. 10 stays the default.
+2. "f > 40 → < 1 %": it is 1.1 % at f = 40.
+3. **z_t is not a surface property on its own** — it was fitted together with
+   their c₁/c₂ (SS 304: 10.67 GPa/−0.37). With Bahrami's 6.27/−0.23 for the
+   same S1 data, plain CMY is already 14.7 % RMS and TG over-corrects to 22.4 %.
+   The reference lookup now says so (INFO flag).
+4. On Hegazy's 26 light-load points (Y/σ > 3.4, not bead-blasted as far as the
+   thesis says, σ/m mostly outside their range) the reference z_t cuts the bias
+   1.23 → 1.14 and removes it at Y/σ 3.2–3.4 (1.05 → 1.00); overall RMS
+   unchanged. Partial, as expected without the right z_t.
+5. Carrying the TG separation (Eq. 9) into the gap model is ours; the paper is
+   vacuum-only. It raises h_g; no gas data test it yet (P0-3).
+
+### 12.2 Hardness (P0-6) — Bahrami, Yovanovich & Culham, AIAA 2004-0989
+
+- Table 3 confirms the c₁/c₂ in `materials.yaml` (SS 304 6.271/−0.229, Ni 200
+  6.304/−0.264). Bahrami's 2004 thesis rounds both to 6.3/−0.26.
+- Al 6061-T6 (Nho): c₁ 1.123 GPa, c₂ −0.0079 (Table 10), Brinell 915 MPa
+  (Table 9). c₂ ≈ 0: almost no indentation-size effect, unlike SS and Ni.
+- Hot hardness (Nho, Tables 10–13): c₁(T)/c₁(T_rm) = exp[C_T(T − T_rm)],
+  C_T = −1.372, −1.675, −1.190 × 10⁻³ /°C (Ni 200, SS 304, Al 6061), valid to
+  ~186–190 °C; c₂ independent of T. **Not applied:** on Hegazy's joints at
+  110–145 °C, room-temperature c₁ gives pred/meas 1.03 and the softened c₁
+  1.19. Either the asperity contact hardness does not follow bulk hot hardness,
+  or the thesis's per-row k_s and c₁ already absorb it; we report it as an INFO
+  (`HARDNESS_TEMPERATURE`, ≈ +19 % at 137 °C for SS 304) rather than correct.
+- c₁, c₂ from bulk Brinell hardness (Sridhar, Eqs. 53–55): c₁/3.178 = 4.0 −
+  5.77Z + 4.0Z² − 0.61Z³, c₂ = −0.57 + Z/1.22 − Z²/2.42 + Z³/16.58, Z =
+  H_B/3.178 GPa, valid 1.30 ≤ H_B ≤ 7.60 GPa (c₁ RMS 5.3 %, c₂ 20.8 %). Not
+  built: the soft packaging metals (Cu, pure Al) are below its range.
+
+### 12.3 Extended benchmark — Bahrami 2004 thesis, Appendix A.2
+
+The thesis (supplied in full) tabulates 36 conforming vacuum pairs; we used 9.
+Added `tests/benchmarks/joint_conductance_ext.csv` (174 points, 158 usable
+after excluding rows printed too coarsely — R to 2 decimals reaches ±50 % at
+0.01 K/W): Antonetti Ni 200, Milanez and McWaid SS 304, Nho Ni 200, Al 6061-T6
+and Al/Ni. Parsed from the text and checked against each row's printed %
+column. Our CMY reproduces Bahrami's own model column within 3 % for every
+same-material set (transcription and area confirmed). Against measurement:
+0.950, RMS 13.3 %, all within 2×; Al-containing 0.951, 11.1 %. The light-load
+trend repeats on these independent data: meas/pred 1.03 below Y/σ 3.2, 1.15
+above. Nho's ground surfaces are anisotropic (outside CMY's assumption).
+
+### 12.4 Bolted joints — Yeh et al., ETFS 25, 349 (2001)
+
+Bolted Al 6061-T6 blocks (63.5 mm square, 4 or 8 bolts, 1–10 N·m), in air,
+contact pressure from Fuji film, σ 0.25–0.4 and 1.27 µm, no slopes or
+hardness. Results as correlations only: h_c = 1.35 + 0.21 P_c^2.8 (4 bolts),
+9.04 + 0.1 P_c^3.79 (8 bolts), kW/m²K with P_c in MPa (2–5 MPa), and 8 bolts
+beat 4 at the same mean pressure. CMY at their mean pressure (σ_eff 0.50 µm, m
+0.05–0.095, H 1.12 GPa) gives 50–190 kW/m²K against their 3–28: **5–35×
+over**. The P^2.8–3.8 dependence and the bolt-count effect say the real
+contact is confined near the bolts — flatness and waviness, not asperities,
+control it. For screwed heat sinks and lids, the apparent-area pressure into
+CMY is the wrong input; a flatness (macro-contact) model or a measured h is
+needed. Their Al/RTV/Al data (0.2 mm RTV, k 0.31: 1.16 kW/m²K) imply 2.2 ×
+10⁻⁴ m²K/W of boundary resistance for both faces.
+
+### 12.5 Al/Si interface conductance — Hopkins et al., PRB 82, 085307 (2010)
+
+Table I: eight Al(80 nm)/Si(100) interfaces by TDTR at room temperature;
+roughness 1.4–10.6 nm by AFM; native oxide stripped (BOE) or regrown.
+158–193 MW/m²K clean, 115–144 with oxide; h falls with roughness in both
+classes; the oxide adds ~1.74 × 10⁻⁹ m²K/W by their Eq. 4 fit (≈ 2.2 nm of
+SiO₂; the plain pairwise difference here is 1.91 × 10⁻⁹). Their sine-
+dispersion DMM is ~230; our Debye DMM is 321, i.e. 1.66× the best real
+interface and 2.2× the as-received one — the DMM placeholder is an upper
+estimate for a real die metallisation. Benchmark in
+`tests/benchmarks/kapitza_measured.csv`.
+
+### 12.6 Grease TIMs — DeVoto et al., NREL/CP-5400-68014 (ITherm 2017)
+
+ASTM D5470 at 139 kPa, Ni-plated polished blocks, BLT 29–266 µm set by
+measured glass spheres (95th-percentile diameter). Five commercial greases fit
+R = BLT/k + R_c with R² 0.991–0.998: k 0.7–3.8 W/mK, R_c (both faces)
+4.2–28.3 mm²K/W. The stack's TIM form is exactly this regression. Good greases
+reach 12–18 mm²K/W at 29–50 µm, below Blazej's 2003 grease floor (20); the
+class range now starts at 10. Pump-out after −40/125 °C cycling is shown as
+acoustic images only — no resistance numbers to build a degradation model on.
+
+### 12.7 Accommodation — Fan & Manson, arXiv:0804.2269
+
+Full text read: classical theory with trapping–desorption fits Ar, Kr, Xe on
+clean W; "much too large for He and Ne" (Sec. III). §8.2 corrected; our flag's
+direction (classical He = upper estimate) stands.
+
+### Still missing
+
+Marmier et al. 1997 (N₂ on Cu, P5-4), Song's 1988 thesis (tabulated gas-gap
+data, P0-3), Prasher 2005 (BLT rheology, P0-1), Vandeperre et al. 2007 (Si/Ge
+hardness), an elastic-regime dataset (P0-4), and the Ioffe pages (Si/Ge
+properties).
