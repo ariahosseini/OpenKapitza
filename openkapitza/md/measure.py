@@ -63,24 +63,31 @@ class KapitzaMeasurement:
 
 
 def frame_fluxes(reservoir_path: Path, frame_ends_steps: list[int], window_steps: int,
-                 timestep_fs: float, area: float, sample_every: int) -> list[float]:
+                 timestep_fs: float, area: float, sample_every: int,
+                 production_steps: int) -> list[float]:
     """Flux over each profile frame's own time window, from the accumulators.
 
-    Alignment does not rely on LAMMPS's `time` (whether `reset_timestep`
-    resets it is version-dependent). The deck re-creates both reservoir fixes
-    at production step 0, so both tallies are zero there, and `fix print`
-    first writes at step `sample_every`. The series is therefore rebuilt as
-    (0, 0, 0) followed by the samples at steps sample_every, 2*sample_every...
+    Alignment uses neither LAMMPS's `time` nor an assumption about the first
+    sample. `fix print` writes on multiples of `sample_every` and the
+    production run ends on one, so the LAST sample is at `production_steps`
+    and sample i sits at production_steps - (n-1-i)*sample_every. That holds
+    whether or not a step-0 line is written (current LAMMPS writes one,
+    "0 0 0"; the first version of this function assumed it did not and was off
+    by one sample). Both tallies are zero at step 0, since the deck
+    re-creates the reservoir fixes there, so that point is added if absent.
     """
     t, hot, cold = (np.asarray(v) for v in parse_reservoir_series(reservoir_path))
     dt_s = timestep_fs * FS_TO_PS * 1e-12
-    steps = np.concatenate([[0.0], (t - t[0]) / dt_s + sample_every])
-    hot = np.concatenate([[0.0], hot])
-    cold = np.concatenate([[0.0], cold])
+    n = t.size
+    steps = production_steps - (n - 1 - np.arange(n)) * float(sample_every)
+    if steps[0] > 0.5:
+        steps = np.concatenate([[0.0], steps])
+        hot = np.concatenate([[0.0], hot])
+        cold = np.concatenate([[0.0], cold])
     out = []
     for end in frame_ends_steps:
         s0, s1 = end - window_steps, end
-        if s0 < -0.5 or s1 > steps[-1] + 0.5:
+        if s0 < steps[0] - 0.5 or s1 > steps[-1] + 0.5:
             raise ValueError("profile frame lies outside the reservoir series")
         dh = np.interp(s1, steps, hot) - np.interp(s0, steps, hot)
         dc = np.interp(s1, steps, cold) - np.interp(s0, steps, cold)
@@ -118,7 +125,8 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
     per_frame: list[float] = []
     try:
         fluxes = frame_fluxes(energy, [s for s, _ in frames], window,
-                              spec.timestep_fs, area, spec.profile_every)
+                              spec.timestep_fs, area, spec.profile_every,
+                              spec.production_steps)
         for (_, prof), q in zip(frames, fluxes):
             r = extract_kapitza(prof, q, FlagSet(), bulk_a=g.bulk_a, bulk_b=g.bulk_b)
             per_frame.append(r.h_K.si)

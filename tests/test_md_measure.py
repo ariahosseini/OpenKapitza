@@ -35,7 +35,7 @@ def _spec(frames=8):
 
 
 def _write_run(wd: Path, spec: NEMDSpec, *, dT=5.0, k_a=50.0, k_b=30.0,
-               frame_noise=0.0, bin_noise=0.0, seed=1):
+               frame_noise=0.0, bin_noise=0.0, seed=1, step_zero=False, ramp=0.0):
     """Planted-jump profile per frame plus linear, balanced reservoir tallies."""
     rng = np.random.default_rng(seed)
     g = spec.geometry
@@ -60,10 +60,14 @@ def _write_run(wd: Path, spec: NEMDSpec, *, dT=5.0, k_a=50.0, k_b=30.0,
                 fh.write(f"{i} {zz * 1e10:.6f} 80 {tt:.6f}\n")
     with open(wd / "reservoir_energy.dat", "w") as fh:
         fh.write("# time[ps] E_hot[eV] E_cold[eV]\n")
-        for step in range(spec.profile_every, spec.production_steps + 1, spec.profile_every):
-            # Real decks: `time` keeps counting from before production.
+        first = 0 if step_zero else spec.profile_every
+        P = spec.production_steps
+        for step in range(first, P + 1, spec.profile_every):
+            # Offset `time`: alignment must not depend on it.
             t_ps = 5000.0 + step * spec.timestep_fs * 1e-3
-            fh.write(f"{t_ps} {-rate_eV_per_step * step} {rate_eV_per_step * step}\n")
+            # Integral of rate*(1 + ramp*(s/P - 0.5)) ds from 0 to step.
+            e = rate_eV_per_step * (step + ramp * (step * step / (2 * P) - 0.5 * step))
+            fh.write(f"{t_ps} {-e} {e}\n")
     return q
 
 
@@ -89,8 +93,34 @@ class Measurement(unittest.TestCase):
         window = spec.production_steps // spec.profile_frames
         ends = [(k + 1) * window for k in range(spec.profile_frames)]
         fl = frame_fluxes(self.wd / "reservoir_energy.dat", ends, window,
-                          spec.timestep_fs, spec.snapped_area, spec.profile_every)
+                          spec.timestep_fs, spec.snapped_area, spec.profile_every,
+                          spec.production_steps)
         np.testing.assert_allclose(fl, q, rtol=1e-6)
+
+    def test_alignment_with_a_step_zero_line(self):
+        """Real LAMMPS writes '0 0 0' at production start; both forms must agree."""
+        spec = _spec()
+        q = _write_run(self.wd, spec, step_zero=True)
+        window = spec.production_steps // spec.profile_frames
+        ends = [(k + 1) * window for k in range(spec.profile_frames)]
+        fl = frame_fluxes(self.wd / "reservoir_energy.dat", ends, window,
+                          spec.timestep_fs, spec.snapped_area, spec.profile_every,
+                          spec.production_steps)
+        np.testing.assert_allclose(fl, q, rtol=1e-6)
+
+    def test_ramping_power_is_attributed_to_the_right_frame(self):
+        """Power rising in time: frame k must get the mean power of ITS window."""
+        spec = _spec()
+        ramp = 0.5
+        q = _write_run(self.wd, spec, ramp=ramp, step_zero=True)
+        window = spec.production_steps // spec.profile_frames
+        ends = [(k + 1) * window for k in range(spec.profile_frames)]
+        fl = frame_fluxes(self.wd / "reservoir_energy.dat", ends, window,
+                          spec.timestep_fs, spec.snapped_area, spec.profile_every,
+                          spec.production_steps)
+        P = spec.production_steps
+        expect = [q * (1 + ramp * ((e - window / 2) / P - 0.5)) for e in ends]
+        np.testing.assert_allclose(fl, expect, rtol=1e-6)
 
     def test_frame_scatter_beyond_fit_error_is_flagged_and_used(self):
         spec = _spec()
