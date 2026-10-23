@@ -1771,3 +1771,32 @@ indentation unreliable for phase-transforming Si, Haberl et al. 2012); SS304
 and Ni 200 Vickers (datasheets give HRB/HB only, and a conversion would be our
 number, not theirs); SiO₂ θ_D. The rule held: a field gets a citation only if
 the cited page states that number.
+
+## 11. Equilibrium (temperature-fluctuation) cross-check as built (P1-8, 23 Oct 2026)
+
+`md/emd_kapitza.py`: the NEMD deck up to the end of equilibration (same cell,
+relaxation, piston), then NVE with no reservoirs, logging each slab's kinetic
+temperature and total energy. τ from the autocorrelation of ΔT gives
+h = C_r/(A τ), C_r = C_aC_b/(C_a+C_b), C = 3Nk_B.
+
+- **Use slab ENERGY, not kinetic temperature.** First Si/Ge run (1,184 mobile
+  atoms, 2.5 nm slabs, SiCGe.tersoff, 1 ns): the kinetic-temperature ACF fell
+  to ~0.3 within 0.05 ps — each slab swaps energy between its own kinetic and
+  potential parts on vibrational time scales — and the interfacial decay was
+  buried. Total slab energy (ke/atom + pe/atom) moves only through the
+  interface (frozen walls do no work): its ACF decays smoothly.
+- **It decays in two stages.** Energy-based run: a fast partial drop
+  (τ₁ = 0.87 ps, 42 % of the variance; most likely the per-atom potential-
+  energy split across the interface jittering) and the slow interfacial
+  relaxation (τ₂ = 32 ps). A single exponential fitted between 1.0 and 0.5
+  ACF(0) mixed them (9.5 ps). `h_from_series(model="biexp")` fits both (grid
+  over τ₁, τ₂ with linear least squares for the amplitudes; no SciPy) and
+  takes τ₂.
+- **Statistics.** Synthetic Ornstein–Uhlenbeck checks: τ reads low by ~10 %
+  with 143 τ of data and ~5 % with 714 τ; `check` flags series shorter than
+  500 τ. The 1 ns local run is 31 τ₂ long: h = 77 ± 269 MW/m²K, unresolved;
+  NEMD/EMD 7.5 against the old 577 MW/m²K NEMD value means nothing yet. The
+  cluster job (`sige_emd`) runs 16 ns.
+- **Comparison.** NEMD and EMD measure different conductances (Merabia &
+  Termentzidis): the test is NEMD/EMD inside 1–10 (≈3 expected for Si/Ge),
+  not agreement.

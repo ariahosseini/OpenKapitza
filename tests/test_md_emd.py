@@ -38,6 +38,16 @@ class Analysis(unittest.TestCase):
         self.assertAlmostEqual(r.h, c_r / (area * tau * 1e-12), delta=0.12 * r.h)
         self.assertIsNotNone(r.h_err)
 
+    def test_biexponential_recovers_the_slow_interface_time(self):
+        dt = 0.02
+        slow = _ou(25.0, 400_000, dt, sigma=6.0, seed=3)          # interface, 8 ns
+        fast = _ou(0.3, 400_000, dt, sigma=6.0, seed=4)           # partition jitter
+        t = np.arange(len(slow)) * dt
+        r = h_from_series(t, slow + fast, 600, 600, 5e-18, model="biexp")
+        self.assertAlmostEqual(r.tau / 1e-12, 25.0, delta=0.15 * 25.0)
+        self.assertLess(r.tau_fast / 1e-12, 2.0)
+        self.assertAlmostEqual(r.slow_weight, 0.5, delta=0.1)
+
     def test_short_series_is_flagged(self):
         dT = _ou(14.0, 100_000, 0.01); t = np.arange(len(dT)) * 0.01   # ~70 tau
         f = FlagSet(); check(h_from_series(t, dT, 1000, 1000, 4.8e-18), f)

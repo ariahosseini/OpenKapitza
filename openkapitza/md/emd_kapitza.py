@@ -46,11 +46,22 @@ compute         t_a emd_a temp
 compute         t_b emd_b temp
 variable        ta equal c_t_a
 variable        tb equal c_t_b
+# Slab ENERGIES (kinetic + potential). The kinetic temperature alone swaps
+# energy with the slab's own potential energy on vibrational time scales, so
+# its dT autocorrelation collapses to ~0.3 within 0.05 ps (first Si/Ge run)
+# and buries the interfacial decay; total energy only moves through the
+# interface (frozen walls do no work).
+compute         ke_at all ke/atom
+compute         pe_at all pe/atom
+compute         e_a emd_a reduce sum c_ke_at c_pe_at
+compute         e_b emd_b reduce sum c_ke_at c_pe_at
+variable        ea equal c_e_a[1]+c_e_a[2]
+variable        eb equal c_e_b[1]+c_e_b[2]
 variable        tnow equal time
 print           "OPENKAPITZA_EMD n_a $(count(emd_a)) n_b $(count(emd_b)) area $(lx*ly:%.6f)"
 run             {settle_steps}
 reset_timestep  0
-fix             emd_log all print {every} "${{tnow}} ${{ta}} ${{tb}}" file emd_temperatures.dat screen no title "# time[ps] T_a[K] T_b[K]"
+fix             emd_log all print {every} "${{tnow}} ${{ta}} ${{tb}} ${{ea}} ${{eb}}" file emd_temperatures.dat screen no title "# time[ps] T_a[K] T_b[K] E_a[eV] E_b[eV]"
 thermo          {thermo_every}
 thermo_style    custom step temp pe etotal
 run             {production_steps}
@@ -121,6 +132,38 @@ def fit_tau(t: np.ndarray, acf: np.ndarray, *, lo: float = 1.0, hi: float = 0.5)
     return -1.0 / slope
 
 
+def fit_biexponential(t: np.ndarray, acf: np.ndarray, *, end_fraction: float = 0.15,
+                      n_grid: int = 60) -> tuple[float, float, float, float]:
+    """ACF/ACF(0) ~ a1 exp(-t/tau1) + a2 exp(-t/tau2), tau1 < tau2.
+
+    The slab-energy dT of a real cell decays in two stages: a fast partial
+    drop (the per-atom potential-energy split across the interface jitters on
+    vibrational time scales) and the slow interfacial relaxation. Only tau2 is
+    the interface. Grid over (tau1, tau2), linear least squares for the
+    amplitudes; no SciPy. Returns (tau1, tau2, a1, a2), times in t's units.
+    """
+    y = acf / acf[0]
+    below = np.nonzero(y < end_fraction)[0]
+    n = int(below[0]) if len(below) else len(y)
+    tt, yy = t[:n], y[:n]
+    if n < 10:
+        raise ValueError("too few points before the ACF decays; sample faster or run longer")
+    span = tt[-1]
+    best = None
+    for t1 in np.geomspace(span * 1e-4, span * 0.3, n_grid):
+        for t2 in np.geomspace(t1 * 1.5, span * 20, n_grid):
+            X = np.c_[np.exp(-tt / t1), np.exp(-tt / t2)]
+            coef, *_ = np.linalg.lstsq(X, yy, rcond=None)
+            if np.any(coef < 0):
+                continue
+            res = float(np.sum((X @ coef - yy) ** 2))
+            if best is None or res < best[0]:
+                best = (res, t1, t2, coef[0], coef[1])
+    if best is None:
+        raise ValueError("no positive two-exponential fit")
+    return best[1], best[2], best[3], best[4]
+
+
 @dataclass
 class EMDResult:
     h: float                 # W/m^2K
@@ -131,30 +174,54 @@ class EMDResult:
     area: float              # m^2
     blocks: int
     ratio_nemd: float | None = None
+    tau_fast: float | None = None    # s, biexponential fit only
+    slow_weight: float | None = None
 
 
 def h_from_series(time_ps: np.ndarray, dT: np.ndarray, n_a: int, n_b: int,
-                  area_m2: float, *, blocks: int = 5) -> EMDResult:
-    """h from a dT(t) series: whole-series tau, and a block standard error."""
+                  area_m2: float, *, blocks: int = 5, model: str = "single") -> EMDResult:
+    """h from a dT(t) series: whole-series tau, and a block standard error.
+
+    model "single": one exponential (synthetic, or clean energy series);
+    "biexp": two exponentials, the slow one taken as the interface -- use for
+    slab-energy series from a real cell.
+    """
     t = (np.asarray(time_ps) - time_ps[0]) * 1e-12
     c_a, c_b = 3 * n_a * KB, 3 * n_b * KB
     c_r = c_a * c_b / (c_a + c_b)
-    tau = fit_tau(t, autocorrelation(dT))
+    tau_fast = weight = None
+    if model == "biexp":
+        tau_fast, tau, a1, a2 = fit_biexponential(t, autocorrelation(dT))
+        weight = a2 / (a1 + a2)
+        one = lambda tt, x: fit_biexponential(tt, autocorrelation(x))[1]
+    elif model == "single":
+        tau = fit_tau(t, autocorrelation(dT))
+        one = lambda tt, x: fit_tau(tt, autocorrelation(x))
+    else:
+        raise ValueError("model must be 'single' or 'biexp'")
     h = c_r / (area_m2 * tau)
     hs = []
     m = len(dT) // blocks
     for k in range(blocks):
         try:
-            seg = dT[k * m:(k + 1) * m]
-            hs.append(c_r / (area_m2 * fit_tau(t[:m], autocorrelation(seg))))
+            hs.append(c_r / (area_m2 * one(t[:m], dT[k * m:(k + 1) * m])))
         except ValueError:
             pass
     err = float(np.std(hs, ddof=1) / math.sqrt(len(hs))) if len(hs) >= 3 else None
-    return EMDResult(h, err, tau, float(t[-1]), c_r, area_m2, len(hs))
+    return EMDResult(h, err, tau, float(t[-1]), c_r, area_m2, len(hs),
+                     tau_fast=tau_fast, slow_weight=weight)
+
+
+EV_OVER_KB = 1.602176634e-19 / KB    # K per eV
 
 
 def read_emd(run_dir: Path | str) -> tuple[np.ndarray, np.ndarray, int, int, float]:
-    """(time ps, dT K, n_a, n_b, area m^2) from a finished EMD run."""
+    """(time ps, dT K, n_a, n_b, area m^2) from a finished EMD run.
+
+    dT is the ENERGY temperature difference E_a/C_a - E_b/C_b (C = 3 N k_B)
+    when the energy columns are present; the kinetic-temperature difference
+    only for older files (its fast intra-slab component hides the decay).
+    """
     wd = Path(run_dir)
     data = np.loadtxt(wd / "emd_temperatures.dat", comments="#")
     n_a = n_b = None; area = None
@@ -164,6 +231,9 @@ def read_emd(run_dir: Path | str) -> tuple[np.ndarray, np.ndarray, int, int, flo
             n_a, n_b, area = int(float(p[2])), int(float(p[4])), float(p[6]) * 1e-20
     if n_a is None:
         raise ValueError("no OPENKAPITZA_EMD line in log.lammps")
+    if data.shape[1] >= 5:
+        dT = (data[:, 3] / (3 * n_a) - data[:, 4] / (3 * n_b)) * EV_OVER_KB
+        return data[:, 0], dT, n_a, n_b, area
     return data[:, 0], data[:, 1] - data[:, 2], n_a, n_b, area
 
 

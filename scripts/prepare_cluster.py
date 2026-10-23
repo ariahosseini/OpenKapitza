@@ -146,7 +146,8 @@ def main(argv=None) -> int:
         files = [(pot / spec.pair_file, spec.pair_file)] + [(pot / f, f) for f in spec.extra_files]
         extra = {}
         if kind == "emd":
-            emd = EMDSpec(settle_ps=50.0, production_ps=15_000.0)   # >= 500 tau at tau ~ 25 ps
+            # >= 500 tau: the local Si/Ge run measured tau_slow = 32 ps (2.5 nm slabs)
+            emd = EMDSpec(settle_ps=50.0, production_ps=16_000.0, sample_fs=20.0)
             deck = build_emd_deck(spec, emd)
             steps = (spec.relax_steps + spec.equilibrate_steps
                      + int((emd.settle_ps + emd.production_ps) * 1000 / spec.timestep_fs))

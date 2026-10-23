@@ -142,9 +142,11 @@ at 10¹³ K/s for the rate sensitivity (P2-5). Bracket: Chen, Zhang & Li 2012 (a
 ## 7b. Equilibrium cross-check (P1-8)
 
 `sige_emd/`: same Si/Ge potential, short slabs (2 nm + reservoirs), NVE after
-equilibration, ΔT(t) logged every 10 fs for 15 ns (≥ 500 relaxation times).
-Analyse with `md.emd_kapitza.read_emd` → `h_from_series` → `check(...,
-h_nemd=<converged campaign h_K>)`. Expect NEMD/EMD > 1 (≈3 for Si/Ge per
+equilibration, slab energies logged every 20 fs for 16 ns (≥ 500 slow
+relaxation times; the local run measured τ_slow = 32 ps). Analyse with
+`md.emd_kapitza.read_emd` → `h_from_series(..., model="biexp")` → `check(...,
+h_nemd=<converged campaign h_K>)`. Use the energy columns, not the kinetic
+temperatures, and the two-exponential model (knowledge base §11). Expect NEMD/EMD > 1 (≈3 for Si/Ge per
 Merabia & Termentzidis); below 1 means one of the runs is wrong.
 
 ## 8. Only if needed
