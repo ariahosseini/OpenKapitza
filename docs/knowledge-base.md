@@ -2089,6 +2089,17 @@ state, `log.lammps`, stderr and outputs:
 The decks write no restart files, so a retried job starts over. Restart from a
 checkpoint is the obvious next step for multi-day runs.
 
+### Checked end to end on a real run
+
+The Si/Al MEAM plumbing deck was run through the Session with the real LAMMPS
+build: `jobs DIR`, `submit sial_pp local`, `watch 20`. It ran 1,840 s serial
+(6,680 atoms), was classified "finished; output present", and was ingested
+automatically: h_K = 444.6 ± 173 MW/m²K. That is identical to the committed
+fixture from 23 Oct, because the deck and seeds are the same. The joint
+re-ran from 858 to 905 kW/m²K with the MD caveats attached: 39 % error,
+single cell, mean T 260 K against 300 K. The loop is verified; the number is
+still a plumbing number, not a converged one.
+
 ### Four defects found building it
 
 - **`tests/test_rag.py` broke the documented test command.** It was written
