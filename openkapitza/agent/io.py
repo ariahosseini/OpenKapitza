@@ -121,7 +121,8 @@ def save_session(session, path: Path | str) -> Path:
     p = Path(path)
     data = {"version": SESSION_VERSION, "answers": session.intake.answers,
             "defaulted": session.intake.defaulted, "skipped": sorted(session.intake.skipped),
-            "md": [r.to_dict() for r in session.md.values()]}
+            "md": [r.to_dict() for r in session.md.values()],
+            "jobs_root": session.jobs_root, "lmp": session.lmp}
     p.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return p
 
@@ -142,3 +143,5 @@ def load_session(session, path: Path | str) -> None:
         session.md[r.pair] = r
     session.result = session.plan = None
     session.history = []
+    session.jobs_root = data.get("jobs_root")
+    session.lmp = data.get("lmp")

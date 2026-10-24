@@ -23,6 +23,12 @@ Commands at any prompt:
     ingest <path>        measure finished MD (job folder, campaign, or prepared root)
                          and use its h_K in place of the DMM placeholder
     md                   list ingested MD results;  md clear  to drop them
+    submit <jobs|plan|all> [local|slurm] [lmp=PATH] [np=N]
+                         submit prepared jobs ('plan' = the ones this joint needs)
+    jobs [DIR]           poll once: status, diagnosis of failures, finished jobs
+                         ingested automatically; DIR attaches an existing job folder
+    watch [SECONDS]      poll until nothing is running (Ctrl-C stops watching only)
+    resubmit <job>       after you fixed what a diagnosis named;  cancel <job>
     save FILE / load FILE        the session (inputs, defaults, ingested MD)
     export FILE.json             the last result as JSON
     lookup <question>    search our docs, paper notes and the LAMMPS manual, with
@@ -84,6 +90,9 @@ class Session:
     n_samples: int = 1000
     md: dict = field(default_factory=dict)                  # pair -> ingest.MDResult
     md_used: object | None = None                           # MDResult in the last run
+    jobs_root: str | None = None                            # prepared job folder
+    lmp: str | None = None                                  # LAMMPS executable (local runs)
+    emit: object | None = None                              # callable(str) for live output
 
     # ---- prompts -------------------------------------------------------------
     def start(self) -> str:
@@ -135,6 +144,16 @@ class Session:
                 return self._ingest(t[7:].strip())
             if low in ("md", "md clear"):
                 return self._md(low)
+            if low.startswith("submit"):
+                return self._submit(t[6:].split())
+            if low == "jobs" or low.startswith("jobs "):
+                return self._jobs(t[4:].strip())
+            if low == "watch" or low.startswith("watch "):
+                return self._watch(t[5:].strip())
+            if low.startswith("resubmit "):
+                return self._jobs_action("resubmit", t[9:].split())
+            if low.startswith("cancel "):
+                return self._jobs_action("cancel", t[7:].split())
             if low.startswith("sweep "):
                 return self._sweep(t[6:])
             if low.startswith("save "):
@@ -348,10 +367,127 @@ class Session:
         with contextlib.redirect_stdout(io.StringIO()):
             prepare_cluster.main([folder, "--potentials", self.potentials])
         manifest = json.loads((Path(folder) / "manifest.json").read_text())
+        self.jobs_root = str(Path(folder).resolve())
         mine = [j for j in manifest["jobs"]
                 if any(j["name"] == n or j["name"].startswith(n + "/") for n in self.plan.cluster_jobs)]
         nh = sum(j["node_hours"] for j in mine)
         rows = "\n".join(f"  {j['name']:40} {j['node_hours']:7.2f} node-h" for j in mine)
         return (f"Wrote all prepared jobs to {folder}; the ones for this joint:\n{rows}\n"
                 f"  total {nh:.1f} node-hours. Each job folder has submit.sbatch (cluster) "
-                f"and run.sh (local). Nothing was submitted.")
+                f"and run.sh (local). Nothing was submitted: 'submit plan' sends these, "
+                f"'submit plan local lmp=PATH' runs them here.")
+
+    # ---- the job loop ----------------------------------------------------------
+    def _book(self):
+        from .jobs import JobBook, JobError
+        if not self.jobs_root:
+            raise FieldError("no job folder yet: 'prepare jobs <dir>' first, or 'jobs <dir>' "
+                             "for one prepared earlier")
+        try:
+            return JobBook.open(self.jobs_root)
+        except JobError as e:
+            raise FieldError(str(e)) from e
+
+    def _submit(self, words: list[str]) -> str:
+        from .jobs import JobError
+        backend, lmp, launcher, names = None, None, "", []
+        for w in words:
+            if w in ("local", "slurm"):
+                backend = w
+            elif w.startswith("lmp="):
+                lmp = w[4:]
+            elif w.startswith("np="):
+                launcher = f"mpirun -np {int(w[3:])}"
+            else:
+                names.append(w)
+        if not names:
+            raise FieldError("which jobs? 'submit plan', 'submit all', or job names "
+                             "('jobs' lists them)")
+        if names == ["plan"]:
+            if self.plan is None or not self.plan.cluster_jobs:
+                raise FieldError("the current plan names no MD jobs ('run' first)")
+            names = list(self.plan.cluster_jobs)
+        book = self._book()
+        lmp = lmp or self.lmp
+        try:
+            events = book.submit(names, backend=backend, lmp=lmp, launcher=launcher)
+        except JobError as e:
+            raise FieldError(str(e)) from e
+        if lmp:
+            self.lmp = lmp
+        lines = [f"  {ev.name}: {ev.message}" for ev in events]
+        started = sum(ev.what == "started" for ev in events)
+        nh = sum(book.entries[ev.name].node_hours or 0 for ev in events if ev.what == "started")
+        head = f"Submitted {started} job(s)" + (f", ~{nh:.1f} node-hours" if nh else "") + ":"
+        return "\n".join([head] + lines + [
+            "Nothing waits on them. 'jobs' polls once; 'watch' polls until they stop. "
+            "Finished jobs are measured and used automatically."])
+
+    def _jobs(self, arg: str) -> str:
+        if arg:
+            from pathlib import Path
+            self.jobs_root = str(Path(arg).resolve())
+        book = self._book()
+        events = book.refresh()
+        out = self._report_events(book, events)
+        out.append(book.table(only_active=True))
+        return "\n".join(out)
+
+    def _report_events(self, book, events) -> list[str]:
+        out = []
+        for ev in events:
+            out.append(f"{ev.name}: {ev.what} — {ev.message}")
+            d = ev.diagnosis
+            if d is not None and ev.what in ("failed", "resubmitted") and d.kind != "infrastructure":
+                if d.evidence:
+                    out.append(f"    log: {d.evidence}")
+                out += [f"    fix: {f}" for f in d.fixes]
+                out += [f"    see: {c}" for c in d.citations]
+            elif d is not None and ev.what == "failed":
+                out += [f"    fix: {f}" for f in d.fixes]
+        if any(ev.what == "finished" for ev in events):
+            out.append(self._auto_ingest(book, [ev.name for ev in events if ev.what == "finished"]))
+        return out
+
+    def _auto_ingest(self, book, names: list[str]) -> str:
+        """Measure everything finished under the job folder and use it."""
+        try:
+            msg = self._ingest(str(book.root))
+        except FieldError as e:
+            return f"Could not measure the finished job(s) yet: {e}"
+        for n in names:
+            book.mark_ingested(n)
+        return msg
+
+    def _watch(self, arg: str) -> str:
+        import time
+        interval = float(arg) if arg else 60.0
+        book = self._book()
+        log: list[str] = []
+        say = self.emit if callable(self.emit) else log.append
+        say(f"Watching {book.root} every {interval:g} s (Ctrl-C stops watching; jobs keep running).")
+        try:
+            while True:
+                book = self._book()
+                events = book.refresh()
+                for line in self._report_events(book, events):
+                    say(line)
+                live = [e for e in book.entries.values() if e.status in ("submitted", "running")]
+                if not live:
+                    say("Nothing running.")
+                    break
+                time.sleep(interval)
+        except KeyboardInterrupt:
+            say("Stopped watching; the jobs are still running. 'jobs' to check later.")
+        say(book.table(only_active=True))
+        return "\n".join(log) if log else ""
+
+    def _jobs_action(self, action: str, names: list[str]) -> str:
+        from .jobs import JobError
+        book = self._book()
+        try:
+            events = (book.submit(names, resubmit=True, lmp=self.lmp) if action == "resubmit"
+                      else book.cancel(names))
+        except JobError as e:
+            raise FieldError(str(e)) from e
+        return "\n".join(f"  {ev.name}: {ev.message}" for ev in events) or "Nothing to do."

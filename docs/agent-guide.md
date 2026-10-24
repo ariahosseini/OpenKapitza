@@ -7,14 +7,20 @@ and what to measure next. All the logic is in `openkapitza.agent`; the
 terminal wrapper only reads lines and prints replies, so the same session can
 sit behind any front end.
 
-Contents: [ways in](#three-ways-in) · [a session](#a-session) ·
+Contents: [ways in](#ways-in) · [a session](#a-session) ·
 [reading the answer](#reading-the-answer) · [inputs](#inputs) ·
 [model options](#model-options) · [commands](#commands) ·
 [files and JSON](#description-files-and-json) · [sweeps](#sweeps) ·
-[the MD loop](#the-md-loop) · [troubleshooting](#troubleshooting) ·
+[the MD loop](#the-md-loop) · [running the jobs](#running-the-jobs) ·
+[from Claude (MCP)](#from-claude-or-another-llm-mcp) · [lookup](#looking-things-up) ·
+[troubleshooting](#troubleshooting) ·
 [limits](#what-it-does-not-do-yet)
 
-## Three ways in
+## Ways in
+
+Four: a conversation, a description file, Python, or a language model
+([MCP](#from-claude-or-another-llm-mcp)) that turns a plain description into
+the same inputs.
 
 **Conversation.** Enter takes the default shown in brackets; `why` explains a
 question; `help` lists the commands.
@@ -185,6 +191,10 @@ from the code.
 | `prepare jobs DIR` | write the cluster jobs the plan names (start with `--potentials`) |
 | `ingest PATH` | measure finished MD and use it |
 | `md`, `md clear` | list or drop the ingested MD |
+| `submit JOBS [local\|slurm] [lmp=PATH] [np=N]` | submit prepared jobs: names, `plan` or `all` ([below](#running-the-jobs)) |
+| `jobs [DIR]` | poll once: status, diagnoses, finished jobs ingested; `DIR` attaches a folder |
+| `watch [SECONDS]` | poll until nothing is running |
+| `resubmit JOB`, `cancel JOB` | after fixing what a diagnosis named; stop a job |
 | `save FILE`, `load FILE` | the session: inputs, which were defaults, ingested MD |
 | `export FILE.json` | the last result as JSON |
 | `lookup QUESTION` | search our docs, paper notes and the LAMMPS manual; cited passages ([below](#looking-things-up)) |
@@ -264,6 +274,77 @@ Example, with the Si/Al MEAM plumbing run kept as a test fixture:
 
     python -m openkapitza.agent --input examples/agent/si_al_contact_md.yaml
 
+## Running the jobs
+
+After `prepare jobs DIR`, the agent can run them and bring the results back.
+
+```
+> submit plan                       # SLURM if sbatch is on PATH, else say 'local'
+> submit plan local lmp=/opt/lammps/lmp np=8
+> jobs                              # poll once
+> watch 300                         # poll every 5 min until nothing runs
+```
+
+Nothing waits on a job: each poll checks once and returns, and the state is
+kept in `DIR/jobs.json`. A new session picks the jobs up with `jobs DIR`, and
+a cron job or scheduled task can poll with no session at all:
+
+    python -m openkapitza.agent.jobs refresh DIR
+
+When a job stops, the agent says why and acts by one rule: **it retries what
+the cluster broke, never what the input or the physics broke.**
+
+| outcome | what happens |
+|---|---|
+| finished, output present | measured and used at once (as `ingest DIR`); the answer is re-run |
+| timeout, node failure, preemption, out of memory, killed | **resubmitted automatically**, up to 3 attempts; a timeout gets 1.5× the walltime (max 72 h). The decks write no restart files, so a retry starts over |
+| a LAMMPS `ERROR:` line | shown with the best knowledge-base or manual passage; not retried (the same input fails the same way) |
+| lost atoms, NaN | proposed fixes (check the relaxed structure, halve the timestep, lower the flux); **not applied**: they change what is measured |
+| exit 0 but no `OPENKAPITZA_DONE`, or an empty profile | reported as an output failure (a known silent failure) |
+
+`resubmit JOB` after you change something; `cancel JOB` stops one. On the
+cluster, run the agent on the login node so `sbatch` and `sacct` are on the
+PATH. The cluster settings (partition, account, modules) are the ones given to
+`prepare_cluster.py`.
+
+## From Claude or another LLM (MCP)
+
+The same session runs as an [MCP](https://modelcontextprotocol.io) server, so
+a language model can be the front end: you describe the joint in your own
+words, and the model fills in the inputs, asks for what is missing and
+explains the answer. The physics stays in OpenKapitza.
+
+```bash
+pip install "openkapitza[mcp]"            # the mcp package, >= 2.0
+claude mcp add openkapitza -- python -m openkapitza.agent.mcp_server \
+    --potentials /opt/lammps/potentials --lmp /opt/lammps/lmp
+```
+
+For Claude Desktop, add the same command under `mcpServers` in its config file.
+
+What the model does, and what it cannot do:
+
+- **Inputs go through the same checks.** `set_inputs` takes values with units
+  ("50 psi", "0.4 um", "85 C"). Out-of-range values, unknown materials and
+  units that don't fit are rejected with the reason, and the model is told to
+  ask you rather than guess.
+- **Every number comes from the server.** `run_joint` returns the explanation,
+  the full result, `must_report` (every warning and caution) and the defaults
+  used. The server instructions say to pass on every `must_report` item and to
+  say which values were assumed.
+- **Spending compute needs your yes.** The model is told to state jobs and
+  node-hours before `submit_jobs`, and to present physics fixes, not apply them.
+- Tools: `describe_fields`, `set_inputs`, `clear_input`, `show_inputs`,
+  `run_joint`, `what_if`, `sweep`, `technical_report`, `lookup`,
+  `prepare_jobs`, `submit_jobs`, `job_status`, `resubmit_job`, `cancel_job`,
+  `ingest_md`, `save_session`, `load_session`, `export_json`, `reset_session`,
+  and `command` for any terminal command.
+
+The instructions are guidance to the model, not enforcement. What *is*
+enforced is in the server: validation, the physics and the flags. A model can
+still word things badly, so the numbers and warnings in its answer are the
+ones to trust.
+
 ## Looking things up
 
 `lookup` searches three sources and returns the best passages, each with a
@@ -330,7 +411,8 @@ description files (`heatsink_screwed.yaml`, `si_al_contact_md.yaml`).
 
 ## What it does not do yet
 
-Launch or monitor MD (it writes jobs and reads results); routes for pairs
-without a validated potential (Phase 4 MLIPs); a chat front end; semantic
-(meaning-based) search in `lookup`. Open items
+Restart a timed-out job from where it stopped (the decks write no restart
+files); change a deck itself to apply a physics fix; routes for pairs without a
+validated potential (Phase 4 MLIPs); semantic (meaning-based) search in
+`lookup`. Open items
 are in [`open-issues.md`](open-issues.md).

@@ -22,6 +22,14 @@ pip install -e .                          # Python >= 3.9; needs pyyaml, numpy
 python -m openkapitza.agent               # guided: asks for the joint, explains the answer
 ```
 
+Or describe the joint to Claude (or any MCP client) in your own words; the
+model fills in the inputs and OpenKapitza does every calculation and check:
+
+```bash
+pip install -e ".[mcp]"
+claude mcp add openkapitza -- python -m openkapitza.agent.mcp_server
+```
+
 From a description file, or in Python:
 
 ```bash
@@ -85,7 +93,10 @@ Routes today: Si/Al and Si/Cu (Jelinek MEAM, passes the elastic gate), Si/Ge
 melt-quenched a-SiO₂). None has a converged, validated h_K yet. `scripts/prepare_cluster.py`
 writes every job, validated and costed (22 jobs, ~70 node-hours);
 [`docs/cluster-runbook.md`](docs/cluster-runbook.md) says what to run in what
-order; the agent's `ingest` reads the results back into a joint.
+order. The agent submits them (`submit plan`, on SLURM or locally), polls,
+retries what the cluster broke (timeouts, node failures), diagnoses input and
+physics failures with knowledge-base citations without "fixing" them, and
+measures finished runs into the joint automatically.
 
 ## Documentation
 
@@ -128,6 +139,8 @@ python3 -m unittest discover -s tests      # ~650 tests, ~25 s
 
 ## Status
 
-Phases 0–2 built; Phase 3 (agent) built through guided input, planning, MD
-ingestion, files and sweeps. Next: converged MD on a cluster, a chat front end,
-and Phase 4 machine-learned potentials for pairs without a validated route.
+Phases 0–2 built. Phase 3 (agent) built: guided input, planning, files and
+sweeps, cited lookup, the MD job loop (submit, poll, diagnose, retry, ingest),
+and an MCP server for a language-model front end. Next: converged MD on a
+cluster (needs access), restart-from-checkpoint for timed-out jobs, and Phase 4
+machine-learned potentials for pairs without a validated route.

@@ -2068,3 +2068,54 @@ Thresholds in `tests/test_rag.py` sit just under these numbers (repo
 0.95/0.88, curated 0.83/0.70, manual 0.75/0.58 for R@5/MRR). The weights were
 tuned on this same question set, so the numbers are optimistic. A held-out
 set is the honest next check before any further tuning.
+
+## 14. The job loop and the LLM front end (24 Oct 2026)
+
+### The rule: retry what the cluster broke, never what the input or physics broke
+
+`openkapitza/agent/jobs.py`. A stopped job is classified from its scheduler
+state, `log.lammps`, stderr and outputs:
+
+- **infrastructure** (TIMEOUT, NODE_FAIL, PREEMPTED, out of memory, killed by
+  a signal): resubmitted automatically, at most 3 attempts; a timeout gets
+  1.5× the walltime (cap 72 h).
+- **input** (a LAMMPS `ERROR:` line): reported with the best two `lookup`
+  passages. On the knowledge base's own error the top hit is §1's entry.
+- **physics** (lost atoms, NaN in a thermo row): fixes proposed, never applied.
+  A smaller timestep or another structure changes what is measured.
+- **output** (exit 0 without `OPENKAPITZA_DONE`, or a header-only profile):
+  the silent failure of §2.
+
+The decks write no restart files, so a retried job starts over. Restart from a
+checkpoint is the obvious next step for multi-day runs.
+
+### Four defects found building it
+
+- **`tests/test_rag.py` broke the documented test command.** It was written
+  for pytest; `python3 -m unittest discover` (the README's command, and the
+  only runner in a bare install) failed on `import pytest`. Rewritten as
+  unittest. Every test file is unittest-style.
+- **The walltime increase keyed on wording.** It tested for "timeout" in a
+  summary that said "walltime limit", so timeouts were resubmitted with the
+  same walltime. Diagnoses now carry a `cause` code. Caught by the fake-SLURM
+  test.
+- **`LocalRunner` overwrote the prepared `run.sh`.** Its wrapper used the same
+  name as the script `prepare_cluster` writes for manual runs. Renamed to
+  `job_wrapper.sh`; regression test added.
+- **Finished local jobs were never reaped through their `Popen`.** `poll()`
+  read the `job.done` sentinel and `_pid_alive` reaped with `os.waitpid`, so
+  each job's `Popen` kept believing its process was running. That leaks one
+  object per job over a campaign and shows as `ResourceWarning: subprocess N
+  is still running` at exit. `poll()` now lets the `Popen` reap its own child.
+
+### MCP server notes
+
+- The installed `mcp` is 2.x: `FastMCP` is now
+  `mcp.server.mcpserver.MCPServer`, and `mcp.Client(server)` connects
+  in-process for tests. A `ToolError` message reaches the model as the tool
+  result, so validation errors read as the agent's own ("must be greater than
+  0 um").
+- What is enforced is in the server: unit parsing, ranges, choices, physics,
+  flags. The instructions (pass on every `must_report` item, say which values
+  were defaulted, never invent inputs, confirm before spending compute) are
+  guidance to the model, not enforcement. The guide says so.

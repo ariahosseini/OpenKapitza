@@ -173,7 +173,8 @@ class LocalRunner:
         # on EXIT writes the sentinel even when the script dies on a signal,
         # so a killed or timed-out job is still distinguishable from a running
         # one.
-        script = spec.workdir / "run.sh"
+        # not run.sh: prepared job folders already hold a run.sh for manual use
+        script = spec.workdir / "job_wrapper.sh"
         env_lines = "\n".join(
             f"export {k}={shlex.quote(v)}" for k, v in spec.env.items()
         )
@@ -223,6 +224,8 @@ class LocalRunner:
 
     def poll(self, handle: JobHandle) -> JobState:
         done = Path(handle.workdir) / "job.done"
+        if handle.native_id:
+            _reap(int(handle.native_id))
         if done.exists():
             try:
                 rc = int(done.read_text().strip() or "1")
@@ -275,6 +278,15 @@ class LocalRunner:
 _LAUNCHED: list[subprocess.Popen] = []
 
 
+def _reap(pid: int) -> None:
+    """Collect a finished child this process launched, so its Popen holds the exit
+    status and is released (left alone, each finished job stays a zombie with a
+    Popen that believes it is still running)."""
+    for proc in list(_LAUNCHED):
+        if proc.pid == pid and proc.poll() is not None:
+            _LAUNCHED.remove(proc)
+
+
 def _pid_alive(pid: int) -> bool:
     """Is this pid a live process?
 
@@ -297,6 +309,16 @@ def _pid_alive(pid: int) -> bool:
        macOS -- found by running the suite on a Mac.
     3. Fall back to os.kill(), which is right except for zombies.
     """
+    # 0. A job this process launched: let its Popen reap it, so the Popen
+    #    learns the exit status (reaping behind its back with waitpid left
+    #    every finished job's Popen believing it still ran, and leaked).
+    for proc in list(_LAUNCHED):
+        if proc.pid == pid:
+            if proc.poll() is None:
+                return True
+            _LAUNCHED.remove(proc)
+            return False
+
     # 1. Reap, if we happen to be the parent.
     try:
         reaped, _ = os.waitpid(pid, os.WNOHANG)
@@ -431,6 +453,23 @@ class SlurmRunner:
         handle.save()
         return handle
 
+    def submit_script(self, script: Path, name: str) -> JobHandle:
+        """sbatch a script that already exists (prepare_cluster writes them)."""
+        script = Path(script)
+        proc = subprocess.run([self.submit_cmd, str(script)], capture_output=True,
+                              text=True, cwd=str(script.parent))
+        if proc.returncode != 0:
+            raise RuntimeError(f"sbatch failed: {proc.stderr.strip()}")
+        m = re.search(r"(\d+)", proc.stdout)
+        if not m:
+            raise RuntimeError(f"could not parse a job id from: {proc.stdout!r}")
+        handle = JobHandle(job_id=f"slurm-{m.group(1)}", backend=self.name, name=name,
+                           workdir=str(script.parent), submitted_at=time.time(),
+                           state=JobState.PENDING.value, native_id=m.group(1),
+                           meta={"script": str(script)})
+        handle.save()
+        return handle
+
     def poll(self, handle: JobHandle) -> JobState:
         proc = subprocess.run(
             [self.status_cmd, "-j", str(handle.native_id),
@@ -442,6 +481,9 @@ class SlurmRunner:
             for line in proc.stdout.splitlines():
                 token = line.strip().split()[0] if line.strip() else ""
                 if token:
+                    # keep the raw state: TIMEOUT and FAILED both map to FAILED,
+                    # but only one of them is fixed by resubmitting
+                    handle.meta["sacct_state"] = token
                     state = _SACCT_STATES.get(token, JobState.UNKNOWN)
                     break
         handle.state = state.value

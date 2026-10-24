@@ -104,6 +104,7 @@ def main(argv=None) -> int:
     ap.add_argument("--csv", help="sweep table as CSV")
     ap.add_argument("--plot", help="sweep plot (needs matplotlib)")
     ap.add_argument("--potentials", help="LAMMPS potentials folder (for 'prepare jobs')")
+    ap.add_argument("--lmp", help="LAMMPS executable for local job runs")
     ap.add_argument("--samples", type=int, default=1000, help="Monte Carlo samples")
     ap.add_argument("--fields", action="store_true", help="list the fields and exit")
     a = ap.parse_args(argv)
@@ -118,7 +119,7 @@ def main(argv=None) -> int:
             return 2
     if a.json or a.sweep or a.csv or a.plot or a.md:
         ap.error("--json, --md, --sweep, --csv and --plot go with --input")
-    s = Session(potentials=a.potentials, n_samples=a.samples)
+    s = Session(potentials=a.potentials, n_samples=a.samples, lmp=a.lmp, emit=print)
     print(s.start())
     if a.answers:
         with open(a.answers, encoding="utf-8") as fh:

@@ -938,6 +938,12 @@ class TestLocalRunner(unittest.TestCase):
         self.r = LocalRunner()
 
     def tearDown(self):
+        from openkapitza.compute import runner
+        for proc in list(runner._LAUNCHED):     # jobs a test left running (sleep 5)
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait(timeout=10)
+            runner._LAUNCHED.remove(proc)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run(self, cmd, name="j"):
