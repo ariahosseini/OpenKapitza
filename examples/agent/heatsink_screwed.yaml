@@ -1,0 +1,14 @@
+# Al 6061 heat sink screwed to a Cu lid, dry, in air (same joint as heatsink_screwed.txt).
+label: heat sink to lid
+material_a: Al6061
+material_b: Cu
+temperature_K: 45 C
+pressure_MPa: 0.5
+sigma_a_um: 0.8
+sigma_b_um: 0.4
+slope_a: 0.08
+slope_b: 0.06
+medium: air
+clamping: bolted
+flatness_um: 25
+joint_area_mm2: 40 x 40 mm

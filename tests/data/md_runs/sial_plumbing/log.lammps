@@ -1,0 +1,412 @@
+LAMMPS (30 Sep 2026)
+# OpenKapitza direct NEMD -- Si/Al interface
+# Generated; do not edit by hand. Units: metal (Angstrom, ps, eV, bar).
+#
+# Layout along z:
+#   [wall][hot Langevin][ bulk Si ]|[ bulk Al ][cold Langevin][wall]
+# z is NON-PERIODIC so heat cannot short-circuit around the box.
+
+units           metal
+dimension       3
+boundary        p p f
+atom_style      atomic
+timestep        0.001000
+
+# Heterostructure: diamond side A (6 cells, -0.29% in-plane) and
+# fcc side B (8 cells, +0.29%) in a 32.4930 A square
+# supercell. The box extends 5.00 A above the built cell for the
+# piston (that space starts empty).
+region          simbox block 0.0 32.4930 0.0 32.4930                 0.0 121.0000 units box
+create_box      2 simbox
+Created orthogonal box = (0 0 0) to (32.493 32.493 121)
+  1 by 1 by 1 MPI processor grid
+lattice         custom 1.0 a1 5.415500 0.0 0.0 a2 0.0 5.415500 0.0 a3 0.0 0.0 5.431000                 basis 0.0000 0.0000 0.0000                 basis 0.0000 0.5000 0.5000                 basis 0.5000 0.0000 0.5000                 basis 0.5000 0.5000 0.0000                 basis 0.2500 0.2500 0.2500                 basis 0.2500 0.7500 0.7500                 basis 0.7500 0.2500 0.7500                 basis 0.7500 0.7500 0.2500
+Lattice spacing in x,y,z = 5.4155 5.4155 5.431
+region          side_a block INF INF INF INF INF 57.7044 units box
+create_atoms    1 region side_a
+Created 3096 atoms
+  using lattice units in orthogonal box = (0 0 0) to (32.493 32.493 121)
+  create_atoms CPU = 0.001 seconds
+lattice         custom 1.0 a1 4.061625 0.0 0.0 a2 0.0 4.061625 0.0 a3 0.0 0.0 4.050000                 origin 0.0 0.0 0.692062                 basis 0.0000 0.0000 0.0000                 basis 0.0000 0.5000 0.5000                 basis 0.5000 0.0000 0.5000                 basis 0.5000 0.5000 0.0000
+Lattice spacing in x,y,z = 4.061625 4.061625 4.05
+region          side_b block INF INF INF INF 58.4904 116.0000 units box
+create_atoms    2 region side_b
+Created 3584 atoms
+  using lattice units in orthogonal box = (0 0 0) to (32.493 32.493 121)
+  create_atoms CPU = 0.001 seconds
+mass            1 28.0855
+mass            2 26.9815
+
+pair_style      meam
+pair_coeff      * * library.meam AlS SiS MgS CuS FeS AlSiMgCuFe.meam SiS AlS
+Reading MEAM library file library.meam with DATE: 2012-06-29
+Reading MEAM potential file AlSiMgCuFe.meam with DATE: 2012-06-29
+
+# ---- regions, in Angstrom -------------------------------------------------
+region          wall_lo  block INF INF INF INF INF 8.0000 units box
+region          hot      block INF INF INF INF 8.0000 18.0000 units box
+region          cold     block INF INF INF INF 98.0000 108.0000 units box
+region          wall_hi  block INF INF INF INF 108.0000 INF units box
+
+group           gwall_lo region wall_lo
+432 atoms in group gwall_lo
+group           gwall_hi region wall_hi
+512 atoms in group gwall_hi
+group           ghot     region hot
+576 atoms in group ghot
+group           gcold    region cold
+512 atoms in group gcold
+group           gwalls   union gwall_lo gwall_hi
+944 atoms in group gwalls
+group           gmobile  subtract all gwalls
+5736 atoms in group gmobile
+
+velocity        gwalls set 0.0 0.0 0.0 units box
+fix             freeze gwalls setforce 0.0 0.0 0.0
+
+# ---- relaxation -----------------------------------------------------------
+# The cell is built on ONE in-plane lattice constant, so the whole lattice
+# mismatch shows up as in-plane strain: 6.4 GPa of internal pressure in the
+# Si/Ge case, against ~0 for a relaxed crystal. That stress shifts phonon
+# frequencies and therefore changes h_K directly, so an unrelaxed cell does
+# not measure the interface it claims to.
+#
+# x and y are PERIODIC and can be barostatted. z cannot -- it is non-periodic
+# (walls), and `fix npt` on a non-periodic dimension is a hard LAMMPS error.
+# That is fine, because the mismatch strain is in-plane by construction.
+# Relaxing x and y at zero pressure lets the shared in-plane constant settle
+# where the net in-plane stress vanishes, splitting the mismatch between the
+# two sides instead of putting all of it on the B side.
+#
+# `couple xy` keeps the cross-section square, which the periodic images
+# require and which the cubic symmetry of both materials justifies.
+minimize        1.0e-6 1.0e-8 10000 100000
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 7
+  ghost atom cutoff = 7
+  binsize = 3.5, bins = 10 10 35
+  2 neighbor lists, perpetual/occasional/extra = 2 0 0
+  (1) pair meam, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+  (2) pair meam, perpetual, half/full from (1)
+      attributes: half, newton on
+      pair build: halffull/newton
+      stencil: none
+      bin: none
+Per MPI rank memory allocation (min/avg/max) = 19.74 | 19.74 | 19.74 Mbytes
+   Step          Temp          E_pair         E_mol          TotEng         Press     
+         0   0             -25998.294      0             -25998.294      5118.627     
+        13   0             -26025.823      0             -26025.823      2974.3532    
+Loop time of 1.54439 on 1 procs for 13 steps with 6680 atoms
+
+99.1% CPU use with 1 MPI tasks x no OpenMP threads
+
+Minimization stats:
+  Stopping criterion = energy tolerance
+  Energy initial, next-to-last, final = 
+     -25998.2942455036  -26025.7987451787  -26025.8226407486
+  Force two-norm initial, final = 35.338189 0.971033
+  Force max component initial, final = 3.1336695 0.08042055
+  Final line search alpha, max atom move = 0.88410513 0.071100221
+  Iterations, force evaluations = 13 26
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 1.5374     | 1.5374     | 1.5374     |   0.0 | 99.55
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 0.0020963  | 0.0020963  | 0.0020963  |   0.0 |  0.14
+Output  | 0          | 0          | 0          |   0.0 |  0.00
+Modify  | 0.00029969 | 0.00029969 | 0.00029969 |   0.0 |  0.02
+Other   |            | 0.004609   |            |       |  0.30
+
+Nlocal:           6680 ave        6680 max        6680 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           7307 ave        7307 max        7307 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:         241408 ave      241408 max      241408 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:       482816 ave      482816 max      482816 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 482816
+Ave neighs/atom = 72.277844
+Neighbor list builds = 0
+Dangerous builds = 0
+# minimize advances the step counter by its iteration count. Reset it, or any
+# fix ave/time window below never lands on an output step and reads as zero.
+reset_timestep  0
+velocity        gmobile create 600.00 12345 mom yes rot yes dist gaussian
+fix             relax gmobile npt temp 300.00 300.00 0.1000                 couple xy x 0.0 0.0 1.0000 y 0.0 0.0 1.0000
+# Sample often enough to SEE the box converge. Inheriting a coarse interval
+# from an earlier stage left two samples across 30 000 steps, which cannot
+# distinguish a converged box from one still drifting -- and the relaxed
+# in-plane constant is the number everything downstream inherits.
+thermo          500
+thermo_style    custom step temp press pxx pyy pzz lx ly
+# The in-plane box oscillates under the barostat (period ~ps). It is set to
+# its MEAN over the second half before the barostat comes off; stopping it
+# mid-swing froze a ~0.1 % strain, ~0.2 GPa, into every later stage (open
+# issue P1-13).
+variable        lxv equal lx
+variable        lyv equal ly
+fix             boxav all ave/time 10 500 10000 v_lxv v_lyv
+unfix           freeze
+fix             freeze_lo gwall_lo setforce 0.0 0.0 0.0
+fix             freeze_hi gwall_hi setforce 0.0 0.0 NULL
+fix             piston gwall_hi aveforce NULL NULL 0.0
+fix             piston_nve gwall_hi nve
+fix             piston_damp gwall_hi viscous 5.592870e-03
+variable        zwall equal bound(gwall_hi,zmin)
+# The cell breathes along z (period ~10 ps for a 20 nm Si/Ge slab), so the
+# wall is frozen at its MEAN position over the second half, not wherever the
+# oscillation leaves it -- the latter left up to +/-0.3 GPa in the first test.
+fix             zav all ave/time 10 500 10000 v_zwall
+thermo_style    custom step temp press pxx pyy pzz lx ly v_zwall
+run             10000
+Per MPI rank memory allocation (min/avg/max) = 18.63 | 18.63 | 18.63 Mbytes
+   Step          Temp          Press           Pxx            Pyy            Pzz             Lx             Ly          v_zwall    
+         0   515.19689      6693.1583      6168.4303      6019.3602      7891.6844      32.493         32.493         108.10285    
+       500   293.67209      1482.4605     -579.8605      -689.45269      5716.6947      32.721988      32.721988      108.06945    
+      1000   300.30177      1490.789      -362.23927     -418.03656      5252.6427      32.707147      32.707147      108.13345    
+      1500   301.33731      1496.2556      223.94434      116.4882       4148.3342      32.677058      32.677058      108.40784    
+      2000   301.34543      1112.6022      216.24568      167.24056      2954.3203      32.664103      32.664103      108.60826    
+      2500   309.42631      601.01113      58.423213      105.22532      1639.3849      32.652184      32.652184      108.72328    
+      3000   299.65491      237.00509     -41.194158     -104.0756       856.28505      32.64518       32.64518       108.82265    
+      3500   300.00217      41.807932     -24.392896     -107.28293      257.09962      32.638696      32.638696      108.92111    
+      4000   297.79371      1307.2563      1294.3119      1346.9256      1280.5313      32.607371      32.607371      108.97515    
+      4500   298.55831     -1020.3883     -1579.8093     -1639.8393      158.48376      32.670941      32.670941      108.84906    
+      5000   301.84345      620.45025      51.924688      115.85375      1693.5723      32.650819      32.650819      108.74406    
+      5500   295.28804      1239.3539      670.03041      557.32776      2490.7036      32.642844      32.642844      108.68997    
+      6000   292.88966      541.16004     -437.51191     -524.08732      2585.0793      32.672423      32.672423      108.6127     
+      6500   296.73181      1437.6869      412.20967      337.59884      3563.2523      32.664863      32.664863      108.53766    
+      7000   296.23882      1674.1364      393.44226      401.89969      4227.0674      32.669782      32.669782      108.47387    
+      7500   304.68608      604.93804     -577.50092     -841.1569       3233.472       32.689509      32.689509      108.5062     
+      8000   300.84823      1790.3761      801.45562      758.4678       3811.205       32.653629      32.653629      108.56161    
+      8500   297.11287      734.94897     -290.72771     -231.80572      2727.3804      32.670729      32.670729      108.59489    
+      9000   302.71967     -395.11583     -1431.3883     -1343.0234      1589.0642      32.684676      32.684676      108.64685    
+      9500   306.70393      1775.681       1144.2154      1282.9476      2899.8799      32.634634      32.634634      108.69453    
+     10000   303.91987     -229.53627     -914.13184     -945.4225       1170.9455      32.666872      32.666872      108.74452    
+Loop time of 721.401 on 1 procs for 10000 steps with 6680 atoms
+
+Performance: 1.198 ns/day, 20.039 hours/ns, 13.862 timesteps/s, 92.598 katom-step/s
+98.6% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 716.78     | 716.78     | 716.78     |   0.0 | 99.36
+Neigh   | 0.45958    | 0.45958    | 0.45958    |   0.0 |  0.06
+Comm    | 0.44848    | 0.44848    | 0.44848    |   0.0 |  0.06
+Output  | 0.0020644  | 0.0020644  | 0.0020644  |   0.0 |  0.00
+Modify  | 3.3008     | 3.3008     | 3.3008     |   0.0 |  0.46
+Other   |            | 0.4134     |            |       |  0.06
+
+Nlocal:           6680 ave        6680 max        6680 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           7303 ave        7303 max        7303 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:         248628 ave      248628 max      248628 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:       497256 ave      497256 max      497256 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 497256
+Ave neighs/atom = 74.439521
+Neighbor list builds = 27
+Dangerous builds = 0
+unfix           relax
+change_box      all x final $(xlo) $(xlo+f_boxav[1]) y final $(ylo) $(ylo+f_boxav[2]) remap units box
+change_box      all x final -0.086936003807124961895 $(xlo+f_boxav[1]) y final $(ylo) $(ylo+f_boxav[2]) remap units box
+change_box      all x final -0.086936003807124961895 32.577950668759328323 y final $(ylo) $(ylo+f_boxav[2]) remap units box
+change_box      all x final -0.086936003807124961895 32.577950668759328323 y final -0.086936003807124961895 $(ylo+f_boxav[2]) remap units box
+change_box      all x final -0.086936003807124961895 32.577950668759328323 y final -0.086936003807124961895 32.577950668759328323 remap units box
+Changing box ...
+  orthogonal box = (-0.086936004 -0.086936004 0) to (32.577951 32.579936 121)
+  orthogonal box = (-0.086936004 -0.086936004 0) to (32.577951 32.577951 121)
+unfix           boxav
+displace_atoms  gwall_hi move 0.0 0.0 $(f_zav-v_zwall) units box
+displace_atoms  gwall_hi move 0.0 0.0 -0.14044750588702470395 units box
+Displacing atoms ...
+unfix           zav
+unfix           piston_damp
+unfix           piston_nve
+unfix           piston
+unfix           freeze_hi
+velocity        gwall_hi set 0.0 0.0 0.0 units box
+fix             freeze_hi gwall_hi setforce 0.0 0.0 0.0
+group           gside_a type 1
+3096 atoms in group gside_a
+group           gside_b type 2
+3584 atoms in group gside_b
+print           "OPENKAPITZA_RELAXED wall_hi_zmin $(bound(gwall_hi,zmin):%.4f) top_a $(bound(gside_a,zmax):%.4f) bottom_b $(bound(gside_b,zmin):%.4f)"
+OPENKAPITZA_RELAXED wall_hi_zmin 108.6041 top_a 57.8213 bottom_b 59.4297
+thermo_style    custom step temp press pe ke etotal
+
+# ---- equilibration --------------------------------------------------------
+velocity        gmobile create 600.00 12345 mom yes rot yes dist gaussian
+
+fix             equil gmobile nvt temp 300.00 300.00 0.1000
+thermo          10000
+thermo_style    custom step temp pe etotal press
+run             10000
+Per MPI rank memory allocation (min/avg/max) = 19.21 | 19.21 | 19.21 Mbytes
+   Step          Temp          PotEng         TotEng         Press     
+     10000   515.19689     -25758.975     -25314.191      2398.248     
+     20000   257.76653     -25797.321     -25574.783     -463.48507    
+Loop time of 713.879 on 1 procs for 10000 steps with 6680 atoms
+
+Performance: 1.210 ns/day, 19.830 hours/ns, 14.008 timesteps/s, 93.573 katom-step/s
+99.1% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 711.24     | 711.24     | 711.24     |   0.0 | 99.63
+Neigh   | 0.23349    | 0.23349    | 0.23349    |   0.0 |  0.03
+Comm    | 0.75239    | 0.75239    | 0.75239    |   0.0 |  0.11
+Output  | 7.2166e-05 | 7.2166e-05 | 7.2166e-05 |   0.0 |  0.00
+Modify  | 1.2267     | 1.2267     | 1.2267     |   0.0 |  0.17
+Other   |            | 0.4219     |            |       |  0.06
+
+Nlocal:           6680 ave        6680 max        6680 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           7304 ave        7304 max        7304 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:         248410 ave      248410 max      248410 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:       496820 ave      496820 max      496820 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 496820
+Ave neighs/atom = 74.374251
+Neighbor list builds = 14
+Dangerous builds = 0
+unfix           equil
+
+# ---- impose the gradient --------------------------------------------------
+# Langevin reservoirs on the ends only; the bulk runs NVE so the profile
+# between them is physical and not thermostatted into a straight line.
+fix             nve gmobile nve
+fix             hot  ghot  langevin 320.00 320.00 0.1000 12346 tally yes
+fix             cold gcold langevin 280.00 280.00 0.1000 12347 tally yes
+
+# Reach steady state before any averaging starts.
+run             2000
+Per MPI rank memory allocation (min/avg/max) = 20.71 | 20.71 | 20.71 Mbytes
+   Step          Temp          PotEng         TotEng         Press     
+     20000   257.76653     -25797.321     -25574.783     -463.48507    
+     22000   259.51757     -25796.122     -25572.073     -518.9613     
+Loop time of 144.138 on 1 procs for 2000 steps with 6680 atoms
+
+Performance: 1.199 ns/day, 20.019 hours/ns, 13.876 timesteps/s, 92.689 katom-step/s
+99.1% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 143.59     | 143.59     | 143.59     |   0.0 | 99.62
+Neigh   | 0.016178   | 0.016178   | 0.016178   |   0.0 |  0.01
+Comm    | 0.1566     | 0.1566     | 0.1566     |   0.0 |  0.11
+Output  | 3.852e-05  | 3.852e-05  | 3.852e-05  |   0.0 |  0.00
+Modify  | 0.29555    | 0.29555    | 0.29555    |   0.0 |  0.21
+Other   |            | 0.0807     |            |       |  0.06
+
+Nlocal:           6680 ave        6680 max        6680 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           7281 ave        7281 max        7281 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:         248290 ave      248290 max      248290 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:       496580 ave      496580 max      496580 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 496580
+Ave neighs/atom = 74.338323
+Neighbor list builds = 1
+Dangerous builds = 0
+
+# ---- production -----------------------------------------------------------
+# Restart the clock. fix ave/chunk writes on multiples of Nfreq and averages
+# backwards over Nevery*Nrepeat steps, so on a non-zero starting timestep the
+# window reaches back before the fix existed and NO frame is written at all --
+# the file ends up holding nothing but its header. Resetting makes the
+# averaging windows align exactly with this run.
+reset_timestep  0
+
+# Recreate the reservoirs so their energy accumulators cover the production
+# window only. The flux comes from these, never from a nominal setpoint.
+unfix           hot
+unfix           cold
+fix             hot  ghot  langevin 320.00 320.00 0.1000 12346 tally yes
+fix             cold gcold langevin 280.00 280.00 0.1000 12347 tally yes
+
+# Bin along z and average the temperature in each bin. The chunk ID
+# ("layers") MUST follow Nfreq and precede the values -- omitting it makes
+# LAMMPS read the first value as the chunk ID and fail with "No values from
+# computes, fixes, or variables used in fix ave/chunk command".
+compute         layers gmobile chunk/atom bin/1d z lower 4.0000 units box
+fix             profile gmobile ave/chunk 100 10 1000 layers temp file temperature_profile.dat
+
+variable        ehot  equal f_hot
+variable        ecold equal f_cold
+variable        tnow  equal time
+fix             energy all print 100 "${tnow} ${ehot} ${ecold}" file reservoir_energy.dat screen no title "# time[ps] E_hot[eV] E_cold[eV]"
+
+# Pxx/Pyy/Pzz, not just the scalar Press: `Press` is their mean, which
+# averages away the anisotropy that matters. In-plane relaxation drives
+# Pxx and Pyy to ~0 while Pzz keeps a residual, because z is non-periodic
+# and cannot be barostatted -- and z is the transport direction, so Pzz is
+# the component h_K is most sensitive to. Without these columns in the
+# PRODUCTION block the stress check has nothing to test where it counts.
+# Stress over the SLAB's own extent. LAMMPS divides the virial by the box
+# volume, and with relax_z the box includes empty headroom above the wall, so
+# raw pxx/pyy/pzz read low by slab/box (6 % on a 21 nm Si/Ge cell). The
+# health check prefers these columns.
+variable        slabf equal lz/(bound(all,zmax)-bound(all,zmin))
+variable        sxx equal pxx*v_slabf
+variable        syy equal pyy*v_slabf
+variable        szz equal pzz*v_slabf
+thermo_style    custom step temp press pxx pyy pzz f_hot f_cold v_sxx v_syy v_szz
+run             8000
+Per MPI rank memory allocation (min/avg/max) = 20.84 | 20.84 | 20.84 Mbytes
+   Step          Temp          Press           Pxx            Pyy            Pzz           f_hot          f_cold         v_sxx          v_syy          v_szz     
+         0   259.51757     -518.9613      -1424.8989     -1364.8373      1232.8523     -0             -0             -1503.437      -1440.065       1300.8051    
+      8000   260.01107     -460.36959     -1352.2149     -1268.0807      1239.1868     -9.1694035      9.9408501     -1426.7468     -1337.9753      1307.4888    
+Loop time of 581.378 on 1 procs for 8000 steps with 6680 atoms
+
+Performance: 1.189 ns/day, 20.187 hours/ns, 13.760 timesteps/s, 91.920 katom-step/s
+99.2% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 579.15     | 579.15     | 579.15     |   0.0 | 99.62
+Neigh   | 0.084367   | 0.084367   | 0.084367   |   0.0 |  0.01
+Comm    | 0.61326    | 0.61326    | 0.61326    |   0.0 |  0.11
+Output  | 0.00020338 | 0.00020338 | 0.00020338 |   0.0 |  0.00
+Modify  | 1.1941     | 1.1941     | 1.1941     |   0.0 |  0.21
+Other   |            | 0.3313     |            |       |  0.06
+
+Nlocal:           6680 ave        6680 max        6680 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           7305 ave        7305 max        7305 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:         248308 ave      248308 max      248308 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:       496616 ave      496616 max      496616 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 496616
+Ave neighs/atom = 74.343713
+Neighbor list builds = 5
+Dangerous builds = 0
+
+print           "OPENKAPITZA_DONE area_m2 1.055795e-17 interface_z_ang 58.0000"
+OPENKAPITZA_DONE area_m2 1.055795e-17 interface_z_ang 58.0000
+Total wall time: 0:36:02

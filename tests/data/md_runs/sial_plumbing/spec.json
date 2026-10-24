@@ -1,0 +1,58 @@
+{
+  "kind": "nemd",
+  "spec": {
+    "geometry": {
+      "wall_thickness": 8e-10,
+      "reservoir_thickness": 1e-09,
+      "bulk_a_length": 4e-09,
+      "bulk_b_length": 4e-09,
+      "cross_section": 3.2e-09,
+      "bin_width": 4e-10
+    },
+    "element_a": "Si",
+    "element_b": "Al",
+    "lattice_a": 5.431e-10,
+    "lattice_b": 4.05e-10,
+    "temperature": 300.0,
+    "delta_reservoir": 40.0,
+    "pair_style": "meam",
+    "pair_file": "library.meam",
+    "relax_structure": true,
+    "relax_steps": 10000,
+    "timestep_fs": 1.0,
+    "equilibrate_steps": 10000,
+    "steady_steps": 2000,
+    "production_steps": 8000,
+    "profile_every": 100,
+    "profile_frames": 8,
+    "damping_fs": 100.0,
+    "seed": 12345,
+    "mass_a": 28.0855,
+    "mass_b": 26.9815,
+    "spot_pressure_GPa": null,
+    "common_lattice": null,
+    "structure_mode": "build",
+    "data_file": "interface.data",
+    "lattice_style_a": "diamond",
+    "lattice_style_b": "fcc",
+    "coeff_args": "library.meam AlS SiS MgS CuS FeS AlSiMgCuFe.meam SiS AlS",
+    "relax_z": true,
+    "piston_damp_ps": 0.5,
+    "spot_pressure_mode": "stress",
+    "load_steps": null,
+    "couple_xy": true,
+    "types_a": [
+      1
+    ],
+    "types_b": [
+      2
+    ],
+    "ttm": null,
+    "supercell": null,
+    "extra_files": [
+      "AlSiMgCuFe.meam"
+    ],
+    "pair_elements": null
+  },
+  "note": "Si/Al MEAM plumbing run, 22 Oct 2026 (tracker P1-6): 4 nm slabs, 8 ps production. Spec reconstructed from its deck; nemd.in is the deck as run."
+}
