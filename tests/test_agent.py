@@ -307,6 +307,8 @@ class FilesSweepsSessions(unittest.TestCase):
             data = json.loads(out.read_text())
             self.assertEqual(data["kapitza"]["source"], "md")
             self.assertEqual(data["plan"]["md"], "in use")
+            band = data["band_W_m2K"]          # p50 was once always null
+            self.assertTrue(band["p05"] < band["p50"] < band["p95"])
             self.assertEqual(len(data["sweep"]["points"]), 3)
             hs = [p["h"] for p in data["sweep"]["points"]]
             self.assertTrue(hs[0] < hs[1] < hs[2])           # h rises with pressure

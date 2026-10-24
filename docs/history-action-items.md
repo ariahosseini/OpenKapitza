@@ -6,7 +6,7 @@ the tracker is right.
 
 ### Action items — next session
 
-> **The tracker is now [`docs/open-issues.md`](docs/open-issues.md).** It
+> **The tracker is now [`docs/open-issues.md`](open-issues.md).** It
 > supersedes this block where they differ; the block below is kept for its
 > reasoning.
 

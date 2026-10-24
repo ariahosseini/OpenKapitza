@@ -87,7 +87,7 @@ def result_to_dict(result, plan, intake: Intake | None = None, md_used=None) -> 
         "joint": result.inputs.label,
         "h_joint_W_m2K": _num(net.h_joint.si),
         "R_total_m2K_W": _num(net.R_total.si),
-        "band_W_m2K": ({"p05": _num(mc.p05), "p50": _num(getattr(mc, "p50", None)),
+        "band_W_m2K": ({"p05": _num(mc.p05), "p50": _num(mc.median),
                         "p95": _num(mc.p95)} if mc else None),
         "branch": net.branch,
         "contributions": [{"part": c.label, "resistance_m2K_W": _num(c.resistance),
