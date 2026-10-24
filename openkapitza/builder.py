@@ -8,6 +8,8 @@ wrong unit without it being visible at the call site.
 
 from __future__ import annotations
 
+import math
+
 from .schema import (
     FlagSet,
     JointInputs,
@@ -44,6 +46,11 @@ def build_joint(
     fill=None,
     z_trunc: float | str | None = None,
     z_trunc_unc: float | None = None,
+    flatness_um: float | None = None,
+    joint_radius_mm: float | None = None,
+    joint_area_mm2: float | None = None,
+    clamping: str | None = None,
+    flatness_rel_unc: float | None = 0.25,
 ) -> JointInputs:
     """Assemble a JointInputs from values in laboratory units.
 
@@ -60,6 +67,13 @@ def build_joint(
     slopes; it was fitted with THEIR c1/c2, so it can over-correct with a
     different hardness fit -- see contact.truncated). `z_trunc_unc` is its
     1-sigma, propagated in the Monte Carlo.
+
+    `flatness_um` is the COMBINED maximum out-of-flatness of the two faces
+    (their deltas add); with it give the joint size as `joint_radius_mm` or
+    `joint_area_mm2`, and the out-of-flatness constriction (Bahrami 2004) is
+    added in series. `clamping` is "uniform" (press, centred spring, dead
+    weight), "bolted" (screws or bolts) or "unknown"; "bolted" raises a
+    warning because the mean pressure misrepresents a bolted face.
     """
     flags = flags or FlagSet()
     a = load_material(material_a, flags)
@@ -99,6 +113,21 @@ def build_joint(
             v, "-", provenance=Provenance.USER_MEASURED, name="accommodation"
         )
 
+    flat_q = radius_q = None
+    if flatness_um is not None:
+        if (joint_radius_mm is None) == (joint_area_mm2 is None):
+            raise ValueError("flatness_um needs the joint size: give exactly one of "
+                             "joint_radius_mm or joint_area_mm2")
+        if flatness_um <= 0:
+            raise ValueError("flatness_um must be positive (use None for 'not measured')")
+        r_mm = joint_radius_mm if joint_radius_mm is not None else (joint_area_mm2 / math.pi) ** 0.5
+        flat_q = Quantity.parse(flatness_um, "um", rel_uncertainty=flatness_rel_unc,
+                                provenance=Provenance.USER_MEASURED, name="flatness")
+        radius_q = Quantity.parse(r_mm, "mm", provenance=Provenance.USER_MEASURED,
+                                  name="joint_radius")
+    if clamping is not None and clamping not in ("uniform", "bolted", "unknown"):
+        raise ValueError('clamping must be "uniform", "bolted" or "unknown"')
+
     z_q = None
     if z_trunc == "reference":
         if slope_a is None or slope_b is None:
@@ -137,6 +166,9 @@ def build_joint(
         regime_override=regime_override,
         fill=fill,
         z_trunc=z_q,
+        flatness=flat_q,
+        joint_radius=radius_q,
+        clamping=clamping,
         label=label or f"{material_a}/{material_b}",
     )
 

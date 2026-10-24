@@ -25,6 +25,8 @@ from .contact import (
     contact_conductance_plastic,
     contact_hardness,
     hot_hardness_note,
+    macro_flags,
+    macro_resistance,
     effective_modulus,
     harmonic_conductivity,
     light_load_check,
@@ -66,6 +68,7 @@ class JointResult:
     # alpha was a default: {"alpha": (lo, hi), "h_g": (lo, hi), "h_joint": (lo, hi)}
     accommodation_band: dict | None = None
     stack: StackResult | None = None      # filled/bonded joint (P0-1)
+    macro: object | None = None           # contact.macro.MacroResult, when flatness given
 
     @property
     def primary(self) -> NetworkResult:
@@ -162,18 +165,29 @@ def run_continuum(
     if kapitza is None:
         kapitza = dmm_conductance(a, b, inputs.temperature, flags)
 
+    # -- out-of-flatness (macro) constriction ----------------------------------
+    macro = None
+    if inputs.flatness is not None:
+        macro = macro_resistance(inputs.pressure, E_eff, sigma_eff, inputs.flatness,
+                                 inputs.joint_radius, k_s, flags)
+
     # -- network ------------------------------------------------------------
     branches: dict[str, NetworkResult] = {}
     for name, contact in contacts.items():
         branches[name] = combine(
             contact, kapitza, gap, hardness.H_c, flags,
             gap_conductance_override=h_g_override,
+            R_macro=macro.R_L_area if macro is not None else None,
         )
+    first = branches.get("plastic") or next(iter(branches.values()))
+    R_rest = first.R_constriction.si + first.R_kapitza.si
+    macro_flags(macro, R_rest, inputs.clamping, inputs.flatness is not None,
+                not inputs.is_vacuum, flags)
 
     result = JointResult(
         inputs=inputs, flags=flags, hardness=hardness, regime=regime,
         E_eff=E_eff, sigma_eff=sigma_eff, m_eff=m_eff, k_s=k_s, Y=Y,
-        kapitza=kapitza, gap=gap, branches=branches,
+        kapitza=kapitza, gap=gap, branches=branches, macro=macro,
     )
     if gap is not None and defaulted:
         result.accommodation_band = _accommodation_band(
@@ -210,6 +224,8 @@ def _run_stack(inputs: JointInputs, flags: FlagSet, with_uncertainty: bool,
     sigma_eff = combined_roughness(inputs.surface_a.sigma, inputs.surface_b.sigma)
     ka, kb = _stack_kapitza(inputs, flags)
     stack = stack_resistance(inputs.fill, sigma_eff, flags, kapitza_a=ka, kapitza_b=kb)
+    if inputs.flatness is not None:
+        _fill_flatness_check(inputs, flags)
     result = JointResult(
         inputs=inputs, flags=flags, hardness=None, regime=None, E_eff=None,
         sigma_eff=sigma_eff, m_eff=None, k_s=None, Y=None, kapitza=None, gap=None,
@@ -219,6 +235,26 @@ def _run_stack(inputs: JointInputs, flags: FlagSet, with_uncertainty: bool,
         result.uncertainty = {"h_joint": propagate(
             lambda rng: _perturbed_stack(inputs, ka, kb, rng), stack.h_joint.si, n=n_samples)}
     return result
+
+
+def _fill_flatness_check(inputs: JointInputs, flags: FlagSet) -> None:
+    """A fill absorbs out-of-flatness, but its thickness then varies by delta."""
+    delta = inputs.flatness.si
+    blt = sum(layer.thickness.si for layer in inputs.fill.layers)
+    if blt < delta:
+        flags.add(Code.MACRO_CONSTRICTION, Severity.WARNING,
+                  f"{inputs.fill.kind.upper()} thickness {blt * 1e6:.3g} um is less than the "
+                  f"combined out-of-flatness {delta * 1e6:.3g} um: the faces can touch at the "
+                  f"crown and the layer thickens toward the edges.",
+                  remedy="R from a single thickness is then wrong in both directions (contact "
+                         "at the crown, thicker layer elsewhere). Use the area-averaged "
+                         "thickness, or measure R on the assembly.")
+    else:
+        flags.add(Code.MACRO_CONSTRICTION, Severity.INFO,
+                  f"The {inputs.fill.kind} fills the out-of-flatness ({delta * 1e6:.3g} um): "
+                  f"its thickness varies by up to that much across the face.",
+                  remedy="Give the AREA-AVERAGED thickness (minimum + about delta/2 for a "
+                         "crown), not the minimum or the spacer size.")
 
 
 def _perturbed_stack(inputs: JointInputs, ka, kb, rng: random.Random) -> float:
@@ -332,6 +368,8 @@ def _perturb(inputs: JointInputs, rng: random.Random, kapitza: KapitzaEstimate):
             si=sample_lognormal(inputs.surface_b.m, rng)
         )
     sub.pressure = inputs.pressure.with_(si=sample_lognormal(inputs.pressure, rng))
+    if inputs.flatness is not None and inputs.flatness.uncertainty:
+        sub.flatness = inputs.flatness.with_(si=sample_lognormal(inputs.flatness, rng))
     if inputs.z_trunc is not None and inputs.z_trunc.uncertainty:
         # Additive spread on z_t, kept above 2.5 sigma (below that no CMY-family model holds)
         z = rng.gauss(inputs.z_trunc.si, inputs.z_trunc.uncertainty)

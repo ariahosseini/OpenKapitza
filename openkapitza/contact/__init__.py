@@ -22,6 +22,7 @@ from .hardness import (
     hot_hardness_note,
     softer_material,
 )
+from .macro import MacroResult, macro_flags, macro_resistance
 from .regime import Regime, RegimeResult, select_regime
 from .truncated import (
     REFERENCE_TRUNCATION,
@@ -53,6 +54,9 @@ __all__ = [
     "Regime",
     "RegimeResult",
     "select_regime",
+    "MacroResult",
+    "macro_flags",
+    "macro_resistance",
     "REFERENCE_TRUNCATION",
     "p_over_hc_truncated",
     "reference_truncation",

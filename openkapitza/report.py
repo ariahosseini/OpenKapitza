@@ -42,6 +42,12 @@ def render(result: JointResult, *, show_samples: bool = False) -> str:
     add(f"  psi (plasticity index)     {result.regime.psi.si:10.4g}"
         f"   -> {result.regime.regime.value}")
     add(f"  Y (mean plane separation)  {result.Y.to('um'):10.4g} um")
+    mac = result.macro
+    if mac is not None:
+        add(f"  flatness (combined)        {result.inputs.flatness.to('um'):10.4g} um"
+            f"   rho = {mac.rho:.3g} m, a_L/b_L = {mac.B:.2f}"
+            + (" (flat: >= 0.8)" if mac.conforming else " (crowned)"))
+        add(f"  R_macro (area basis)       {mac.R_L_area.si:10.4g} m^2.K/W")
     z_t = result.inputs.z_trunc
     if z_t is not None:
         from .contact.truncated import tg_factor, truncation_function

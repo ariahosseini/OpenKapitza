@@ -65,6 +65,15 @@ set, so the transcription and area are confirmed independently of the data.
 Zircaloy-4, Zr-2.5Nb and silver-coated Ni are left out (not packaging, or a
 coated contact). Nho's ground surfaces are anisotropic.
 
+## Crowned (non-conforming) joints — `nonconforming.csv`
+
+205 points, vacuum, from Bahrami 2004 thesis Appendix A.1 (Table A.2 + Tables
+A.3–A.38; Cassidy & Mark left out, no slope), built by
+`scripts/build_nonconforming_csv.py`, tested in `tests/test_macro.py`. Steels,
+brass, Al 2024, Mg AZ31B, Ni 200 on carbon steel; equivalent radii 13 mm–72 m.
+CMY + macro constriction: 1.03, RMS 15.3 %. CMY ignoring flatness: R at 0.14×
+measured (worst 0.008×).
+
 ## Measured interface conductance — `kapitza_measured.csv`
 
 Al(80 nm)/Si(100) by TDTR at room temperature, eight surface treatments:

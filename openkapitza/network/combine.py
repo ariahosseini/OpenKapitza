@@ -70,6 +70,7 @@ class NetworkResult:
     branch: str
     contributions: list[Contribution] = field(default_factory=list)
     sensitivity: dict = field(default_factory=dict)
+    R_macro: Quantity | None = None   # out-of-flatness constriction, apparent-area basis
 
 
 def combine(
@@ -80,8 +81,13 @@ def combine(
     flags: FlagSet,
     *,
     gap_conductance_override: Quantity | None = None,
+    R_macro: Quantity | None = None,
 ) -> NetworkResult:
-    """Combine the contact, interfacial and gas paths into a joint conductance."""
+    """Combine the contact, interfacial and gas paths into a joint conductance.
+
+    R_macro (apparent-area basis, contact.macro) adds the out-of-flatness
+    constriction in series with the asperity and Kapitza terms.
+    """
     h_c = contact.h_c.si
     xi = contact.xi.si
     h_K = kapitza.h_K.si
@@ -92,7 +98,8 @@ def combine(
     R_constriction = 1.0 / h_c
     R_kapitza = 1.0 / (xi * h_K)            # scaled to apparent area
     R_kapitza_raw = 1.0 / h_K               # real-area basis, reference only
-    R_solid = R_constriction + R_kapitza
+    R_mac = R_macro.si if R_macro is not None else 0.0
+    R_solid = R_constriction + R_kapitza + R_mac
     h_solid = 1.0 / R_solid
 
     if gap_conductance_override is not None:
@@ -124,10 +131,14 @@ def combine(
         ),
     ]
 
-    inputs = [contact.h_c, contact.xi, kapitza.h_K, h_g_q]
+    if R_macro is not None:
+        contributions.append(Contribution(
+            "macro constriction (flatness)", R_mac, R_mac / R_solid,
+            "Bahrami 2004, crowned flat"))
+    inputs = [contact.h_c, contact.xi, kapitza.h_K, h_g_q] + ([R_macro] if R_macro is not None else [])
 
     # ---- is MD worth running? ---------------------------------------------
-    sens = _sensitivity(h_c, xi, h_K, h_g, kapitza)
+    sens = _sensitivity(h_c, xi, h_K, h_g, kapitza, R_mac)
     if sens["relative_span"] < NEGLIGIBLE_SENSITIVITY:
         flags.add(
             Code.KAPITZA_NEGLIGIBLE,
@@ -194,11 +205,13 @@ def combine(
         branch=contact.branch,
         contributions=contributions,
         sensitivity=sens,
+        R_macro=R_macro,
     )
 
 
 def _sensitivity(
-    h_c: float, xi: float, h_K: float, h_g: float, kapitza: KapitzaEstimate
+    h_c: float, xi: float, h_K: float, h_g: float, kapitza: KapitzaEstimate,
+    R_mac: float = 0.0,
 ) -> dict:
     """How much could the joint conductance move if h_K is wrong?
 
@@ -210,11 +223,11 @@ def _sensitivity(
     factor = 1.0 + (unc / h_K if unc else 1.5)
 
     def joint(hk: float) -> float:
-        return 1.0 / (1.0 / h_c + 1.0 / (xi * hk)) + h_g
+        return 1.0 / (1.0 / h_c + 1.0 / (xi * hk) + R_mac) + h_g
 
     low = joint(h_K / factor)
     high = joint(h_K * factor)
-    perfect = 1.0 / (1.0 / h_c) + h_g      # h_K -> infinity
+    perfect = 1.0 / (1.0 / h_c + R_mac) + h_g      # h_K -> infinity
     nominal = joint(h_K)
 
     return {

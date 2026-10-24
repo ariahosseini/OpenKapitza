@@ -1918,6 +1918,26 @@ Full text read: classical theory with trapping–desorption fits Ar, Kr, Xe on
 clean W; "much too large for He and Ne" (Sec. III). §8.2 corrected; our flag's
 direction (classical He = upper estimate) stands.
 
+### 12.8 Out-of-flatness as built (P0-9)
+
+From the same thesis, Ch. 3–4: a crowned flat is an equivalent sphere ρ =
+b_L²/2δ (δ = combined max out-of-flatness); the macro-contact radius follows
+a_L = 1.80 a_H √(α + 0.31τ^0.056)/τ^0.028 (Eq. 3.30) with a_H = (3Fρ/4E′)^⅓,
+α = σρ/a_H², τ = ρ/a_H, and the whole face touches above F_c (Eq. 4.23). R_L =
+(1 − a_L/b_L)^1.5/(2k_s a_L) adds in series; the micro term is independent of
+curvature (Eq. 4.30), so our CMY network stays as the micro part. Reproduces
+the thesis's α, τ, B, R_L for all 205 crowned points (A.3–A.38); our CMY + R_L
+gives 1.03 / 15.3 % RMS on R_exp. The size of the effect is the lesson: on
+those joints plain CMY predicts R at 0.14× measured (h ~7× too high), down to
+0.008× — the same direction and order as Yeh's bolted joints (§12.4). A
+"flat" joint in the thesis's sense is B ≥ 0.8, roughly δ/σ ≤ 3–30.
+
+Choices: the macro term is applied only when flatness AND joint size are
+given; otherwise an INFO flag (CAUTION when bolted) says flat contact was
+assumed. In gas, the open macro gap's gas conduction is not modelled, so h_g
+is over-estimated there (stated in the flag). For filled joints the crown is
+absorbed by the fill; a bond line thinner than δ is warned.
+
 ### Still missing
 
 Marmier et al. 1997 (N₂ on Cu, P5-4), Song's 1988 thesis (tabulated gas-gap

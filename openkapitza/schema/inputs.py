@@ -128,6 +128,12 @@ class JointInputs:
     # (open issue P0-7). None = fully Gaussian CMY. Set, the plastic branch and
     # P/H_c use the truncated-Gaussian model (contact.truncated).
     z_trunc: Quantity | None = None
+    # Macro geometry (contact.macro): combined maximum out-of-flatness of the two
+    # faces, joint radius (sqrt(A/pi) for a non-circular footprint) and how the
+    # joint is clamped: "uniform" | "bolted" | "unknown" (None = unknown).
+    flatness: Quantity | None = None
+    joint_radius: Quantity | None = None
+    clamping: str | None = None
     label: str = ""
     extra: dict = field(default_factory=dict)
 
@@ -148,6 +154,11 @@ class JointInputs:
         ]
         if self.gas is not None and self.gas.pressure is not None:
             lines.append(f"  P_gas        = {self.gas.pressure}")
+        if self.flatness is not None:
+            lines.append(f"  flatness     = {self.flatness} (combined), joint radius "
+                         f"{self.joint_radius}")
+        if self.clamping:
+            lines.append(f"  clamping     = {self.clamping}")
         if self.z_trunc is not None:
             lines.append(f"  z_trunc      = {self.z_trunc.si:g} sigma (truncated Gaussian)")
         return "\n".join(lines)
