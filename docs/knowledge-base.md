@@ -1968,6 +1968,39 @@ written by `prepare_cluster` or `plan_campaign` carries `spec.json`
 (`md.campaign.write_spec` / `read_spec`), and `agent.ingest` refuses a folder
 without one rather than guessing.
 
+### 12.11 Copper Vickers coefficients — searched, none found (P0-6)
+
+Copper is the most common packaging metal and every Cu joint falls back to
+bulk hardness (HARDNESS_FALLBACK). Searched 23 Oct: Song & Yovanovich 1988
+(mhtl88-8, Table 2: Zr-4, Zr-2.5Nb, Ni 200, SS 304 only), Yovanovich 2005
+review (Table VI: the same four metals), Bahrami et al. 2004 (Tables 3, 10:
+those plus Al 6061-T6), Sridhar & Yovanovich 1996 (Wear; fits c₁, c₂ to Brinell
+1.30–7.60 GPa, above soft Cu). The one open copper indentation-size-effect
+study (Crystals 14, 913, 2024) is 97 % Cu, unannealed, ~100 HV, with Meyer
+n ≈ 2.0–2.1 (almost no size effect; HV not even monotonic over 10–100 gf) —
+not the annealed packaging copper in materials.yaml (0.36 GPa), so not used.
+Two candidates could not be reached: Phil. Mag. A 82(10) (2002), grain-size
+effect on the indentation hardness of high-purity Cu and Al; and an "analysis
+of indentation size effect in copper and its alloys" study (academia.edu,
+venue unverified). Instead of a number, the path for measured data: `Hv_*`,
+`c1_*`, `c2_*` overrides in `build_joint` and the agent.
+
+### 12.12 Unloading as built (P0-10)
+
+Mikic's unloading model with the truncated geometry, Milanez et al. Eqs.
+16–19, read from page images. Transcription checked analytically before
+coding: with u = λ_max + X², I(0) = erfc(λ_max/√2)/2, so the model starts at
+the first-loading point; Eq. 19 + Eq. 2 reproduce Eq. 8 and Eq. 1 reproduces
+Eq. 6. Two reading errors on the way, both caught by physics: the first factor
+of Eq. 18 is exp(−u²), not exp(−u²/2) (with /2 the spot density went negative
+immediately); and the printed bracket {λ_max − …} must be {λ_max + X² − …} —
+deriving Eq. 18 as the spots lost between λ_max and λ_max + Z² gives that
+form, which integrates to n*(λ_max + Z²) and reaches zero when all contacts
+open; the printed one keeps ~60 %. The truncated version has an edge where
+A_r/A_a = I(Z) − erfc(z_t/√2)/2 reaches zero; the root search is bracketed
+inside it. Hysteresis on S1: 1.4× at 1.5 MPa to 2.6–3.1× at 30 kPa. No
+tabulated unloading data were available, so magnitudes are untested.
+
 ### Still missing
 
 Marmier et al. 1997 (N₂ on Cu, P5-4), Song's 1988 thesis (tabulated gas-gap

@@ -75,7 +75,8 @@ _MEASURE = {
                           "with a TIM.",
     "CMY_SLOPE_ESTIMATED": "Measure the asperity slope (profilometer Δa) on both faces.",
     "HARDNESS_FALLBACK": "Run load-dependent Vickers indentation (10-200 gf) to fit c1, c2 "
-                         "for the softer face.",
+                         "for the softer face, then 'set c1_a_GPa=...' and 'set c2_a=...' "
+                         "(or _b).",
     "CMY_LIGHT_LOAD": "At this light load, a measured h at the working pressure (or a "
                       "z_trunc fitted to light-load data) is worth more than refined inputs.",
     "STACK_INCOMPLETE": "Measure the missing term: the TIM boundary resistance (ASTM D5470 "

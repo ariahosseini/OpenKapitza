@@ -39,7 +39,7 @@ would; an unknown field name is an error, not silently ignored.
 | command | does |
 |---|---|
 | `why`, `back`, `show` | explain the question, re-ask the previous one, list the inputs |
-| `set name=value` | set or change any field, including advanced ones (`z_trunc`, `h_K_MW`) |
+| `set name=value` | set or change any field, including advanced ones: `z_trunc`, `h_K_MW`, `max_pressure_MPa` (relaxed joint: unloading curve), your own hardness `Hv_a_GPa`, `c1_a_GPa` + `c2_a` (and `_b`) |
 | `run` | calculate (remaining optional fields take their defaults) |
 | `what if name=value` | re-run with one change; the inputs are not changed |
 | `sweep name=a:b:n[:log]` | one-parameter sweep; `name=v1,v2,...` for explicit values; add `csv FILE` and/or `plot FILE` (plot needs matplotlib) |

@@ -649,6 +649,11 @@ termination listing, and registry chosen by relaxed energy
 - **Flatness and clamping:** `build_joint(..., flatness_um=, joint_area_mm2=,
   clamping=)` adds the out-of-flatness constriction (Bahrami 2004); ignoring a
   crown over-predicted 205 measured joints ~7×.
+- **Relaxed joints:** `build_joint(..., max_pressure_MPa=...)` follows Mikic's
+  unloading curve when the joint carried a higher load before (relaxed clamp,
+  assembled high, run low): conductance stays above first loading.
+- **Your own hardness:** `Hv_a_GPa`, `c1_a_GPa` + `c2_a` (and `_b`) replace the
+  database for that side; copper has no published c1/c2.
 - **Light loads:** `build_joint(..., z_trunc=...)` switches the plastic branch
   to the truncated-Gaussian model (Milanez et al. 2004); `z_trunc="reference"`
   uses their bead-blasted SS 304 / Ni 200 values (fitted with their c1/c2).

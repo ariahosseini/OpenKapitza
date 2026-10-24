@@ -156,6 +156,55 @@ def contact_conductance_plastic(
     )
 
 
+def contact_conductance_unloading(
+    k_s: Quantity,
+    sigma_eff: Quantity,
+    m_eff: Quantity,
+    pressure: Quantity,
+    max_pressure: Quantity,
+    H_max: Quantity,
+    flags: FlagSet,
+    z_trunc: Quantity | None = None,
+):
+    """Plastic branch on unloading from max_pressure (contact.unloading).
+
+    Returns (ContactResult, UnloadingResult). Reloading up to max_pressure
+    follows the same curve, so this covers relaxed and re-tightened joints too.
+    """
+    from .unloading import unloading_conductance
+    z = z_trunc.si if z_trunc is not None else None
+    r = unloading_conductance(k_s.si, sigma_eff.si, m_eff.si, pressure.si, max_pressure.si,
+                              H_max.si, z)
+    inputs = [k_s, sigma_eff, m_eff, pressure, max_pressure, H_max] + ([z_trunc] if z_trunc else [])
+    cap = None
+    if z is not None and pressure.si < 4e5:
+        flags.add(Code.UNLOADING, Severity.CAUTION,
+                  f"Truncated-Gaussian unloading at {pressure.si / 1e3:.0f} kPa: Milanez et al. "
+                  "found it accurate above ~300-400 kPa; below, the fully Gaussian unloading "
+                  "model predicted their data better.",
+                  remedy="Compare with z_trunc unset (fully Gaussian unloading); the truth for "
+                         "their surfaces lay nearer that one.")
+    if r.at_edge:
+        cap = Confidence.LOW
+        flags.add(Code.UNLOADING, Severity.WARNING,
+                  "Unloaded beyond what the truncated-Gaussian model can describe (the "
+                  "truncated tail has fully opened).",
+                  remedy="Use the fully Gaussian unloading model (z_trunc unset) at this depth "
+                         "of unloading.")
+    xi = _check_area_fraction(r.area_fraction, flags, "plastic (unloading)")
+    p_over_h = make_derived(pressure.si / H_max.si, unit="-", inputs=[pressure, H_max],
+                            name="P_over_Hmax")
+    res = ContactResult(
+        branch="plastic",
+        model="unloading" + ("_truncated" if z is not None else ""),
+        h_c=make_derived(r.h_c, unit="W/m2K", inputs=inputs, confidence=cap, name="h_c",
+                         note="Mikic unloading (Milanez et al. 2004, Eqs. 16-19)"),
+        xi=make_derived(xi, unit="-", inputs=inputs, confidence=cap, name="xi"),
+        sigma_eff=sigma_eff, m_eff=m_eff, k_s=k_s, dimensionless_pressure=p_over_h,
+    )
+    return res, r
+
+
 def contact_conductance_elastic(
     k_s: Quantity,
     sigma_eff: Quantity,

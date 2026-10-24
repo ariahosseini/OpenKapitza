@@ -131,6 +131,9 @@ class JointInputs:
     # Macro geometry (contact.macro): combined maximum out-of-flatness of the two
     # faces, joint radius (sqrt(A/pi) for a non-circular footprint) and how the
     # joint is clamped: "uniform" | "bolted" | "unknown" (None = unknown).
+    # Highest pressure the joint has carried before (contact.unloading): if
+    # above `pressure`, the plastic branch follows the unloading curve.
+    max_pressure: Quantity | None = None
     flatness: Quantity | None = None
     joint_radius: Quantity | None = None
     clamping: str | None = None
@@ -154,6 +157,8 @@ class JointInputs:
         ]
         if self.gas is not None and self.gas.pressure is not None:
             lines.append(f"  P_gas        = {self.gas.pressure}")
+        if self.max_pressure is not None:
+            lines.append(f"  P_max before = {self.max_pressure} (unloading curve)")
         if self.flatness is not None:
             lines.append(f"  flatness     = {self.flatness} (combined), joint radius "
                          f"{self.joint_radius}")

@@ -254,6 +254,27 @@ FIELDS: list[Field] = [
           "Light-load correction (Milanez et al. 2004). Fitted to light-load data with "
           "your own hardness coefficients.",
           kind="text", required=no, advanced=True, applies=bare),
+    Field("max_pressure_MPa", "Highest pressure the joint carried before, if it was "
+          "loaded higher and then relaxed?",
+          "Plastically flattened asperities keep more contact on unloading: conductance "
+          "stays above the first-loading value (Mikic hysteresis).",
+          unit="MPa", units=_PRESS, lo=0.0, hi=1000.0, applies=bare, required=no,
+          advanced=True),
+    Field("Hv_a_GPa", "Bulk Vickers hardness of side A (your measurement)?",
+          "Replaces the database value, its least reliable field.",
+          unit="GPa", units=("GPa", "MPa"), lo=0.0, hi=100.0, required=no, advanced=True),
+    Field("Hv_b_GPa", "Bulk Vickers hardness of side B (your measurement)?", "As for side A.",
+          unit="GPa", units=("GPa", "MPa"), lo=0.0, hi=100.0, required=no, advanced=True),
+    Field("c1_a_GPa", "Vickers correlation c1 for side A (HV = c1 (d/1um)^c2)?",
+          "From load-dependent indentation (10-200 gf); give c2_a too. Sets the contact "
+          "hardness at the joint's own spot size (Song-Yovanovich).",
+          unit="GPa", units=("GPa", "MPa"), lo=0.0, hi=100.0, required=no, advanced=True),
+    Field("c2_a", "Vickers size index c2 for side A?", "Measured fits run -0.37 to ~0.",
+          unit=None, lo=-0.5, hi=0.1, required=no, advanced=True),
+    Field("c1_b_GPa", "Vickers correlation c1 for side B?", "As for side A.",
+          unit="GPa", units=("GPa", "MPa"), lo=0.0, hi=100.0, required=no, advanced=True),
+    Field("c2_b", "Vickers size index c2 for side B?", "As for side A.",
+          unit=None, lo=-0.5, hi=0.1, required=no, advanced=True),
     Field("h_K_MW", "Measured interface conductance h_K (per real contact area)?",
           "Replaces the DMM placeholder for the atomic interface term.",
           unit="MW/m2K", units=("MW/m2K", "GW/m2K", "W/m2K"), lo=0.0, required=no,

@@ -51,6 +51,13 @@ def build_joint(
     joint_area_mm2: float | None = None,
     clamping: str | None = None,
     flatness_rel_unc: float | None = 0.25,
+    max_pressure_MPa: float | None = None,
+    Hv_a_GPa: float | None = None,
+    Hv_b_GPa: float | None = None,
+    c1_a_GPa: float | None = None,
+    c2_a: float | None = None,
+    c1_b_GPa: float | None = None,
+    c2_b: float | None = None,
 ) -> JointInputs:
     """Assemble a JointInputs from values in laboratory units.
 
@@ -74,10 +81,35 @@ def build_joint(
     added in series. `clamping` is "uniform" (press, centred spring, dead
     weight), "bolted" (screws or bolts) or "unknown"; "bolted" raises a
     warning because the mean pressure misrepresents a bolted face.
+
+    `max_pressure_MPa` is the highest pressure the joint carried before; when
+    above `pressure_MPa` (a relaxed clamp, or assembled high and run low), the
+    plastic branch follows Mikic's unloading curve (contact.unloading) and the
+    conductance stays above the first-loading value.
+
+    `Hv_*_GPa` replaces a side's bulk Vickers hardness; `c1_*_GPa` with `c2_*`
+    gives that side's own Vickers correlation HV = c1 (d/1 um)^c2, fitted to
+    load-dependent indentation (10-200 gf) on YOUR surfaces. Measured values
+    beat the database: hardness is its least reliable field, and Cu and pure
+    Al have no published c1/c2 at all (knowledge base 12.11).
     """
     flags = flags or FlagSet()
     a = load_material(material_a, flags)
     b = load_material(material_b, flags)
+    for mat, hv, c1, c2, side in ((a, Hv_a_GPa, c1_a_GPa, c2_a, "a"),
+                                  (b, Hv_b_GPa, c1_b_GPa, c2_b, "b")):
+        if hv is not None:
+            if hv <= 0:
+                raise ValueError(f"Hv_{side}_GPa must be positive")
+            mat.Hv = Quantity.parse(hv, "GPa", provenance=Provenance.USER_MEASURED, name="Hv")
+        if (c1 is None) != (c2 is None):
+            raise ValueError(f"give c1_{side}_GPa and c2_{side} together (one fit)")
+        if c1 is not None:
+            if c1 <= 0 or not -0.5 <= c2 <= 0.1:
+                raise ValueError(f"c1_{side}_GPa must be > 0 and c2_{side} in [-0.5, 0.1] "
+                                 "(measured fits: -0.37 to ~0)")
+            mat.c1 = Quantity.parse(c1, "GPa", provenance=Provenance.USER_MEASURED, name="c1")
+            mat.c2 = Quantity.parse(c2, "-", provenance=Provenance.USER_MEASURED, name="c2")
 
     if hardness_rel_unc is not None:
         a.Hv = a.Hv.with_(uncertainty=a.Hv.si * hardness_rel_unc)
@@ -166,6 +198,9 @@ def build_joint(
         regime_override=regime_override,
         fill=fill,
         z_trunc=z_q,
+        max_pressure=(None if max_pressure_MPa is None else Quantity.parse(
+            max_pressure_MPa, "MPa", rel_uncertainty=pressure_rel_unc,
+            provenance=Provenance.USER_MEASURED, name="P_max")),
         flatness=flat_q,
         joint_radius=radius_q,
         clamping=clamping,

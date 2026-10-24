@@ -102,6 +102,10 @@ class Intake:
             temperature_K=a["temperature_K"], pressure_MPa=a["pressure_MPa"],
             label=f"{a['material_a']}/{a['material_b']}",
         )
+        for k in ("Hv_a_GPa", "Hv_b_GPa", "c1_a_GPa", "c2_a", "c1_b_GPa", "c2_b",
+                  "max_pressure_MPa"):
+            if a.get(k) is not None:
+                kw[k] = a[k]
         jt = a.get("joint_type", "bare")
         if jt == "bare":
             kw.update(sigma_a_um=a["sigma_a_um"], sigma_b_um=a["sigma_b_um"],

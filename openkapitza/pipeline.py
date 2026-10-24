@@ -23,6 +23,7 @@ from .contact import (
     combined_slope,
     contact_conductance_elastic,
     contact_conductance_plastic,
+    contact_conductance_unloading,
     contact_hardness,
     hot_hardness_note,
     macro_flags,
@@ -127,13 +128,35 @@ def run_continuum(
     )
 
     # -- contact branches ---------------------------------------------------
-    if z_t is None:
+    P_max = inputs.max_pressure
+    unloading = P_max is not None and P_max.si > inputs.pressure.si
+    if P_max is not None and not unloading:
+        flags.add(Code.UNLOADING, Severity.INFO,
+                  "The earlier maximum pressure is not above the working pressure: first-"
+                  "loading model used.")
+    if z_t is None and not unloading:
         light_load_check(hardness.P_over_Hc, flags)   # P0-7: CMY under-predicts here
     contacts: dict[str, ContactResult] = {}
+    unload = None
     if regime.regime in (Regime.PLASTIC, Regime.BOTH):
-        contacts["plastic"] = contact_conductance_plastic(
-            k_s, sigma_eff, m_eff, hardness.P_over_Hc, flags, z_trunc=z_t
-        )
+        if unloading:
+            h_max = contact_hardness(a, b, P_max, sigma_eff, m_eff, FlagSet(), z_trunc=z_t)
+            contacts["plastic"], unload = contact_conductance_unloading(
+                k_s, sigma_eff, m_eff, inputs.pressure, P_max, h_max.H_c, flags, z_trunc=z_t)
+            first = contact_conductance_plastic(k_s, sigma_eff, m_eff, hardness.P_over_Hc,
+                                                FlagSet(), z_trunc=z_t)
+            ratio = contacts["plastic"].h_c.si / first.h_c.si
+            flags.add(Code.UNLOADING, Severity.INFO,
+                      f"Unloading from {P_max.si / 1e6:.3g} MPa: contact conductance is "
+                      f"{ratio:.2f}x the first-loading value at {inputs.pressure.si / 1e6:.3g} MPa "
+                      f"(plastic branch; Mikic / Milanez et al.).",
+                      remedy="The unloading magnitudes are checked for internal consistency "
+                             "only; no tabulated unloading data were available to test them.",
+                      ratio=ratio)
+        else:
+            contacts["plastic"] = contact_conductance_plastic(
+                k_s, sigma_eff, m_eff, hardness.P_over_Hc, flags, z_trunc=z_t
+            )
     if z_t is not None and regime.regime in (Regime.ELASTIC, Regime.BOTH):
         flags.add(Code.TG_TRUNCATION_SOURCE, Severity.CAUTION,
                   "z_trunc applies to the plastic branch only; the elastic (Mikic) branch "
@@ -147,7 +170,17 @@ def run_continuum(
         )
 
     # -- gap ----------------------------------------------------------------
-    Y = mean_plane_separation(sigma_eff, hardness.P_over_Hc, flags, z_trunc=z_t)
+    if unload is not None:
+        # Separation at P_max, opened by Z^2 sigma on unloading (our reading of the
+        # height variable u = lambda_max + X^2; affects only the gas path).
+        p_max_ratio = make_derived(P_max.si / h_max.H_c.si, unit="-",
+                                   inputs=[P_max, h_max.H_c], name="P_over_Hmax")
+        Y0 = mean_plane_separation(sigma_eff, p_max_ratio, flags, z_trunc=z_t)
+        Y = make_derived(Y0.si * unload.separation_ratio, unit="um", inputs=[Y0],
+                         name="Y", note="separation at P_max opened by the unloading "
+                                        "parameter (our reading; gas path only)")
+    else:
+        Y = mean_plane_separation(sigma_eff, hardness.P_over_Hc, flags, z_trunc=z_t)
     gap: GapResult | None = None
     h_g_override: Quantity | None = None
     if inputs.is_vacuum:
@@ -387,6 +420,9 @@ def _perturb(inputs: JointInputs, rng: random.Random, kapitza: KapitzaEstimate):
             si=sample_lognormal(inputs.surface_b.m, rng)
         )
     sub.pressure = inputs.pressure.with_(si=sample_lognormal(inputs.pressure, rng))
+    if inputs.max_pressure is not None and inputs.max_pressure.uncertainty:
+        sub.max_pressure = inputs.max_pressure.with_(
+            si=sample_lognormal(inputs.max_pressure, rng))
     if inputs.flatness is not None and inputs.flatness.uncertainty:
         sub.flatness = inputs.flatness.with_(si=sample_lognormal(inputs.flatness, rng))
     if inputs.z_trunc is not None and inputs.z_trunc.uncertainty:
