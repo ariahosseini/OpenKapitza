@@ -1,0 +1,258 @@
+# Papers this project used or needs: our own notes, not the papers' text.
+#
+# One entry per source, written in our words: what it is, what we took from
+# it, what we checked, and the pitfalls found. The public repository must not
+# carry copyrighted text, so quote nothing longer than a short phrase, and
+# never paste figures, tables or equations wholesale; record WHERE they are.
+#
+# status:  full    -- full text read (supplied PDF or open access)
+#          partial -- abstract, or the parts reachable here
+#          needed  -- located but not obtained; what it would close is in `needed_for`
+# kb:      knowledge-base sections that discuss it (docs/knowledge-base.md)
+# Indexed by openkapitza.rag (collection "papers").
+
+- key: milanez2004
+  cite: F. H. Milanez, M. M. Yovanovich & M. B. H. Mantelli, "Thermal Contact Conductance at Low Contact Pressures", J. Thermophys. Heat Transfer 18(1), 2004 (AIAA 36th Thermophysics Conf., 2003)
+  status: full
+  topics: [light load, truncated Gaussian, contact hardness, unloading, hysteresis, CMY]
+  used_for: contact/truncated.py (Eqs. 10-11, 14-15) and contact/unloading.py (Eqs. 16-19)
+  findings: >
+    Truncated-Gaussian (TG) asperity heights explain why CMY under-predicts at
+    light load; fitted truncation levels 3.5-4.2 sigma for bead-blasted SS 304
+    and Ni 200 (their Table 1), RMS error 21-48 % -> 5-18 % (Table 2).
+    Checked here: Table 1 contact hardness reproduced within 2.2 %; S1 data
+    20.8 -> 15.5 % RMS. Pitfalls: equations unreadable in the text layer (read
+    page images); the Eq. 10 correlation is 7 % low at P/H_c = 1e-6 (they claim
+    4 %); "f > 40 -> < 1 %" is 1.1 % at f = 40; z_trunc is tied to the c1/c2 it
+    was fitted with; Eq. 18 as printed leaves ~60 % of spots in contact at full
+    separation (the derived form n*(lambda_max + Z^2) is used); TG unloading
+    only above ~300-400 kPa in their tests.
+  kb: ["12.1", "12.12"]
+
+- key: milanez2003trunc
+  cite: F. H. Milanez, M. M. Yovanovich & J. R. Culham, "Effect of Surface Asperity Truncation on Thermal Contact Conductance", IEEE Trans. Components and Packaging Technologies 26(1), 48-54, 2003
+  status: partial
+  topics: [light load, truncation, CMY under-prediction]
+  findings: >
+    Origin of the truncated-Gaussian idea: real surfaces lack asperities above
+    ~4.5 sigma, so at light loads CMY under-predicts by 40-70 % (bead-blasted
+    SS 304, 16 kPa). Source of the light-load flag's literature range.
+  kb: ["8.1"]
+
+- key: bahrami2004thesis
+  cite: M. Bahrami, "Modeling of Thermal Joint Resistance for Sphere-Flat Contacts in a Vacuum", PhD thesis, University of Waterloo, 2004
+  status: full
+  topics: [benchmark data, Hegazy, Antonetti, Nho, McWaid, crowned contact, flatness, macro constriction, sphere-flat]
+  used_for: >
+    tests/benchmarks/joint_conductance.csv (Hegazy, Tables A.39, A.46-A.54),
+    joint_conductance_ext.csv (A.40-A.43, A.63-A.73), nonconforming.csv
+    (A.2-A.38); contact/macro.py (Eqs. 3.30, 4.2, 4.6, 4.23, 4.30)
+  findings: >
+    Appendix A tabulates 36 conforming and 36 non-conforming vacuum datasets.
+    Our CMY reproduces his model column within 3 %; 207 + 158 conforming
+    points at 1.03 / 0.95 geometric mean. Crowned joints: CMY + macro
+    constriction 1.03, 15.3 % RMS; ignoring flatness over-predicts h ~7x (up
+    to ~125x). Flat-joint criterion B = a_L/b_L >= 0.8 (delta/sigma ~3-30).
+    Pitfalls: Table A.2 rows are not in data-table order (match by name); R_exp
+    printed to 2 decimals (exclude rows rounded > 10 %); Nho's ground surfaces
+    are anisotropic.
+  kb: ["12.3", "12.8"]
+
+- key: bahrami2004hardness
+  cite: M. Bahrami, M. M. Yovanovich & J. R. Culham, "Micro and Macro Hardness Measurements, Correlations, and Contact Models", AIAA 2004-0989
+  status: full
+  topics: [microhardness, Vickers coefficients, c1, c2, hot hardness, Brinell, Al 6061]
+  used_for: materials.yaml c1/c2 (SS 304, Ni 200 Table 3; Al 6061-T6 Table 10), hot-hardness fits (Tables 10-13)
+  findings: >
+    Confirms SS 304 6.271 GPa / -0.229 and Ni 200 6.304 / -0.264. Hot hardness
+    exp[C_T (T - T_rm)] stored but NOT applied: on Hegazy's 110-145 C joints
+    the softened c1 moves pred/meas 1.03 -> 1.19. c1, c2 from Brinell (Sridhar)
+    valid 1.30-7.60 GPa only, above soft Cu and pure Al.
+  kb: ["12.2", "12.11"]
+
+- key: song1988hardness
+  cite: "S. Song & M. M. Yovanovich, \"Relative Contact Pressure: Dependence on Surface Roughness and Vickers Microhardness\", J. Thermophys. Heat Transfer 2(1), 43-47, 1988"
+  status: full
+  topics: [contact hardness, Song-Yovanovich, P/H_c, c1, c2]
+  used_for: contact/hardness.py (explicit P/H_c with 1.62 sigma/m)
+  findings: >
+    The explicit P/H_c correlation. Its Table 2 gives coefficients for Zr-4,
+    Zr-2.5Nb, Ni 200 and SS 304 only (no copper). Where the 1.62 sits was
+    settled by solving the implicit system (KB section 3).
+  kb: ["3", "12.11"]
+
+- key: song1988gap
+  cite: S. Song & M. M. Yovanovich, gap conductance papers (mhtl88-7, Part II; 1989 accommodation), J. Thermophys. Heat Transfer, 1988-1989
+  status: partial
+  topics: [gap conductance, accommodation coefficient, gas, rarefaction]
+  used_for: gap model inputs; tests/benchmarks/gap_conductance_digitised.csv (figures only)
+  findings: >
+    Gap model in the lumped form used here; gas and accommodation inputs.
+    Measured gap data exist only as figures in these papers; the digitised set
+    is exploratory, and the lumped form reads ~32 % low toward the continuum.
+  needed_for: "S. Song, PhD thesis, University of Waterloo, 1988: tabulated h_j(P_gas) (open issue P0-3)"
+  kb: ["3"]
+
+- key: hopkins2010
+  cite: P. E. Hopkins, L. M. Phinney, J. R. Serrano & T. E. Beechem, "Effects of surface roughness and oxide layer on the thermal boundary conductance at aluminum/silicon interfaces", Phys. Rev. B 82, 085307 (2010)
+  status: full
+  topics: [Al/Si, thermal boundary conductance, TDTR, native oxide, roughness, Kapitza validation]
+  used_for: tests/benchmarks/kapitza_measured.csv (Table I)
+  findings: >
+    Eight Al(80 nm)/Si(100) interfaces: 158-193 MW/m2K with the native oxide
+    stripped, 115-144 with it; h falls with roughness in both classes; the
+    oxide adds ~1.7e-9 m2K/W (their Eq. 4 fit; plain pairwise 1.91e-9). Our
+    Debye DMM (321) is 1.66x the best interface: an upper estimate.
+  kb: ["7", "12.5"]
+
+- key: devoto2017
+  cite: D. DeVoto, J. Major, P. Paret, G. S. Blackman, A. Wong & J. S. Meth, "Degradation Characterization of Thermal Interface Greases", NREL/CP-5400-68014 (ITherm 2017)
+  status: full
+  topics: [TIM, grease, ASTM D5470, bond line thickness, boundary resistance, pump-out]
+  used_for: tests/benchmarks/tim_greases.csv (Tables 1-3); grease class range floor 10 mm2K/W
+  findings: >
+    Five greases fit R = BLT/k + R_c (R2 >= 0.991): k 0.7-3.8 W/mK, R_c
+    4.2-28.3 mm2K/W, BLT 29-266 um at 139 kPa. Good greases sit below Blazej's
+    2003 floor. Degradation shown as acoustic images only (no numbers).
+  kb: ["12.6"]
+
+- key: yeh2001
+  cite: C. L. Yeh, C. Y. Wen, Y. F. Chen, S. H. Yeh & C. H. Wu, "An experimental investigation of thermal contact conductance across bolted joints", Exp. Therm. Fluid Sci. 25, 349-357 (2001)
+  status: full
+  topics: [bolted joint, Al 6061, contact pressure, pressure film, flatness, RTV]
+  findings: >
+    Bolted Al 6061 blocks in air; only correlations, no slopes or hardness:
+    h = 1.35 + 0.21 P^2.8 (4 bolts), 9.04 + 0.1 P^3.79 (8 bolts), kW/m2K with P
+    in MPa; 8 bolts beat 4 at the same mean pressure. CMY at their mean
+    pressure is 5-35x too high: real contact is confined near the bolts.
+    Not usable for CMY validation; the reason for the clamping check.
+  kb: ["12.4"]
+
+- key: fanmanson2008
+  cite: G. Fan & J. R. Manson, "Calculations of the Energy Accommodation Coefficient for Gas-Surface Interactions", arXiv:0804.2269
+  status: full
+  topics: [accommodation coefficient, helium, neon, classical scattering, quantum gas]
+  findings: >
+    Classical theory with trapping-desorption fits Ar, Kr, Xe on clean W; for
+    He and Ne it predicts values much too large (stated in Sec. III, not in the
+    abstract). Basis of the MD_ACCOMMODATION_QUANTUM_GAS flag direction.
+  kb: ["8.2", "12.7"]
+
+- key: yang2014alsi
+  cite: Yang et al., Al/Si interfacial thermal conductance with electron-phonon coupling, arXiv:1401.5550
+  status: partial
+  topics: [Al/Si, NEMD, MEAM, electron-phonon, series resistance]
+  findings: >
+    Phonon-only MEAM NEMD 0.47 GW/m2K, 0.37 with the electron-phonon term in
+    series. Our series estimate reproduces 0.37 from their inputs. Once cited
+    in this repository as "Liang et al." (wrong author).
+  kb: ["7", "8.8"]
+
+- key: tong2019
+  cite: Tong et al., first-principles lattice and electronic thermal conductivity of metals, arXiv:1907.01364
+  status: partial
+  topics: [phonon thermal conductivity, metals, electron-phonon, Al, Cu]
+  used_for: md/electron_phonon.py LATTICE_K (Al 8.1, Cu 17.6 W/mK with phonon-electron scattering)
+  kb: ["7"]
+
+- key: lin2008
+  cite: Z. Lin, L. V. Zhigilei & V. Celli, Phys. Rev. B 77, 075133 (2008)
+  status: partial
+  topics: [electron-phonon coupling, g, Al, Cu, ab initio]
+  used_for: electron-phonon coupling factors (Al 2.45e17, Cu 5.5e16 W/m3K)
+  kb: ["7"]
+
+- key: wang2012ttm
+  cite: Wang et al. (2012), two-temperature MD of metal/non-metal interfaces
+  status: partial
+  topics: [TTM, two-temperature model, electron-phonon, interface, Cu/Si]
+  findings: >
+    The series formula over-predicts the full TTM-MD resistance by 6-15 %;
+    results depend on processor count through the electronic grid.
+  kb: ["7"]
+
+- key: chen2012sio2
+  cite: Chen, Zhang & Li, arXiv:1210.0354 (Si/a-SiO2 interfaces, strong and weak bonding)
+  status: partial
+  topics: [Si/SiO2, amorphous, interface bonding, Tersoff]
+  findings: >
+    Strong and weak bonding targets for Si/a-SiO2. Once cited here as "Lampin
+    et al." (wrong author).
+  kb: ["8.5", "8.8"]
+
+- key: rajabpour2024
+  cite: Rajabpour, Mortazavi, Mirchi, El Hajj, Guo, Zhuang & Merabia, arXiv:2407.15404
+  status: partial
+  topics: [machine-learned potential, MTP, interface conductance, Tersoff overestimate]
+  findings: Tersoff over-estimates Si/diamond interface conductance ~3x against an interface-trained MTP within 10 % of experiment; Tier 2 means trained on the interface.
+  kb: ["8.4"]
+
+- key: wei2025
+  cite: Wei et al., Chin. Phys. B 34 (2025), reservoir length in NEMD
+  status: partial
+  topics: [NEMD, reservoir length, convergence]
+  findings: Reservoir length is a convergence axis; added to the campaign (1, 2, 4 nm).
+  kb: ["8.3"]
+
+- key: merabia
+  cite: Merabia & Termentzidis, NEMD vs equilibrium MD interface conductance
+  status: partial
+  topics: [NEMD, EMD, Green-Kubo, interface conductance definitions]
+  findings: NEMD and equilibrium MD measure different conductances; the expected NEMD/EMD ratio band (1-10) comes from this.
+  kb: ["8.3", "11"]
+
+- key: adnan2024
+  cite: Adnan, Neupane & Feng, IJHMT 235, 126227 (2024)
+  status: partial
+  topics: [Al/diamond, MTP, NEMD, TDTR]
+  findings: Al/diamond MTP-NEMD 284 +/- 22 MW/m2K; TDTR 21-390 depending on surface.
+  kb: ["7"]
+
+- key: wu2025
+  cite: Wu, Li, Huang & Tang, Phys. Rev. B 112, 035306 (2025)
+  status: needed
+  topics: [Cu/GaN, rough interface, electron-phonon, TTM]
+  needed_for: optional reference point for electron-phonon on rough interfaces (paywalled)
+  kb: ["7"]
+
+- key: blazej2003
+  cite: Blazej, "Thermal Interface Materials", Electronics Cooling, Nov 2003
+  status: partial
+  topics: [TIM, class ranges, grease, pad, PCM, adhesive, solder]
+  used_for: network/stack.py TIM_CLASS_RANGE (grease floor lowered after DeVoto 2017)
+  kb: ["9", "12.6"]
+
+- key: prasher2005
+  cite: R. S. Prasher, "Rheology based modeling and design of particle laden polymeric thermal interface materials", IEEE Trans. Components and Packaging Technologies 28(2), 230-237 (2005), doi:10.1109/TCAPT.2005.848492
+  status: needed
+  topics: [TIM, bond line thickness, rheology, yield stress]
+  needed_for: bond-line thickness from rheology (open issue P0-1)
+  kb: ["9"]
+
+- key: marmier1997
+  cite: A. Marmier, C. Ramseyer, P. N. M. Hoang, C. Girardet et al., "Adsorption and structure of N2 on copper(110)", Surface Science 383, 321-339 (1997), doi:10.1016/S0039-6028(97)00202-1
+  status: needed
+  topics: [nitrogen, copper, physisorption, adsorption energy, accommodation]
+  needed_for: N2 on Cu adsorption energy to calibrate air accommodation (open issue P5-4)
+  kb: ["12"]
+
+- key: vandeperre2007
+  cite: L. J. Vandeperre et al. (2007), "The hardness of silicon and germanium"
+  status: needed
+  topics: [hardness, silicon, germanium, Vickers]
+  needed_for: sourced Si and Ge hardness (open issue P0-6)
+  kb: ["12"]
+
+- key: yovanovich2005
+  cite: M. M. Yovanovich, "Four Decades of Research on Thermal Contact, Gap, and Joint Resistance in Microelectronics", IEEE Trans. Components and Packaging Technologies, 2005 (mhtl05-11)
+  status: partial
+  topics: [review, contact conductance, gap conductance, Vickers coefficients, microelectronics]
+  findings: Its Vickers-coefficient table covers the same four metals as Song & Yovanovich 1988 (no copper).
+  kb: ["12.11"]
+
+- key: sridhar1996
+  cite: M. R. Sridhar & M. M. Yovanovich, "Empirical methods to predict Vickers microhardness", Wear (1996)
+  status: partial
+  topics: [microhardness, Brinell, Vickers coefficients, correlation, tool steel]
+  findings: c1, c2 from Brinell hardness for 1.30-7.60 GPa (cubic fits); does not reach soft Cu or pure Al.
+  kb: ["12.2", "12.11"]

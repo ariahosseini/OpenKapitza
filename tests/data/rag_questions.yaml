@@ -1,0 +1,307 @@
+# Retrieval questions with known answers, for tests/test_rag.py.
+#
+# Written BEFORE the search code, phrased the way a user would ask (not copied
+# from the headings), from things this project has verified. A question passes
+# at k if any of its `expect` entries matches one of the top-k hits: `source`
+# must end the hit's source path, and `title` (if given) must appear in the
+# hit's section title (case-insensitive).
+#
+# set: repo    -- our docs + knowledge base + papers.yaml (always indexed)
+#      curated -- docs/lammps-rag.md, the committed LAMMPS subset (always indexed)
+#      manual  -- the full LAMMPS manual and examples (needs a built index from a
+#                 LAMMPS checkout; skipped otherwise)
+
+# ---- our knowledge base: errors, silent failures, physics ------------------------
+- q: LAMMPS says potential file is missing an entry for Si Si Si
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "missing an entry for: Si Si Si"}]
+- q: "ERROR: No values from computes, fixes, or variables used in fix ave/chunk command"
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "No values from computes"}]
+- q: my temperature profile file only has the header but the run finished fine
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "contains only its header"}]
+- q: job killed with SIGKILL still shows as running
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "SIGKILLed job"}]
+- q: why can't I just add 1/h_c and 1/h_K in series
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "per different areas"},
+           {source: docs/agent-instruction-v2.md, title: "Combining results"}]
+- q: what pressure should the NEMD interface be loaded at, apparent or spot
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "spot pressure"}]
+- q: where does the 1.62 constant go in the Song Yovanovich hardness relation
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "1.62"}]
+- q: is contact microhardness the same as the handbook Vickers value
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "not the handbook Vickers"},
+           {source: docs/knowledge-base.md, title: "EXCEEDS bulk Vickers"}]
+- q: DMM gives Si/Ge far too high, missing cutoff at the slowest branch
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "elastic cutoff"}]
+- q: how to get the temperature jump at the interface from the profile, adjacent bins
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "difference adjacent bins"}]
+- q: internal pressure of several GPa in my Si/Ge cell
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "6.4 GPa"}]
+- q: the stationarity test never passes on short runs
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "noise floor"},
+           {source: docs/knowledge-base.md, title: "judge drift against its own noise"}]
+- q: mean temperature reads well below the thermostat setpoint
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "below the setpoint"}]
+- q: hot and cold reservoir fluxes don't agree
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "fluxes disagree"}]
+- q: is R squared a good test of the linear fit quality for the profile
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "R²"}]
+- q: potential gets the lattice constant right but the elastic stiffness ordering wrong
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "lattice constant and still invert"}]
+- q: gap conductance underpredicts in the continuum limit near one atmosphere
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "lumped gap form underpredicts"},
+           {source: docs/agent-instruction-v2.md, title: "underpredicts toward continuum"}]
+- q: should the quantum correction be applied to the MD result below the Debye temperature
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Quantum correction"}]
+- q: equilibrium cross-check for interface conductance, Green-Kubo or fluctuations
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "temperature-fluctuation"}]
+- q: classical MD helium accommodation coefficient too high
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "helium accommodation"},
+           {source: docs/papers.yaml, title: "fanmanson2008"}]
+- q: electron-phonon coupling factor for copper and aluminium
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Input values"},
+           {source: docs/papers.yaml, title: "lin2008"}]
+- q: truncated gaussian correlation for light contact pressure
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Truncated Gaussian"},
+           {source: docs/papers.yaml, title: "milanez2004"}]
+- q: typo in equation 18 of the Milanez unloading model
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Unloading as built"},
+           {source: docs/papers.yaml, title: "milanez2004"}]
+- q: are there Vickers c1 c2 coefficients for copper
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Copper Vickers"}]
+- q: hot hardness at high temperature why isn't it applied
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Hardness (P0-6)"},
+           {source: docs/papers.yaml, title: "bahrami2004hardness"}]
+- q: bolted heat sink, CMY gives far too high a conductance
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Bolted joints"},
+           {source: docs/papers.yaml, title: "yeh2001"}]
+- q: out of flatness crowned surfaces macro constriction resistance
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Out-of-flatness"},
+           {source: docs/papers.yaml, title: "bahrami2004thesis"}]
+- q: measured Al/Si thermal boundary conductance with and without native oxide
+  set: repo
+  expect: [{source: docs/papers.yaml, title: "hopkins2010"},
+           {source: docs/knowledge-base.md, title: "Al/Si interface conductance"},
+           {source: tests/benchmarks/SOURCES.md, title: "Measured interface conductance"}]
+- q: thermal grease boundary resistance and conductivity from D5470
+  set: repo
+  expect: [{source: docs/papers.yaml, title: "devoto2017"},
+           {source: docs/knowledge-base.md, title: "Grease TIMs"},
+           {source: tests/benchmarks/SOURCES.md, title: "Grease TIMs"}]
+- q: re-measuring an old run needed its spec, why every job writes spec.json
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "describe themselves"}]
+- q: three citations in the repo were wrong, which ones
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Lessons from the survey"}]
+- q: Tersoff overestimates interface conductance compared with a trained machine learned potential
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "Tier-2 MLIPs"},
+           {source: docs/papers.yaml, title: "rajabpour2024"}]
+- q: reservoir length as a convergence axis
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "NEMD interfacial conductance"},
+           {source: docs/papers.yaml, title: "wei2025"}]
+
+# ---- our other docs ------------------------------------------------------------
+- q: how do I bring finished MD results back into the joint calculation
+  set: repo
+  expect: [{source: docs/agent-guide.md, title: "MD loop"},
+           {source: docs/cluster-runbook.md, title: "Bring results back"}]
+- q: what does confidence limited mean in the agent answer
+  set: repo
+  expect: [{source: docs/agent-guide.md, title: "Reading the answer"}]
+- q: how to run a parameter sweep over pressure and save a plot
+  set: repo
+  expect: [{source: docs/agent-guide.md, title: "Sweeps"}]
+- q: which fields can a joint description file contain
+  set: repo
+  expect: [{source: docs/agent-guide.md, title: "Inputs"},
+           {source: docs/agent-guide.md, title: "Description files"}]
+- q: my copper joint always warns about hardness fallback
+  set: repo
+  expect: [{source: docs/agent-guide.md, title: "Troubleshooting"},
+           {source: docs/knowledge-base.md, title: "Copper Vickers"}]
+- q: what to run first on the cluster and in which order
+  set: repo
+  expect: [{source: docs/cluster-runbook.md}]
+- q: how do I build LAMMPS with the packages this project needs
+  set: repo
+  expect: [{source: docs/cluster-runbook.md, title: "Build LAMMPS"}]
+- q: what is still open for the gap model and what would close it
+  set: repo
+  expect: [{source: docs/open-issues.md}]
+- q: what does the benchmark not validate
+  set: repo
+  expect: [{source: tests/benchmarks/SOURCES.md, title: "does NOT validate"}]
+- q: digitised gap conductance data quality and bias
+  set: repo
+  expect: [{source: tests/benchmarks/SOURCES.md, title: "Digitised gap data"},
+           {source: tests/benchmarks/SOURCES.md, title: "Extraction quality"}]
+- q: hard rules the agent must follow
+  set: repo
+  expect: [{source: docs/agent-instruction-v2.md, title: "Hard rules"}]
+- q: tiered interatomic potentials, when to use a machine learned potential
+  set: repo
+  expect: [{source: docs/agent-instruction-v2.md, title: "Interatomic potentials"}]
+- q: accommodation coefficient from MD, fill compare or defer
+  set: repo
+  expect: [{source: docs/agent-instruction-v2.md, title: "Accommodation coefficient"},
+           {source: docs/agent-instruction-v2.md, title: "MD-derived inputs"}]
+- q: relaxation of the cell doubled h_K, cell strain
+  set: repo
+  expect: [{source: docs/technical-notes.md, title: "Relaxation"}]
+- q: identical flags but a 13 times different answer
+  set: repo
+  expect: [{source: docs/knowledge-base.md, title: "13x"},
+           {source: docs/technical-notes.md, title: "diagnostic that was missing"}]
+
+# ---- curated LAMMPS subset (docs/lammps-rag.md) ----------------------------------
+- q: example input for thermal conductivity with two Langevin thermostatted slabs
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "KAPPA/in.langevin"}]
+- q: Muller-Plathe reverse NEMD fix
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "fix thermal/conductivity"},
+           {source: docs/lammps-rag.md, title: "KAPPA/in.mp"}]
+- q: Green-Kubo heat flux compute for conductivity
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "compute heat/flux"},
+           {source: docs/lammps-rag.md, title: "KAPPA/in.heatflux"}]
+- q: binning atoms into layers along z for a temperature profile
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "compute chunk/atom"},
+           {source: docs/lammps-rag.md, title: "fix ave/chunk"}]
+- q: full elastic tensor by finite differences example
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "ELASTIC/in.elastic"}]
+- q: relax the simulation box to zero stress
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "fix box/relax"}]
+- q: indentation of a surface with a spherical indenter
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "indent"}]
+- q: two temperature model electron phonon fix
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "ttm"}]
+- q: melt and quench to make amorphous silica
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "melt"},
+           {source: docs/lammps-rag.md, title: "vashishta"}]
+- q: stochastic reflecting wall with diffusive or Maxwell accommodation
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "wall/reflect/stochastic"},
+           {source: docs/lammps-rag.md, title: "wall"}]
+- q: autocorrelation of a quantity over time
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "fix ave/correlate"}]
+- q: viscosity by reverse perturbation
+  set: curated
+  expect: [{source: docs/lammps-rag.md, title: "viscosity"}]
+
+# ---- full LAMMPS manual and examples ---------------------------------------------
+- q: fix langevin tally keyword energy added
+  set: manual
+  expect: [{source: fix_langevin.rst}]
+- q: what does the damp parameter of fix langevin mean
+  set: manual
+  expect: [{source: fix_langevin.rst}]
+- q: ttm/thermal requires periodic boundaries in z
+  set: manual
+  expect: [{source: fix_ttm.rst}]
+- q: MEAM library file and parameter file format
+  set: manual
+  expect: [{source: pair_meam.rst}]
+- q: Tersoff potential file format and element entries
+  set: manual
+  expect: [{source: pair_tersoff.rst}]
+- q: Stillinger-Weber pair style
+  set: manual
+  expect: [{source: pair_sw.rst}]
+- q: EAM alloy setfl potential files
+  set: manual
+  expect: [{source: pair_eam.rst}]
+- q: npt barostat couple xy and anisotropic pressure control
+  set: manual
+  expect: [{source: fix_nh.rst}]
+- q: energy minimization stopping criteria etol ftol
+  set: manual
+  expect: [{source: minimize.rst}]
+- q: create velocities with a random seed at a temperature
+  set: manual
+  expect: [{source: velocity.rst}]
+- q: read a data file with atom positions and box
+  set: manual
+  expect: [{source: read_data.rst}]
+- q: define a custom lattice with basis atoms
+  set: manual
+  expect: [{source: lattice.rst}]
+- q: thermo output columns pxx pyy pzz custom style
+  set: manual
+  expect: [{source: thermo_style.rst}]
+- q: hold atoms fixed by setting their force to zero
+  set: manual
+  expect: [{source: fix_setforce.rst}]
+- q: how to compute thermal conductivity in LAMMPS, overview of methods
+  set: manual
+  expect: [{source: Howto_kappa.rst}]
+- q: thermostatting overview, which thermostat to use
+  set: manual
+  expect: [{source: Howto_thermostat.rst}]
+- q: elastic constants howto
+  set: manual
+  expect: [{source: Howto_elastic.rst}]
+- q: "ERROR: All pair coeffs are not set"
+  set: manual
+  expect: [{source: Errors_messages.rst, title: "All pair coeffs are not set"}]
+- q: Potential file is missing an entry
+  set: manual
+  expect: [{source: Errors_messages.rst, title: "Potential file is missing an entry"},
+           {source: docs/knowledge-base.md, title: "missing an entry"}]
+- q: per-atom stress tensor compute
+  set: manual
+  expect: [{source: compute_stress_atom.rst}]
+- q: mean squared displacement compute for diffusion
+  set: manual
+  expect: [{source: compute_msd.rst}]
+- q: example input script for the Langevin thermal conductivity method
+  set: manual
+  expect: [{source: examples/KAPPA/in.langevin}]
+- q: example of melting and quenching a crystal
+  set: manual
+  expect: [{source: examples/melt/in.melt}]
+- q: two-temperature model example input
+  set: manual
+  expect: [{source: examples/ttm/}]
+- q: insert atoms one at a time onto a surface, deposition
+  set: manual
+  expect: [{source: fix_deposit.rst}]
+- q: Vashishta potential for silica
+  set: manual
+  expect: [{source: pair_vashishta.rst}]

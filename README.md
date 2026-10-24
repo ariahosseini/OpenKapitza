@@ -91,13 +91,14 @@ order; the agent's `ingest` reads the results back into a joint.
 
 | file | what it is |
 |---|---|
-| [`docs/agent-guide.md`](docs/agent-guide.md) | using the agent: conversation, files, sweeps, the MD loop, reading the answer |
+| [`docs/agent-guide.md`](docs/agent-guide.md) | using the agent: conversation, files, sweeps, the MD loop, `lookup`, reading the answer |
 | [`docs/open-issues.md`](docs/open-issues.md) | every open item, what closes it, the cluster run list |
 | [`docs/knowledge-base.md`](docs/knowledge-base.md) | every defect hit, in Symptom / Cause / Fix / Verify form; literature surveys (§7–§12) |
 | [`docs/technical-notes.md`](docs/technical-notes.md) | what Phase 0 corrected in the original spec, design rules, verification history, Phase 1–2 development notes |
 | [`docs/agent-instruction-v2.md`](docs/agent-instruction-v2.md) | the specification; read it before changing any correlation, threshold or default |
 | [`docs/cluster-runbook.md`](docs/cluster-runbook.md) | cluster procedure |
 | [`docs/lammps-rag.md`](docs/lammps-rag.md) | official LAMMPS reference for the physics paths used (generated) |
+| [`docs/papers.yaml`](docs/papers.yaml) | our notes on each paper: what it is used for, findings, what is still needed |
 | [`tests/benchmarks/SOURCES.md`](tests/benchmarks/SOURCES.md) | provenance of every benchmark number |
 
 ## Layout
@@ -105,6 +106,7 @@ order; the agent's `ingest` reads the results back into a joint.
 ```
 openkapitza/
   agent/      guided use: fields, intake, planner, explain, session, ingest, io, sweep
+  rag/        cited keyword search over our docs, paper notes and the LAMMPS manual
   builder.py  the input boundary (build_joint, tim_fill, bond_fill)
   pipeline.py run_continuum: hardness, regime, contact, gap, Kapitza, network
   contact/    hardness, regime, CMY + Mikic, truncated, unloading, macro
@@ -121,7 +123,7 @@ tests/        unit, physics and benchmark tests; benchmarks/ and data/ fixtures
 ```
 
 ```bash
-python3 -m unittest discover -s tests      # ~620 tests, ~20 s
+python3 -m unittest discover -s tests      # ~650 tests, ~25 s
 ```
 
 ## Status

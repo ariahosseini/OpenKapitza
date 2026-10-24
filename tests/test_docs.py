@@ -31,7 +31,7 @@ class Docs(unittest.TestCase):
     def test_every_session_command_is_documented(self):
         text = GUIDE.read_text()
         for word in ("why", "back", "show", "set", "run", "report", "what if", "sweep",
-                     "prepare jobs", "ingest", "md clear", "save", "load", "export"):
+                     "prepare jobs", "ingest", "md clear", "save", "load", "export", "lookup"):
             self.assertIn(word, HELP, f"{word!r} missing from Session HELP")
             self.assertIn(f"`{word}", text, f"{word!r} missing from the guide")
 

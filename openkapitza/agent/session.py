@@ -25,6 +25,8 @@ Commands at any prompt:
     md                   list ingested MD results;  md clear  to drop them
     save FILE / load FILE        the session (inputs, defaults, ingested MD)
     export FILE.json             the last result as JSON
+    lookup <question>    search our docs, paper notes and the LAMMPS manual, with
+                         citations; prefix  lammps: / papers: / repo:  to narrow
     help, quit
 """
 
@@ -39,6 +41,33 @@ from .intake import Intake
 from .planner import Plan, plan
 
 HELP = __doc__.split("Commands at any prompt:")[1]
+_LOOKUP_PREFIX = {"lammps": ("lammps",), "papers": ("papers",), "paper": ("papers",),
+                  "repo": ("repo",), "docs": ("repo",)}
+
+
+def lookup(query: str, k: int = 4) -> str:
+    """Retrieved passages with citations. Text informs; it is not a computed result."""
+    from .. import rag
+    cols = None
+    head, sep, rest = query.partition(":")
+    if sep and head.strip().lower() in _LOOKUP_PREFIX:
+        cols, query = _LOOKUP_PREFIX[head.strip().lower()], rest.strip()
+    if not query:
+        return ("Usage: lookup <question>   e.g.  lookup fix ave/chunk Nfreq   or  "
+                "lookup papers: unloading hysteresis")
+    hits = rag.search(query, k=k, collections=cols)
+    if not hits:
+        return f"Nothing found for '{query}'."
+    out = [f"Top {len(hits)} passage(s) for '{query}':"]
+    for n, h in enumerate(hits, 1):
+        out.append(f"\n[{n}] {h.chunk.citation()}")
+        if h.chunk.url:
+            out.append(f"    {h.chunk.url}")
+        out.append("    " + h.snippet)
+    if not rag.has_manual():
+        out.append("\n(LAMMPS manual not indexed: only the curated subset was searched. "
+                   "Build it with  python -m openkapitza.rag build --lammps-src PATH)")
+    return "\n".join(out)
 WELCOME = ("OpenKapitza — thermal resistance of a joint between two solids.\n"
            "I'll ask for the materials, surfaces and conditions; press Enter to take a "
            "default, type 'why' for the reason behind a question, 'help' for commands.\n")
@@ -118,6 +147,8 @@ class Session:
                         + self.prompt())
             if low.startswith("export "):
                 return self._export(t[7:].strip())
+            if low == "lookup" or low.startswith("lookup "):
+                return lookup(t[6:].strip())
             if low == "run" or (t == "" and self.intake.complete):
                 return self._run()
             return self._answer(t)

@@ -2007,3 +2007,64 @@ Marmier et al. 1997 (N₂ on Cu, P5-4), Song's 1988 thesis (tabulated gas-gap
 data, P0-3), Prasher 2005 (BLT rheology, P0-1), Vandeperre et al. 2007 (Si/Ge
 hardness), an elastic-regime dataset (P0-4), and the Ioffe pages (Si/Ge
 properties).
+
+## 13. Retrieval (`lookup`) as built (24 Oct 2026)
+
+Pure-Python BM25 (`openkapitza/rag/`), no new dependencies. Chunks are
+document sections (Markdown headings 1–4, manual-page sections), one per
+LAMMPS error/warning message, one per example script, one per paper note.
+Each carries path, line range, section path, version and, for manual pages,
+the docs.lammps.org URL. Field weights: title ×3, keywords ×3 (`.. index::`
+entries, commands and styles in example scripts, paper topics), body ×1;
+k1 1.2, b 0.75. Tokens keep compounds and their parts (`ave/chunk`, `si(d)`,
+`NEMD_UNEQUILIBRATED`), `Eq. 18` → `eq18`, crude plural and -ing/-ed folding.
+A pasted query found verbatim in a chunk gets +0.6 × the top score.
+
+Corpus: our docs + `papers.yaml` + `lammps-rag.md` = 335 chunks, indexed from
+the working tree at each start (0.4 s). Full manual of LAMMPS 30 Sep 2026
+(commit 8de817dd): 1,073 pages + 1,005 example files = 10,638 chunks, built in
+8 s to a 4.6 MB cache, never committed (GPL text, size).
+
+Question set: 86 questions in `tests/data/rag_questions.yaml`, written before
+the search code, phrased as a user would ask. A hit counts if its source (and
+section, where given) matches.
+
+| set | n | R@1 | R@3 | R@5 | R@10 | MRR |
+|---|---|---|---|---|---|---|
+| repo (manual loaded) | 48 | 0.90 | 0.98 | 0.98 | 0.98 | 0.93 |
+| repo (no manual) | 48 | 0.92 | 1.00 | 1.00 | 1.00 | 0.95 |
+| curated (manual loaded) | 12 | 0.67 | 0.83 | 0.92 | 1.00 | 0.76 |
+| curated (no manual) | 12 | 0.92 | 1.00 | 1.00 | 1.00 | 0.96 |
+| manual | 26 | 0.54 | 0.73 | 0.81 | 0.85 | 0.65 |
+
+What changed the manual numbers (first build: R@5 0.73, MRR 0.48):
+- **Error entries over-ranked.** Each is one line, so BM25 length
+  normalisation rewards it ("Stillinger-Weber pair style" returned five error
+  messages). Fix: ×0.6 unless the query matches the message verbatim.
+- **Example scripts have almost no prose.** Fix: each `in.*` gets its
+  directory README's opening words, plus "example"/"input script", as
+  keywords; ×1.4 when the query asks for an example.
+- **Howto pages** get "howto / how to / overview" keywords.
+- Exact command named ("fix langevin") → that page ×1.3.
+- **Rejected, measured:** priors favouring our docs or the curated subset over
+  the manual (×1.1–1.2). Manual R@5 fell 0.73 → 0.62–0.65 and repo gained
+  nothing; the curated subset repeats manual content, so a prior just puts the
+  duplicate first.
+
+Remaining misses at 5 (the case for or against semantic search):
+- repo — "how do I build LAMMPS with the packages this project needs": the
+  manual's Build pages outrank the runbook. Fair answers, wrong file.
+- manual — "hold atoms fixed by setting their force to zero" (`fix setforce`)
+  and "thermo output columns pxx pyy pzz custom style" (`thermo_style`): no
+  shared words. **Semantic search would likely fix these.**
+- manual — "Stillinger-Weber pair style": rank 7, still behind error entries.
+- manual — melt/quench and two-temperature example scripts: `examples/melt`
+  and `examples/ttm` have no README and the scripts never say "melt" or
+  "two-temperature". Our own melt-quench notes and the curated TTM section
+  rank first instead: useful answers. Semantic search would not help either:
+  the words are not there.
+
+Thresholds in `tests/test_rag.py` sit just under these numbers (repo
+0.95/0.88, curated 0.83/0.70, manual 0.75/0.58 for R@5/MRR). The weights were
+tuned on this same question set, so the numbers are optimistic. A held-out
+set is the honest next check before any further tuning.

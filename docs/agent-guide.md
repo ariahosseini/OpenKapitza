@@ -187,6 +187,7 @@ from the code.
 | `md`, `md clear` | list or drop the ingested MD |
 | `save FILE`, `load FILE` | the session: inputs, which were defaults, ingested MD |
 | `export FILE.json` | the last result as JSON |
+| `lookup QUESTION` | search our docs, paper notes and the LAMMPS manual; cited passages ([below](#looking-things-up)) |
 | `help`, `quit` | |
 
 ## Description files and JSON
@@ -263,6 +264,41 @@ Example, with the Si/Al MEAM plumbing run kept as a test fixture:
 
     python -m openkapitza.agent --input examples/agent/si_al_contact_md.yaml
 
+## Looking things up
+
+`lookup` searches three sources and returns the best passages, each with a
+citation you can open: file and line range, section, version, and for LAMMPS
+manual pages the docs.lammps.org link.
+
+| source | what | indexed |
+|---|---|---|
+| ours | knowledge base, this guide, open issues, technical notes, runbook, spec, benchmark sources | always, from the working tree |
+| papers | [`papers.yaml`](papers.yaml): our own notes on each paper (what it is used for, findings, what is still needed). No paper text. | always |
+| LAMMPS | the curated subset [`lammps-rag.md`](lammps-rag.md) always; the **full** manual, Howto pages, error messages and example scripts once built | full manual: build once (below) |
+
+```
+> lookup ERROR: Potential file is missing an entry for: Si Si Si
+> lookup papers: unloading hysteresis        # narrow with lammps: / papers: / repo:
+> lookup example input script for the Langevin thermal conductivity method
+```
+
+Build the full manual index from a LAMMPS checkout (the one you run, so the
+manual matches your build). It goes to `~/.cache/openkapitza/rag`, or
+`$OPENKAPITZA_RAG_DIR`, and never into the repository:
+
+```bash
+python -m openkapitza.rag build --lammps-src /path/to/lammps
+python -m openkapitza.rag query fix ave/chunk Nfreq     # same search, from the shell
+python -m openkapitza.rag eval --misses                  # retrieval scores on the question set
+```
+
+It is keyword search (BM25), chosen because most lookups here are exact
+strings: command and style names, pasted error messages, flag codes, equation
+numbers. It misses questions phrased with none of the page's words
+("hold atoms fixed" does not find `fix setforce`); measured scores and the
+known misses are in the knowledge base §13. A passage informs; it does not
+change a calculation.
+
 ## Troubleshooting
 
 - **"That didn't work: ..."** — the answer was rejected and the question is
@@ -295,5 +331,6 @@ description files (`heatsink_screwed.yaml`, `si_al_contact_md.yaml`).
 ## What it does not do yet
 
 Launch or monitor MD (it writes jobs and reads results); routes for pairs
-without a validated potential (Phase 4 MLIPs); a chat front end. Open items
+without a validated potential (Phase 4 MLIPs); a chat front end; semantic
+(meaning-based) search in `lookup`. Open items
 are in [`open-issues.md`](open-issues.md).
