@@ -10,7 +10,7 @@ Status: **open** · **in progress** · **blocked** (by another item) ·
 **cluster** (needs long runs; deferred until cluster access) · **parked**
 (out of current scope).
 
-Last updated: 23 Oct 2026 (P0-9 flatness/clamping; user-supplied papers: P0-7 truncated Gaussian, extended benchmark incl. Al 6061, Al/Si TDTR, NREL greases, hardness data).
+Last updated: 23 Oct 2026 (P3-1 agent first slice; P0-9 flatness/clamping; user-supplied papers: P0-7 truncated Gaussian, extended benchmark incl. Al 6061, Al/Si TDTR, NREL greases, hardness data).
 
 ---
 
@@ -82,7 +82,7 @@ heterostructures (fcc on diamond) live in `md/nemd.py`. Script:
 
 | ID | Item | Status |
 |---|---|---|
-| P3-1 | Agent layer wrapping Phases 0–2. | open |
+| P3-1 | **Agent layer.** **First slice built** (`openkapitza/agent/`, `python -m openkapitza.agent`): input schema with questions, reasons, units and defaults (`fields.py`); intake with branching (bare / TIM / bond) and validation; planner (MD not needed / optional / recommended from the h_K sweep or the stack's interface share, route per pair from the tracker, prepared cluster jobs, ranked caveats and next measurements); plain-language answer; `Session` (text in / text out: why, back, show, set, run, what if, report, prepare jobs) behind a thin terminal wrapper. Three scripted cases in `examples/agent/` (screwed heat sink, die on spreader with grease, solder die attach) run in `tests/test_agent.py`. **Not yet:** Green–Kubo / convergence orchestration of real MD runs (cluster), running jobs locally from the session, MLIP routes (Phase 4), a chat front end. | first slice built |
 | P4-1 | Tier-2 MLIPs behind the phonon-DOS / elastic / bulk-k gate. Survey (KB §8.4): Tersoff over-estimates Si/diamond ITC ~3x vs an interface-trained MTP within 10 % of experiment; foundation models as shipped are unreliable for lattice k (MACE-MP-0 log₁₀ MAE ~1.0), so Tier 2 = trained/fine-tuned on the interface. MACE in LAMMPS is GPU-only (ML-IAP + KOKKOS); NEP runs on CPU via NEP_CPU. | open |
 
 ## Housekeeping

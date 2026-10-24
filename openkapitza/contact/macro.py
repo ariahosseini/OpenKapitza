@@ -31,8 +31,9 @@ mean 1.03, RMS 15.3 % (thesis: 14.8 % for its approximate model); CMY alone,
 ignoring flatness, predicts R at 0.14x measured on average, down to 0.008x
 -- i.e. it OVER-predicts h by ~7x typically and up to ~125x.
 
-Assumptions carried over: spherical crown, centred load, vacuum (the gas in
-the open macro gap is not modelled), elastic bulk. A bolted joint is none of
+Assumptions carried over: spherical crown, centred load, elastic bulk,
+vacuum for the validated part. In gas, `crowned_gap_conductance` averages the
+lumped gap model over the crown profile (our extension, not validated). A bolted joint is none of
 those: pressure concentrates around the fasteners (Yeh et al. 2001: h rises
 as P_mean^2.8-3.8 and 8 bolts beat 4 at the same mean pressure), so for
 `clamping="bolted"` the result is an indication, flagged as such.
@@ -116,6 +117,26 @@ def macro_resistance(pressure: Quantity, E_eff: Quantity, sigma_eff: Quantity,
     return MacroResult(rho, a_H, alpha, tau, F, F_c, a_L, B, R_L, R_area, B >= FLAT_B)
 
 
+def crowned_gap_conductance(k_g: float, Y: float, M: float, rho: float, a_L: float,
+                            b_L: float) -> float:
+    """Area-averaged lumped gas conductance over a crowned joint, W/m^2K.
+
+    Inside the macro-contact the asperity gap Y applies; outside it the gap
+    opens with the crown profile y = Y + (r^2 - a_L^2)/(2 rho). With
+    h_g = k_g/(y + M) the average over the face has a closed form:
+
+        h = [a_L^2 k_g/(Y+M) + 2 rho k_g ln(1 + (b_L^2 - a_L^2)/(2 rho (Y+M)))] / b_L^2
+
+    a_L = b_L gives back k_g/(Y+M). This package's first-order extension (the
+    elastic sag outside the contact is ignored, which slightly over-states the
+    gap there); Bahrami's thesis is vacuum-only.
+    """
+    c = Y + M
+    inner = a_L * a_L * k_g / c
+    outer = 2.0 * rho * k_g * math.log1p((b_L * b_L - a_L * a_L) / (2.0 * rho * c))
+    return (inner + outer) / (b_L * b_L)
+
+
 def macro_flags(result: MacroResult | None, R_rest: float, clamping: str | None,
                 flatness_given: bool, gas: bool, flags: FlagSet) -> None:
     """Explain the macro term, or its absence, in the joint's own terms.
@@ -170,7 +191,7 @@ def macro_flags(result: MacroResult | None, R_rest: float, clamping: str | None,
                   f"resistance.",
                   remedy=("Raising the load, lapping the faces flatter, or a TIM that fills "
                           "the macro gap all help more than smoother asperities would."
-                          + (" In gas, the open macro gap's own gas conduction is not "
-                             "modelled: h_g (computed for the asperity gap) is over-estimated "
-                             "over that area." if gas else "")),
+                          + (" In gas, conduction across the open macro gap is included as a "
+                             "first-order estimate (crown profile; this package's extension, "
+                             "not a validated model)." if gas else "")),
                   B=result.B, share=share)

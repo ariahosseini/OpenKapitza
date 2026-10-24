@@ -1,0 +1,15 @@
+# Si die on a Cu heat spreader with a thermal grease (NREL grease A properties).
+Si
+
+Cu
+
+85 C
+tim
+0.14 MPa
+50 um
+3.7
+4.2
+grease
+run
+what if blt_um=25
+quit

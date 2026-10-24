@@ -33,6 +33,7 @@ from .contact import (
     mean_plane_separation,
     select_regime,
 )
+from .contact.macro import crowned_gap_conductance
 from .gap import GapResult, gap_conductance, gas_state, vacuum_gap
 from .md.dmm import KapitzaEstimate, dmm_conductance
 from .network import MonteCarloResult, NetworkResult, combine, propagate, sample_lognormal
@@ -47,6 +48,7 @@ from .schema import (
     default_accommodation,
 )
 from .schema.flags import Code
+from .schema.quantities import make_derived
 
 
 @dataclass
@@ -170,6 +172,8 @@ def run_continuum(
     if inputs.flatness is not None:
         macro = macro_resistance(inputs.pressure, E_eff, sigma_eff, inputs.flatness,
                                  inputs.joint_radius, k_s, flags)
+        if gap is not None:
+            gap = _crowned_gap(gap, macro)
 
     # -- network ------------------------------------------------------------
     branches: dict[str, NetworkResult] = {}
@@ -271,6 +275,17 @@ def _perturbed_stack(inputs: JointInputs, ka, kb, rng: random.Random) -> float:
                             kapitza_b=draw(kb)).h_joint.si
 
 
+def _crowned_gap(gap: GapResult, macro) -> GapResult:
+    """Gap conductance averaged over a crowned face (contact.macro)."""
+    import dataclasses
+    h = crowned_gap_conductance(gap.state.k_g.si, gap.Y.si, gap.M.si, macro.rho, macro.a_L,
+                                macro.a_L / macro.B)
+    q = make_derived(h, unit="W/m2K", inputs=[gap.h_g, macro.R_L_area], name="h_g",
+                     confidence=Confidence.LOW,
+                     note="lumped gap model averaged over the crown profile (extension)")
+    return dataclasses.replace(gap, h_g=q)
+
+
 def _accommodation_band(result, state, alpha_a, alpha_b, contacts, flags) -> dict | None:
     """h_g and h_joint with every DEFAULTED alpha at the band's low and high end.
 
@@ -291,7 +306,11 @@ def _accommodation_band(result, state, alpha_a, alpha_b, contacts, flags) -> dic
         aa = alpha_a if inputs.accommodation_a is not None else alpha_a.with_(si=value)
         ab = alpha_b if inputs.accommodation_b is not None else alpha_b.with_(si=value)
         g = gap_conductance(state, result.Y, aa, ab, quiet)
-        net = combine(contacts[branch], result.kapitza, g, result.hardness.H_c, quiet)
+        mac = result.macro
+        if mac is not None:
+            g = _crowned_gap(g, mac)
+        net = combine(contacts[branch], result.kapitza, g, result.hardness.H_c, quiet,
+                      R_macro=mac.R_L_area if mac is not None else None)
         out["h_g"].append(g.h_g.si); out["h_joint"].append(net.h_joint.si)
     out["h_g"] = tuple(out["h_g"]); out["h_joint"] = tuple(out["h_joint"])
     hj = result.primary.h_joint.si

@@ -1,0 +1,20 @@
+# Al 6061 heat sink screwed to a Cu lid, dry, in air.
+Al6061
+crystalline
+Cu
+crystalline
+45 C
+bare
+0.5 MPa
+0.8 um
+0.4 um
+0.08
+0.06
+air
+101.325
+bolted
+25 um
+40 x 40 mm
+run
+what if flatness_um=5
+quit

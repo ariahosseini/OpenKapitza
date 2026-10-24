@@ -164,3 +164,34 @@ class Filled(unittest.TestCase):
                                           flatness_um=40.0, **kw), with_uncertainty=False)
         f = next(x for x in thick.flags.flags if x.code == Code.MACRO_CONSTRICTION)
         self.assertEqual(f.severity, Severity.INFO)
+
+
+class CrownedGas(unittest.TestCase):
+    def test_flat_limit_and_numerical_integral(self):
+        from openkapitza.contact.macro import crowned_gap_conductance
+        k, Y, M, rho, b = 0.026, 2e-6, 0.3e-6, 30.0, 20e-3
+        self.assertAlmostEqual(crowned_gap_conductance(k, Y, M, rho, b, b), k / (Y + M))
+        a = 6e-3                                           # check the closed form numerically
+        n = 20000
+        acc = a * a * k / (Y + M)
+        for i in range(n):
+            r = a + (b - a) * (i + 0.5) / n
+            acc += k / (Y + M + (r * r - a * a) / (2 * rho)) * 2 * r * (b - a) / n
+        self.assertAlmostEqual(crowned_gap_conductance(k, Y, M, rho, a, b) / (acc / b ** 2), 1.0,
+                               places=5)
+
+    def test_band_matches_headline_in_air(self):
+        # Regression: the accommodation band once ignored the macro term (67 vs 12.6 kW/m^2K).
+        r = run_continuum(build_joint("Al6061", "Cu", sigma_a_um=0.8, sigma_b_um=0.4,
+                                      slope_a=0.08, slope_b=0.06, pressure_MPa=0.5,
+                                      temperature_K=318.0, gas="air", gas_pressure_kPa=101.325,
+                                      flatness_um=25.0, joint_area_mm2=1600.0, clamping="bolted"),
+                          with_uncertainty=False)
+        lo, hi = r.accommodation_band["h_joint"]
+        h = r.primary.h_joint.si
+        self.assertTrue(lo * 0.98 <= h <= hi * 1.02, (lo, h, hi))
+        flat = run_continuum(build_joint("Al6061", "Cu", sigma_a_um=0.8, sigma_b_um=0.4,
+                                         slope_a=0.08, slope_b=0.06, pressure_MPa=0.5,
+                                         temperature_K=318.0, gas="air",
+                                         gas_pressure_kPa=101.325), with_uncertainty=False)
+        self.assertLess(r.primary.h_gap.si, flat.primary.h_gap.si)   # crown opens the gap

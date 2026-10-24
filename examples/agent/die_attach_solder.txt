@@ -1,0 +1,12 @@
+# Si die soldered to a Cu substrate: thin Al backside metallisation, SAC305 with 4 % voids.
+Si
+
+Cu
+
+100 C
+bond
+
+Al 0.5 237 0 Al; SAC305 30 58 0.04
+run
+what if layers=Al 0.5 237 0 Al; SAC305 15 58 0.02
+quit

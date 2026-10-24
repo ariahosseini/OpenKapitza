@@ -1938,6 +1938,24 @@ assumed. In gas, the open macro gap's gas conduction is not modelled, so h_g
 is over-estimated there (stated in the flag). For filled joints the crown is
 absorbed by the fill; a bond line thinner than δ is warned.
 
+### 12.9 Found while building the agent (P3-1)
+
+Running the scripted heat-sink case end to end exposed two physics defects
+that the unit tests had not: (1) the accommodation band re-combined the
+network without the macro term, so in air with a crowned face the band read
+67 kW/m²K against a 12.6 headline; (2) the gas path was computed for the
+asperity gap over the whole face, so a 25 µm crown left 75 % of the heat in a
+gas film that is really tens of µm thick. Fixed: the band passes R_macro, and
+`crowned_gap_conductance` averages k_g/(y + M) over the crown profile (closed
+form; our first-order extension). Same case after the fix: 6.4 kW/m²K, gas
+51 %, band 6.35–6.38. Lesson: an end-to-end case through the user-facing path
+is a test class of its own — it combines options (gas + flatness + bolted)
+that unit tests exercise one at a time.
+
+Also: a bonded layer with no material key gets no face estimate; the planner
+first read that as "no interface, MD not needed" while the stack flag said the
+faces could carry 99 % of R. The planner now uses the flag's pessimistic share.
+
 ### Still missing
 
 Marmier et al. 1997 (N₂ on Cu, P5-4), Song's 1988 thesis (tabulated gas-gap

@@ -294,7 +294,9 @@ carry a symptom rather than only a fix.
 ```
 openkapitza/
   schema/     units, Quantity, flags, inputs, YAML loaders
-  contact/    hardness (Song-Yovanovich), regime selector, CMY + Mikic
+  agent/      Phase 3: fields, intake, planner, explain, Session; python -m openkapitza.agent
+  contact/    hardness (Song-Yovanovich), regime selector, CMY + Mikic,
+              truncated Gaussian (light loads), macro (out-of-flatness)
   gap/        Sutherland gas properties, rarefaction, accommodation
   md/         DMM placeholder, Debye heat capacity, quantum screen
   network/    area-scaled series/parallel combination, Monte Carlo
@@ -304,6 +306,7 @@ openkapitza/
   compute/    JobRunner protocol, local + SLURM backends, cost model
 docs/
   knowledge-base.md   retrieval corpus for the agent layer
+examples/agent/       scripted agent sessions (answers files)
 scripts/
   audit.py            independent recomputation of every Phase-0 model
   verify_extraction.py  extraction against synthetic ground truth
@@ -632,11 +635,22 @@ termination listing, and registry chosen by relaxed energy
 - **Benchmarks:** [`tests/benchmarks/SOURCES.md`](tests/benchmarks/SOURCES.md) —
   207 Hegazy points (headline) plus 158 from the rest of Bahrami's appendix
   (incl. Al 6061-T6), Al/Si TDTR interface conductances, NREL grease TIMs.
+- **Guided use (agent, Phase 3 first slice):** `python -m openkapitza.agent` asks for
+  the joint step by step (Enter takes a default, `why` explains a question),
+  runs it, and answers in plain language: the conductance with its band, what
+  carries the resistance, whether MD would change the answer and whether a
+  route exists, ranked caveats and the best next measurements. `what if
+  name=value` re-runs with one change; `prepare jobs <dir>` writes the cluster
+  jobs the plan names. Scripted examples: `examples/agent/`. In Python:
+  `from openkapitza.agent import Session`.
+- **Flatness and clamping:** `build_joint(..., flatness_um=, joint_area_mm2=,
+  clamping=)` adds the out-of-flatness constriction (Bahrami 2004); ignoring a
+  crown over-predicted 205 measured joints ~7×.
 - **Light loads:** `build_joint(..., z_trunc=...)` switches the plastic branch
   to the truncated-Gaussian model (Milanez et al. 2004); `z_trunc="reference"`
   uses their bead-blasted SS 304 / Ni 200 values (fitted with their c1/c2).
-- **Next phases:** Phase 3, the agent layer that guides the user and runs all
-  of this; Phase 4, Tier-2 machine-learned potentials trained or fine-tuned on
+- **Next phases:** Phase 3 continues (the agent driving real MD runs, a chat
+  front end); Phase 4, Tier-2 machine-learned potentials trained or fine-tuned on
   the interface, behind the elastic / phonon / bulk-k gate.
 - Earlier action items, superseded by the tracker:
   [`docs/history-action-items.md`](docs/history-action-items.md).
