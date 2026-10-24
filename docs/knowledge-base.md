@@ -1956,6 +1956,18 @@ Also: a bonded layer with no material key gets no face estimate; the planner
 first read that as "no interface, MD not needed" while the stack flag said the
 faces could carry 99 % of R. The planner now uses the flag's pessimistic share.
 
+### 12.10 Jobs must describe themselves (P3-1, MD ingestion)
+
+Re-measuring the 22 Oct Si/Al plumbing run needed its NEMDSpec, which lived in
+a throwaway script. The deck generator had changed since (new comments, a
+mobile-atom thermo compute), so the spec could not be recovered by regenerating
+decks and comparing; it was rebuilt from the deck's own numbers (geometry from
+the region lines, stage lengths from the `run` lines, frames from `ave/chunk`)
+and reproduced the recorded 444.6 ± 173.3 MW/m²K exactly. Rule now: every job
+written by `prepare_cluster` or `plan_campaign` carries `spec.json`
+(`md.campaign.write_spec` / `read_spec`), and `agent.ingest` refuses a folder
+without one rather than guessing.
+
 ### Still missing
 
 Marmier et al. 1997 (N₂ on Cu, P5-4), Song's 1988 thesis (tabulated gas-gap

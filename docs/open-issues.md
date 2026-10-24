@@ -10,7 +10,7 @@ Status: **open** · **in progress** · **blocked** (by another item) ·
 **cluster** (needs long runs; deferred until cluster access) · **parked**
 (out of current scope).
 
-Last updated: 23 Oct 2026 (P3-1 agent first slice; P0-9 flatness/clamping; user-supplied papers: P0-7 truncated Gaussian, extended benchmark incl. Al 6061, Al/Si TDTR, NREL greases, hardness data).
+Last updated: 23 Oct 2026 (P3-1 agent: MD ingestion, files, sweeps; P0-9 flatness/clamping; user-supplied papers: P0-7 truncated Gaussian, extended benchmark incl. Al 6061, Al/Si TDTR, NREL greases, hardness data).
 
 ---
 
@@ -82,7 +82,7 @@ heterostructures (fcc on diamond) live in `md/nemd.py`. Script:
 
 | ID | Item | Status |
 |---|---|---|
-| P3-1 | **Agent layer.** **First slice built** (`openkapitza/agent/`, `python -m openkapitza.agent`): input schema with questions, reasons, units and defaults (`fields.py`); intake with branching (bare / TIM / bond) and validation; planner (MD not needed / optional / recommended from the h_K sweep or the stack's interface share, route per pair from the tracker, prepared cluster jobs, ranked caveats and next measurements); plain-language answer; `Session` (text in / text out: why, back, show, set, run, what if, report, prepare jobs) behind a thin terminal wrapper. Three scripted cases in `examples/agent/` (screwed heat sink, die on spreader with grease, solder die attach) run in `tests/test_agent.py`. **Not yet:** Green–Kubo / convergence orchestration of real MD runs (cluster), running jobs locally from the session, MLIP routes (Phase 4), a chat front end. | first slice built |
+| P3-1 | **Agent layer.** **Built** (`openkapitza/agent/`, guide `docs/agent-guide.md`): input schema with questions, reasons, units and defaults; intake with bare / TIM / bond branching; planner (MD not needed / optional / recommended / in use, route per pair, prepared jobs, ranked caveats, next measurements); plain-language answer; `Session` behind a thin terminal wrapper. **23 Oct, second slice:** the MD loop closed — every prepared/campaign job writes `spec.json`; `ingest` measures a job folder, a campaign root (axes judged, most refined rung quoted) or a prepared root (grouped by pair, TTM preferred, EMD as cross-check) and re-runs the joint with the MD h_K and its error (checked on the real Si/Al plumbing run: 444.6 ± 173 MW/m²K, fixture in `tests/data/md_runs/`); description files (YAML/JSON, batch under `joints:`), JSON output, one-parameter sweeps (table / CSV / plot), save/load sessions. **Not yet:** launching and monitoring MD from the agent, MLIP routes (Phase 4), a chat front end. | built (two slices) |
 | P4-1 | Tier-2 MLIPs behind the phonon-DOS / elastic / bulk-k gate. Survey (KB §8.4): Tersoff over-estimates Si/diamond ITC ~3x vs an interface-trained MTP within 10 % of experiment; foundation models as shipped are unreliable for lattice k (MACE-MP-0 log₁₀ MAE ~1.0), so Tier 2 = trained/fine-tuned on the interface. MACE in LAMMPS is GPU-only (ML-IAP + KOKKOS); NEP runs on CPU via NEP_CPU. | open |
 
 ## Housekeeping

@@ -641,8 +641,11 @@ termination listing, and registry chosen by relaxed energy
   carries the resistance, whether MD would change the answer and whether a
   route exists, ranked caveats and the best next measurements. `what if
   name=value` re-runs with one change; `prepare jobs <dir>` writes the cluster
-  jobs the plan names. Scripted examples: `examples/agent/`. In Python:
-  `from openkapitza.agent import Session`.
+  jobs the plan names, and `ingest <path>` reads finished MD back and re-runs
+  the joint with it. Also: description files (`--input joint.yaml`, batch),
+  `--json` output, `sweep name=a:b:n` (table / CSV / plot), `save`/`load`.
+  Guide: [`docs/agent-guide.md`](docs/agent-guide.md); examples in
+  `examples/agent/`; in Python `from openkapitza.agent import Session`.
 - **Flatness and clamping:** `build_joint(..., flatness_um=, joint_area_mm2=,
   clamping=)` adds the out-of-flatness constriction (Bahrami 2004); ignoring a
   crown over-predicted 205 measured joints ~7×.

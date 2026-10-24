@@ -59,6 +59,8 @@ class Plan:
     next_measurements: list[str] = field(default_factory=list)
     caveats: list = field(default_factory=list)       # Flag objects, ranked
     caveats_hidden: int = 0
+    md_caveats: list = field(default_factory=list)    # the ingested MD run's own, ranked
+    md_caveats_hidden: int = 0
 
 
 _ORDER = {Severity.CRITICAL: 0, Severity.WARNING: 1, Severity.CAUTION: 2, Severity.INFO: 3}
@@ -84,8 +86,8 @@ _MEASURE = {
 }
 
 
-def plan(result) -> Plan:
-    """Build the plan from a JointResult."""
+def plan(result, md_used=None) -> Plan:
+    """Build the plan from a JointResult (md_used: the ingest.MDResult applied)."""
     inputs = result.inputs
     net = result.primary
     pair = frozenset({inputs.material_a.key, inputs.material_b.key})
@@ -126,8 +128,12 @@ def plan(result) -> Plan:
             md, why = "recommended", (f"the interface term could move the answer by "
                                       f"{span:.0%} and rests on a DMM placeholder")
 
+    if md_used is not None:
+        conv = {True: "converged", False: "not converged", None: "single run"}[md_used.converged]
+        md, why = "in use", (f"h_K = {md_used.h_K / 1e6:.4g} ± {md_used.uncertainty / 1e6:.3g} "
+                             f"MW/m²K from {md_used.potential} ({conv}); before it, {why}")
     p = Plan(md=md, md_reason=why)
-    if md != "not needed":
+    if md not in ("not needed", "in use"):
         route = MD_ROUTES.get(pair)
         if route:
             p.route_status, p.route_potential, p.route_note, p.cluster_jobs = route
@@ -135,6 +141,12 @@ def plan(result) -> Plan:
             p.route_status, p.route_note = "none", NO_ROUTE_NOTE
 
     flags = sorted(result.flags.flags, key=lambda f: _ORDER.get(f.severity, 9))
+    md_own = [f for f in flags if f.message.startswith("[MD]")]
+    flags = [f for f in flags if not f.message.startswith("[MD]")]
+    # The MD run's caveats get their own short list: its summary codes first.
+    md_own.sort(key=lambda f: (not str(f.code).startswith("MD_"), _ORDER.get(f.severity, 9)))
+    md_keep = [f for f in md_own if f.severity != Severity.INFO]
+    p.md_caveats, p.md_caveats_hidden = md_keep[:3], max(0, len(md_keep) - 3)
     seen, ranked = set(), []
     for f in flags:
         if f.code in seen:

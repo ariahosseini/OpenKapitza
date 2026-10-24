@@ -35,7 +35,9 @@ sys.path.insert(0, str(REPO / "scripts"))
 
 from openkapitza.compute.resources import estimate_cost, resources_for  # noqa: E402
 from openkapitza.compute.runner import JobSpec, SlurmRunner  # noqa: E402
-from openkapitza.md.campaign import _atoms, _steps, cores_for, plan_campaign, write_campaign  # noqa: E402
+from openkapitza.md.campaign import (  # noqa: E402
+    _atoms, _steps, cores_for, plan_campaign, write_campaign, write_spec,
+)
 from openkapitza.md.emd_kapitza import EMDSpec, build_emd_deck  # noqa: E402
 from openkapitza.md.nemd import (  # noqa: E402
     NEMDGeometry, NEMDSpec, build_input_deck, ttm_properties, validate_deck,
@@ -82,10 +84,13 @@ def jobs() -> list[tuple[str, NEMDSpec, str]]:
 
 
 def _write(root: Path, name: str, deck: str, files: list[tuple[Path, str]], n_atoms: int,
-           steps: int, pair_style: str, a, flags: FlagSet, extra: dict | None = None) -> dict:
+           steps: int, pair_style: str, a, flags: FlagSet, extra: dict | None = None,
+           spec=None, kind: str = "nemd", spec_extra: dict | None = None) -> dict:
     wd = root / name
     wd.mkdir(parents=True, exist_ok=True)
     (wd / "nemd.in").write_text(deck, encoding="utf-8")
+    if spec is not None:
+        write_spec(wd, spec, kind, **(spec_extra or {}))
     for src, dst in files:
         shutil.copy(src, wd / dst)
     for k, v in (extra or {}).items():
@@ -145,10 +150,13 @@ def main(argv=None) -> int:
     for name, spec, kind in jobs():
         files = [(pot / spec.pair_file, spec.pair_file)] + [(pot / f, f) for f in spec.extra_files]
         extra = {}
+        spec_extra = {}
         if kind == "emd":
             # >= 500 tau: the local Si/Ge run measured tau_slow = 32 ps (2.5 nm slabs)
             emd = EMDSpec(settle_ps=50.0, production_ps=16_000.0, sample_fs=20.0)
             deck = build_emd_deck(spec, emd)
+            spec_extra = {"emd": {"settle_ps": emd.settle_ps, "production_ps": emd.production_ps,
+                                  "sample_fs": emd.sample_fs}}
             steps = (spec.relax_steps + spec.equilibrate_steps
                      + int((emd.settle_ps + emd.production_ps) * 1000 / spec.timestep_fs))
         else:
@@ -159,7 +167,8 @@ def main(argv=None) -> int:
             steps = _steps(spec)
             if spec.ttm is not None:
                 extra["ttm_props.in"] = ttm_properties(spec)
-        e = _write(root, name, deck, files, _atoms(spec), steps, spec.pair_style, a, flags, extra)
+        e = _write(root, name, deck, files, _atoms(spec), steps, spec.pair_style, a, flags, extra,
+                   spec=spec, kind=kind, spec_extra=spec_extra)
         e["issue"] = issues[name]
         entries.append(e)
 
@@ -175,7 +184,8 @@ def main(argv=None) -> int:
         e = _write(root, f"sio2_{cls}", deck,
                    [(data / f"Si100_aSiO2_{cls}_4nm.data", "interface.data"),
                     (pot / "SiO.tersoff", "SiO.tersoff")],
-                   n_atoms, _steps(spec), "tersoff", a, flags)
+                   n_atoms, _steps(spec), "tersoff", a, flags, spec=spec, kind="nemd",
+                   spec_extra={"bonding": cls})
         e["issue"] = "P2-3/P2-6"
         entries.append(e)
 

@@ -149,6 +149,18 @@ h_nemd=<converged campaign h_K>)`. Use the energy columns, not the kinetic
 temperatures, and the two-exponential model (knowledge base §11). Expect NEMD/EMD > 1 (≈3 for Si/Ge per
 Merabia & Termentzidis); below 1 means one of the runs is wrong.
 
+## 7c. Bring results back into the joint
+
+Every job folder written by `prepare_cluster.py` or `plan_campaign.py` holds a
+`spec.json`. After jobs finish (whole tree, a campaign root, or one folder):
+
+    python -m openkapitza.agent --input joint.yaml --md <root>
+    # or, in a session:  ingest <root>
+
+Each finished NEMD job is measured (`measure_kapitza`), campaign axes are
+judged, and the joint is re-run with the MD h_K and its error. See
+`docs/agent-guide.md`.
+
 ## 8. Only if needed
 
 SW-Si bulk k at ns scale (P5-1): only if bulk k for a material without

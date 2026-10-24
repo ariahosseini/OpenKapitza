@@ -67,7 +67,12 @@ def explain(result, plan: Plan) -> str:
     # atomistic route
     lines.append("")
     lines.append(f"Atomistic (MD) calculation: {plan.md} — {plan.md_reason}.")
-    if plan.md != "not needed":
+    if plan.md_caveats:
+        for f in plan.md_caveats:
+            lines.append(f"  [{_SEV[f.severity]}] {f.message[5:]}")
+        if plan.md_caveats_hidden:
+            lines.append(f"  (+{plan.md_caveats_hidden} more on the MD measurement; 'report')")
+    if plan.md not in ("not needed", "in use"):
         if plan.route_status in ("ready", "caveat"):
             lines.append(f"  Route: {plan.route_potential}; {plan.route_note}")
             lines.append(f"  Prepared cluster jobs that cover it: {', '.join(plan.cluster_jobs)}"

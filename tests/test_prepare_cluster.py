@@ -30,6 +30,15 @@ class DryRun(unittest.TestCase):
             self.assertTrue((root / "sial_ttm" / "ttm_props.in").exists())
             self.assertTrue((root / "sio2_weak" / "interface.data").exists())
             self.assertIn("1e12", (root / "commands.txt").read_text())
+            # every job is self-describing, so agent.ingest can measure it later
+            from openkapitza.md.campaign import read_spec
+            spec, kind, _ = read_spec(root / "sial_ttm")
+            self.assertEqual((kind, spec.element_b), ("nemd", "Al"))
+            self.assertIsNotNone(spec.ttm)
+            self.assertEqual(read_spec(root / "sige_emd")[1], "emd")
+            self.assertEqual(read_spec(root / "sio2_weak")[2].get("bonding"), "weak")
+            rung = next(n for n in names if n.startswith("campaign/"))
+            self.assertEqual(read_spec(root / rung)[0].element_a, "Si")
             for e in m["jobs"]:
                 d_ = root / e["name"]
                 self.assertTrue((d_ / "submit.sbatch").exists(), e["name"])

@@ -158,6 +158,7 @@ def write_campaign(root: Path | str, rungs: list[Rung], potential: Path | str, *
         wd = root / r.name
         wd.mkdir(exist_ok=True)
         (wd / "nemd.in").write_text(build_input_deck(r.spec), encoding="utf-8")
+        write_spec(wd, r.spec, "nemd")
         shutil.copy(potential, wd / potential.name)
         for extra in r.spec.extra_files:           # e.g. a MEAM parameter file
             shutil.copy(potential.parent / extra, wd / extra)
@@ -220,6 +221,26 @@ def _spec_record(spec: NEMDSpec) -> dict:
         "extra_files": list(spec.extra_files),
         "pair_elements": list(spec.pair_elements) if spec.pair_elements else None,
     }
+
+
+SPEC_FILE = "spec.json"
+
+
+def write_spec(wd: Path | str, spec: NEMDSpec, kind: str = "nemd", **extra) -> Path:
+    """Write the job's spec next to its deck, so the job can be measured later
+    without the script that built it (agent.ingest reads it). kind: nemd | emd."""
+    path = Path(wd) / SPEC_FILE
+    path.write_text(json.dumps({"kind": kind, "spec": _spec_record(spec), **extra}, indent=2),
+                    encoding="utf-8")
+    return path
+
+
+def read_spec(wd: Path | str) -> tuple[NEMDSpec, str, dict]:
+    """(spec, kind, extra) from a job folder's spec.json."""
+    rec = json.loads((Path(wd) / SPEC_FILE).read_text(encoding="utf-8"))
+    kind = rec.pop("kind", "nemd")
+    spec = spec_from_record(rec.pop("spec"))
+    return spec, kind, rec
 
 
 def spec_from_record(rec: dict) -> NEMDSpec:
