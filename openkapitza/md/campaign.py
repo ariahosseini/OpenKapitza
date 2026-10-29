@@ -118,8 +118,8 @@ def _atoms(spec: NEMDSpec) -> int:
 
 
 def _steps(spec: NEMDSpec) -> int:
-    relax = spec.relax_steps if spec.relax_structure else 0
-    return relax + spec.total_steps
+    from .nemd import relax_steps
+    return relax_steps(spec) + spec.total_steps
 
 
 # Below roughly this many atoms per core, a classical many-body run stops

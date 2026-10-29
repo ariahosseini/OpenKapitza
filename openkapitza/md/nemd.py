@@ -338,6 +338,14 @@ class NEMDSpec:
     # toward Ge (scripts/test_inplane_relaxation.py, 0 K).
     relax_z: bool = True
     piston_damp_ps: float = 0.5
+    # A longer column takes longer to settle under the piston: the relaxation
+    # is scaled up (never down) by column length / relax_ref_length. Found on
+    # the M3 Pro campaign (KB 16): at 50 ps the 32 nm cell ended with Pzz
+    # -0.13 GPa and a 0.77 A wall correction, the 64 nm cell needed 6.8 A and
+    # lost atoms. 32 nm of column (16 + 16 nm) is where 50 ps was measured to
+    # settle.
+    relax_scale_with_length: bool = True
+    relax_ref_length: float = 32e-9
     timestep_fs: float = 1.0
     equilibrate_steps: int = 500_000
     steady_steps: int = 500_000
@@ -788,11 +796,26 @@ variable        zwall equal bound(gwall_hi,zmin)
 # wall is frozen at its MEAN position over the second half, not wherever the
 # oscillation leaves it -- the latter left up to +/-0.3 GPa in the first test.
 fix             zav all ave/time 10 {nrep} {relax_steps} v_zwall
+# Mean Pzz over the same window, printed below so the measurement can judge
+# whether the column had settled (NEMD_RELAX_UNSETTLED).
+variable        pzzv equal pzz
+fix             pzzav all ave/time 10 {nrep} {relax_steps} v_pzzv
 thermo_style    custom step temp press pxx pyy pzz lx ly v_zwall
 """
 
 PISTON_OFF = """\
-displace_atoms  gwall_hi move 0.0 0.0 $(f_zav-v_zwall) units box
+# Set the wall to its mean position by stretching the WHOLE column, not by
+# moving the wall alone: every mobile atom moves in proportion to its height
+# between the frozen bottom wall and the top wall. Moving only the wall drove
+# it 6.8 A into the atoms below in a 64 nm cell (lost atoms, KB 16); the ramp
+# is safe for any correction and the same as before for a small one.
+variable        wfix_dz equal $(f_zav-v_zwall)
+variable        wfix_lo equal $(bound(gwall_lo,zmax))
+variable        wfix_hi equal $(bound(gwall_hi,zmin))
+print           "OPENKAPITZA_WALLFIX dz ${{wfix_dz}} pzz_mean_bar $(f_pzzav:%.2f)"
+displace_atoms  gmobile ramp z 0.0 ${{wfix_dz}} z ${{wfix_lo}} ${{wfix_hi}} units box
+displace_atoms  gwall_hi move 0.0 0.0 ${{wfix_dz}} units box
+unfix           pzzav
 unfix           zav
 unfix           piston_damp
 unfix           piston_nve
@@ -818,8 +841,10 @@ LOAD_STAGE = """\
 # Spot pressure {pressure:g} GPa; lateral stress builds to ~C12/C11 * P.
 variable        pfz equal -{p:.8e}*lx*ly/count(gwall_hi)
 unfix           zav
+unfix           pzzav
 fix             relax_load gmobile nvt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f}
 fix             zav all ave/time 10 {nrep} {load_steps} v_zwall
+fix             pzzav all ave/time 10 {nrep} {load_steps} v_pzzv
 thermo          {load_thermo}
 run             {load_steps}
 unfix           relax_load
@@ -863,9 +888,20 @@ def headroom(spec: NEMDSpec) -> float:
 
 
 def _relax_steps(spec: NEMDSpec) -> int:
-    """Relaxation length rounded up to a multiple of 20, so the averaging
-    windows (every 10 steps, over the second half) tile it exactly."""
-    return max(20, -(-spec.relax_steps // 20) * 20)
+    """Relaxation length, scaled with the column for a piston relaxation and
+    rounded up to a multiple of 20, so the averaging windows (every 10 steps,
+    over the second half) tile it exactly."""
+    steps = spec.relax_steps
+    if spec.relax_z and spec.relax_scale_with_length and spec.relax_ref_length > 0:
+        column = spec.geometry.bulk_a_length + spec.geometry.bulk_b_length
+        # whole multiples, so a load stage that divides relax_steps still divides it
+        steps *= max(1, math.ceil(column / spec.relax_ref_length - 1e-9))
+    return max(20, -(-steps // 20) * 20)
+
+
+def relax_steps(spec: NEMDSpec) -> int:
+    """The relaxation length the deck will actually run (0 without relaxation)."""
+    return _relax_steps(spec) if spec.relax_structure else 0
 
 
 GPA_TO_EV_A3 = 1.0 / 160.21766208
@@ -1514,6 +1550,35 @@ def parse_relaxed_positions(path: Path | str) -> dict[str, float] | None:
     except OSError:
         return None
     return None
+
+
+def parse_relax_settle(path: Path | str) -> dict[str, float] | None:
+    """How settled the piston relaxation was: the wall correction dz (A) and,
+    from decks that print it, the mean Pzz over the averaging window (bar).
+
+    Older decks did not print OPENKAPITZA_WALLFIX; for them dz is read from
+    the echoed `displace_atoms gwall_hi move 0.0 0.0 <dz>` line.
+    """
+    import re
+    new = re.compile(r"^OPENKAPITZA_WALLFIX dz (\S+) pzz_mean_bar (\S+)")
+    old = re.compile(r"^displace_atoms\s+gwall_hi\s+move\s+0\.0\s+0\.0\s+(-?[\d.eE+-]+)\s+units")
+    found = None
+    try:
+        with open(Path(path), "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                t = line.strip()
+                m = new.match(t)
+                if m:
+                    return {"dz": float(m.group(1)), "pzz_mean_bar": float(m.group(2))}
+                m = old.match(t)
+                if m and found is None:
+                    try:
+                        found = {"dz": float(m.group(1))}
+                    except ValueError:
+                        pass
+    except OSError:
+        return None
+    return found
 
 
 def parse_relaxed_box(path: Path | str) -> tuple[float, float] | None:

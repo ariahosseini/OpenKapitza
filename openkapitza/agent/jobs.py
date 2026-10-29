@@ -203,7 +203,10 @@ class JobBook:
         wd = Path(e.workdir)
         if not (wd / "nemd.in").is_file():
             raise JobError(f"{e.name}: {wd}/nemd.in not found")
-        for stale in ("job.done", "log.lammps", "stdout.log", "stderr.log"):
+        # a re-run must not be measured from its predecessor's outputs
+        for stale in ("job.done", "log.lammps", "stdout.log", "stderr.log",
+                      "temperature_profile.dat", "reservoir_energy.dat", "relaxed.data",
+                      "emd_temperatures.dat"):
             p = wd / stale
             if p.exists() and e.attempts:
                 p.rename(wd / f"{stale}.attempt{e.attempts}")

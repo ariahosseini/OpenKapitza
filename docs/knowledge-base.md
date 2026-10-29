@@ -2286,3 +2286,54 @@ material database grows to materials without Debye data (DMM cannot run, a
 descriptor model could), or if oxide/bonded interfaces are modelled
 explicitly. The training table is not committed; the script reads it from the
 Zenodo files.
+
+## 16. The piston relaxation must settle before the wall is set (29 Oct 2026)
+
+**Symptom.** In the Si/Ge campaign on the M3 Pro, the 64 nm rung (r07,
+126,336 atoms) died on the first equilibration step with `ERROR: Lost atoms:
+original 126336 current 126012`. The 32 nm rung (r06) finished, but at
+528 MW/m²K, 9 % above the 8–16 nm rungs (478–503).
+
+**Cause.** The decks let the top wall float as a piston for a fixed 50 ps,
+then set it to its mean position over the second half. The column breathes
+with a period that grows with its length, so a long column was still
+swinging when the window ended:
+- In r07 the wall went 1330 → 1343 → 1340 → 1356 Å, and Pzz swung between
+  +1.5 and −0.2 GPa.
+- The deck moved **only the wall** to the mean position, −6.8 Å, into the
+  atoms below. Overlapping atoms, exploding forces, 324 atoms out of the box.
+
+The wall correction against column length, from the logs:
+
+| column | 16 nm (r05) | 32 nm (r00–r04) | 64 nm (r06) | 128 nm (r07) |
+|---|---|---|---|---|
+| wall correction | +0.01 Å | −0.13 to −0.15 Å | +0.77 Å | −6.8 Å |
+| Pzz at the end | +0.14 GPa | +0.03 to +0.07 GPa | −0.13 GPa | — |
+
+r06 therefore entered the gradient under about −0.13 GPa of tension. Part of
+its 9 % excess is this artefact, not the length dependence. The laptop's
+sleep in transit was unrelated: the run had already restarted cleanly
+before the failure.
+
+**Fix** (decks from 29 Oct):
+1. **Relaxation scales with column length**, by whole multiples of
+   `relax_steps` per 32 nm of column (`relax_ref_length`): 64 nm → 2×,
+   128 nm → 4×. It never shortens. Whole multiples keep a strain-mode load
+   stage that divides `relax_steps` valid.
+2. **The wall is set by an affine ramp of the whole column**: `displace_atoms
+   gmobile ramp z 0 dz z <bottom wall top> <top wall bottom>`, then the wall
+   by dz. That is safe for any correction and equivalent to the old move for
+   a small one. Checked with LAMMPS stable_30Sep2026: it runs to
+   OPENKAPITZA_DONE.
+3. **Guard.** The deck prints `OPENKAPITZA_WALLFIX dz … pzz_mean_bar …` (mean
+   Pzz over the averaging window, re-averaged over the load stage in strain
+   mode). `measure_kapitza` raises `NEMD_RELAX_UNSETTLED` (WARNING) if
+   |dz| > 0.5 Å or |mean Pzz − applied load| > 0.05 GPa. For older logs, dz
+   comes from the echoed `displace_atoms` line: on the campaign it flags r06
+   only.
+4. **A re-run sets aside every output** of its predecessor (profile, energy
+   log, relaxed structure), not only the log, so it is never measured from
+   the old run's files.
+
+On the 16 nm and shorter decks the relaxation length is unchanged; only the
+ramp and the report are added.

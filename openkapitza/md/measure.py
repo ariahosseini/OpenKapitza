@@ -30,7 +30,8 @@ from ..schema.flags import Code, FlagSet, Severity
 from ..schema.quantities import Quantity
 from .nemd import (
     FS_TO_PS, NEMDSpec, check_flux_stationarity, check_run_health,
-    M_TO_ANG, parse_log_thermo, parse_profile, parse_profile_frames, parse_relaxed_box,
+    M_TO_ANG, parse_log_thermo, parse_profile, parse_profile_frames, parse_relax_settle,
+    parse_relaxed_box,
     parse_relaxed_positions, parse_reservoir_energy, parse_reservoir_series,
 )
 from .profile import (KapitzaExtraction, extract_kapitza, flux_from_reservoirs,
@@ -104,6 +105,38 @@ def frame_fluxes(reservoir_path: Path, frame_ends_steps: list[int], window_steps
     return out
 
 
+RELAX_DZ_MAX_ANG = 0.5          # wall correction beyond this: the column had not settled
+RELAX_PZZ_MAX_GPA = 0.05        # mean Pzz residual over the window, about the load
+
+
+def check_relax_settle(log: Path, spec: NEMDSpec, flags: FlagSet) -> dict | None:
+    """Flag a piston relaxation that ended before the column settled (KB 16)."""
+    if not (spec.relax_structure and spec.relax_z) or not Path(log).exists():
+        return None
+    r = parse_relax_settle(log)
+    if not r:
+        return None
+    # the averaged window is loaded in both modes (stress: throughout; strain:
+    # the load stage re-averages), so Pzz is judged about the applied load
+    target = spec.spot_pressure_GPa or 0.0
+    problems = []
+    if abs(r["dz"]) > RELAX_DZ_MAX_ANG:
+        problems.append(f"the wall had to be moved {r['dz']:+.2f} A to its mean position "
+                        f"(over {RELAX_DZ_MAX_ANG} A)")
+    if "pzz_mean_bar" in r and abs(r["pzz_mean_bar"] / 1e4 - target) > RELAX_PZZ_MAX_GPA:
+        problems.append(f"mean Pzz over the window was {r['pzz_mean_bar'] / 1e4:+.3f} GPa"
+                        + (f" against the applied {target:g}" if target else ""))
+    if problems:
+        flags.add(Code.NEMD_RELAX_UNSETTLED, Severity.WARNING,
+                  "The piston relaxation ended before the column settled: "
+                  + "; ".join(problems) + ". The cell entered the gradient under residual "
+                  "strain, which changes h_K.",
+                  remedy="Re-run with a longer relaxation (relax_steps; decks from 29 Oct "
+                         "scale it with the column length).",
+                  wall_dz_ang=r["dz"])
+    return r
+
+
 def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
                     k_expected_a: float | None = None,
                     k_expected_b: float | None = None) -> KapitzaMeasurement:
@@ -123,6 +156,8 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
                          expected_pzz_GPa=spec.spot_pressure_GPa or 0.0,
                          lateral_constrained=(bool(spec.spot_pressure_GPa)
                                               and spec.spot_pressure_mode == "strain"))
+
+    check_relax_settle(log, spec, flags)
 
     energy = wd / "reservoir_energy.dat"
     profile_path = wd / "temperature_profile.dat"
