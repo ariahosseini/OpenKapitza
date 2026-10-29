@@ -274,15 +274,19 @@
 
 - key: wu2020itrdata
   cite: Y.-J. Wu, T. Zhan, Z. Hou, L. Fang & Y. Xu, "Physical and chemical descriptors for predicting interfacial thermal resistance", Sci. Data 7, 36 (2020); data Zenodo 10.5281/zenodo.3564173 (CC BY 4.0)
-  status: partial
+  status: full
   topics: [dataset, interfacial thermal resistance, measured, descriptors, machine learning]
   used_for: md/measured.py import_nims (column layout from their Table 1)
   findings: >
     1,318 measured ITR points, 457 interface samples, 54 materials, 87 papers;
     columns include interlayer, temperature, method, film preparation and
     thickness, so the conditions travel with each value. Descriptors for
-    298 materials (the abstract says 289). ITR in 1e-9 m2K/W.
-  needed_for: the data files themselves (Zenodo is not reachable from here)
+    298 materials (the abstract says 289). ITR in 1e-9 m2K/W. In the released
+    file the interlayer column is a 0/1 flag (materials are in the Interface
+    string), SiO2 often marks a native oxide, some samples are deliberately
+    irradiated, and Hopkins 2010 overlaps our own benchmark. Imported into
+    openkapitza/data/itr_measured.csv; the authors' training table backs the
+    surrogate test (KB 15: not adopted).
   kb: ["15"]
 
 - key: wu2019itrml

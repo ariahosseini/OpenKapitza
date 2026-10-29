@@ -12,16 +12,31 @@ from openkapitza.schema import FlagSet
 from openkapitza.schema.flags import Code, Severity
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD = ["id", "interface id", "interface", "interlayer", "ITR (10-9 m2K/W)",
-        "measuring temperature (K)", "measurement method", "Film 1",
-        "Film 1 preparation method", "Film 1 thickness (nm)", "substrate (Film 2)",
-        "substrate details", "id-R"]
+# the released ITR_dataset.xlsx layout (Zenodo 10.5281/zenodo.3564173, sheet "ITR")
+HEAD = ["id", "interface id", "Interface", "interlayer", "Thermal Boundary Conductance (MW/m2K)",
+        "itr (10-9 m2K/W)", "Temperature (K)", "Measurement method", "Film 1",
+        "Film preparation method", "Film thickness (nm)", "substrate (Film2)",
+        "Substrate details", "Substrate pretreatment", " Interfacial properties ",
+        "Reference (id-R)"]
 ROWS = [
-    ["1", "1", "Au/Si", "", "5", "300", "TDTR", "Au", "e-beam", "80", "Si(100)", "", "R12"],
-    ["2", "1", "Au/Si", "Ti", "2.5", "300", "TDTR", "Au", "e-beam", "80", "Si(100)", "", "R12"],
-    ["3", "2", "Al/sapphire", "", "4", "310", "TDTR", "Al", "sputter", "100", "sapphire", "", "R7"],
-    ["4", "3", "Bi/Si", "", "", "300", "3w", "Bi", "", "", "Si", "", "R9"],      # no ITR
+    [1, 1, "Au/Si", 0, 200, 5, 300, "TDTR", "Au", "e-beam", 80, "Si", "", "", "None", 1],
+    [2, 1, "Au/Ti/Si", 1, 400, 2.5, 300, "TDTR", "Au", "e-beam", 80, "Si", "", "", "None", 1],
+    [3, 2, "Au/SiO2/Si", 1, 50, 20, 300, "TDTR", "Au", "e-beam", 80, "Si", "", "", "None", 2],
+    [4, 3, "Au/Si", 0, 20, 50, 300, "TDTR", "Au", "", 80, "Si", "", "implanted",
+     "5.7*1016 protons cm-2", 3],
+    [5, 3, "Au/Si", 0, 180, 5.556, 300, "TDTR", "Au", "", 80, "Si", "", "implanted",
+     "non-irradiated", 3],
+    [6, 4, "Al/ Sapphire", 0, None, 4, 310, "TDTR", "Al", "sputter", 100, "sapphire", "", "",
+     "None", 2],                                           # TBC blank: from ITR
+    [7, 5, "Al/Si", 0, 193, 5.18, 298, "TDTR", "Al", "", 80, "Si", "", "", "None", 4],  # repeat
+    [8, 6, "Bi", 0, None, None, 300, "3 ω", "Bi", "", "", "Si", "", "", "None", 2],     # unusable
 ]
+REFS = [["id-R", "Title", "Authors", "Journal", "DOI"],
+        [1, "t1", "A. Smith, B. Jones", "Phys. Rev. B 80, 000001 (2009)", "http://dx.doi.org/x"],
+        [2, "t2", "C. Doe and E. Roe", "Appl. Phys. Lett. 90, 111111 (2007)", ""],
+        [3, "t3", "F. Poe", "J. Appl. Phys. 1, 222222 (2011)", ""],
+        [4, "Effects of surface roughness", "P. E. Hopkins", "PHYSICAL REVIEW B 82, 085307 (2010)",
+         "http://dx.doi.org/10.1103/PhysRevB.82.085307"]]
 
 
 def _flags(fn, *a):
@@ -38,6 +53,15 @@ class TestNames(unittest.TestCase):
             self.assertEqual(M.canonical(raw), want, raw)
 
 
+def _seed_file(d: Path) -> str:
+    """The project's own rows only, so the logic tests do not move with imports."""
+    rows = [ln for ln in M.DATA.read_text().splitlines(True)
+            if ln.startswith(("#", "id,")) or ",project," in ln]
+    p = d / "seed.csv"
+    p.write_text("".join(rows))
+    return str(p)
+
+
 class TestPackagedData(unittest.TestCase):
     def test_seed_matches_the_benchmark(self):
         with open(ROOT / "tests/benchmarks/kapitza_measured.csv", encoding="utf-8") as fh:
@@ -45,30 +69,65 @@ class TestPackagedData(unittest.TestCase):
         mine = {r.id: r.h for r in M.load() if r.dataset == "project"}
         self.assertEqual(mine, bench)
 
-    def test_al_si_reference(self):
+    def test_nims_dataset_is_imported_with_attribution(self):
+        recs = M.load()
+        nims = [r for r in recs if r.dataset == "NIMS-ITR"]
+        self.assertGreater(len(nims), 1300)
+        self.assertGreater(len({r.pair for r in nims}), 100)
+        head = M.DATA.read_text()[:1200]
+        for s in ("CC BY 4.0", "zenodo.3564173", "Sci. Data 7, 36 (2020)", "Changes:"):
+            self.assertIn(s, head)
+        # Hopkins 2010 is in both; it must be counted once
+        hop = [r for r in recs if r.pair == frozenset({"Al", "Si"}) and abs(r.h - 193.0) < 0.01]
+        self.assertEqual(len(hop), 1)
+
+    def test_al_si_reference_from_the_full_table(self):
         ref = M.reference("Si", "Al", 300.0)
-        self.assertEqual(len(ref.records), 8)
-        self.assertAlmostEqual(ref.lo, 114.6)
-        self.assertAlmostEqual(ref.hi, 193.0)
-        self.assertIn("4 of 8 with an oxide", ref.summary())
-        self.assertIsNone(ref.proxy_note)
-        self.assertIn("pure-Al", M.reference("Al6061", "Si", 300.0).proxy_note)
+        self.assertGreaterEqual(len(ref.records), 30)
+        self.assertGreaterEqual(len(ref.sources), 8)
+        self.assertLessEqual(ref.lo, 115)
+        self.assertGreaterEqual(ref.hi, 340)                 # the clean interfaces arrived
+        self.assertGreater(ref.n_modified, 0)                # irradiated samples left out
+        self.assertGreater(ref.n_excluded_layers, 0)         # Ge, GaN, polymer layers left out
+        self.assertTrue(all(not r.modified for r in ref.records))
+        self.assertIn("clean", ref.summary())
+
+    def test_seed_only_reference(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = _seed_file(Path(d))
+            ref = M.reference("Si", "Al", 300.0, p)
+            self.assertEqual(len(ref.records), 8)
+            self.assertAlmostEqual(ref.lo, 114.6)
+            self.assertAlmostEqual(ref.hi, 193.0)
+            self.assertIn("clean 158-193 (n=4), with an oxide 115-144 (n=4)", ref.summary())
+            self.assertIsNone(ref.proxy_note)
+            self.assertIn("pure-Al", M.reference("Al6061", "Si", 300.0, p).proxy_note)
+            self.assertTrue(M.reference("Si", "Al", 80.0, p).widened)
+            self.assertIn("none within 50 K of 80 K", M.reference("Si", "Al", 80.0, p).summary())
+        M.load.cache_clear()
 
     def test_no_data_is_silent(self):
         f = FlagSet()
-        self.assertIsNone(M.check_kapitza("Cu", "Ge", 300.0, 2e8, "dmm_debye", f))
+        self.assertIsNone(M.check_kapitza("Cu", "Unobtainium", 300.0, 2e8, "dmm_debye", f))
         self.assertEqual(len(f), 0)
-
-    def test_temperature_window_widens_and_says_so(self):
-        ref = M.reference("Si", "Al", 80.0)
-        self.assertTrue(ref.widened)
-        self.assertIn("none within 50 K of 80 K", ref.summary())
 
 
 class TestCheck(unittest.TestCase):
+    """Against the 8 project rows (115-193 MW/m²K), so the numbers are fixed."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._td = tempfile.TemporaryDirectory()
+        cls.seed = _seed_file(Path(cls._td.name))
+
+    @classmethod
+    def tearDownClass(cls):
+        M.load.cache_clear()
+        cls._td.cleanup()
+
     def check(self, h_MW, source="dmm_debye"):
         f = FlagSet()
-        M.check_kapitza("Si", "Al", 300.0, h_MW * 1e6, source, f)
+        M.check_kapitza("Si", "Al", 300.0, h_MW * 1e6, source, f, self.seed)
         (flag,) = f.flags
         return flag
 
@@ -106,52 +165,62 @@ class TestImport(unittest.TestCase):
         self._td = tempfile.TemporaryDirectory()
         self.tmp = Path(self._td.name)
         self.out = self.tmp / "itr.csv"
-        self.out.write_text((M.DATA).read_text())          # start from the packaged seed
+        self.out.write_text(Path(_seed_file(self.tmp)).read_text())   # the project rows
 
     def tearDown(self):
         M.load.cache_clear()
         self._td.cleanup()
 
-    def _csv(self) -> Path:
+    def _xlsx(self) -> Path:
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "ITR"
+        ws.append(HEAD)
+        for r in ROWS:
+            ws.append(r)
+        refs = wb.create_sheet("ITR References")
+        for r in REFS:
+            refs.append(r)
+        p = self.tmp / "ITR_dataset.xlsx"
+        wb.save(p)
+        return p
+
+    def test_real_layout_import(self):
+        info = M.import_nims(self._xlsx(), self.out)
+        # 8 rows: 1 unusable, 1 repeats Hopkins 2010 (same paper, same value)
+        self.assertEqual((info["imported"], info["skipped"], info["duplicates_of_project_rows"],
+                          info["kept"], info["modified"]), (6, 1, 1, 8, 1))
+        recs = {r.id: r for r in M.load(str(self.out))}
+        self.assertEqual(recs["NIMS-2"].interlayer, "Ti")                       # parsed
+        self.assertIn("oxide", recs["NIMS-3"].interlayer)                       # SiO2 on Si
+        self.assertTrue(recs["NIMS-4"].modified)                                # irradiated
+        self.assertFalse(recs["NIMS-5"].modified)                               # "non-irradiated"
+        self.assertAlmostEqual(recs["NIMS-6"].h, 250.0)                         # from ITR
+        self.assertEqual(recs["NIMS-6"].pair, frozenset({"Al", "Al2O3"}))       # 'Al/ Sapphire'
+        self.assertTrue(recs["NIMS-1"].source.startswith("Smith et al., Phys. Rev. B 80"))
+        # Ti adhesion layer and damaged sample are left out of the Au/Si reference;
+        # the native-oxide row and the non-irradiated control stay
+        ref = M.reference("Au", "Si", 300.0, str(self.out))
+        self.assertEqual(sorted(r.h for r in ref.records), [50.0, 180.0, 200.0])
+        self.assertEqual((ref.n_excluded_layers, ref.n_modified), (1, 1))
+        self.assertEqual(len(ref.sources), 3)
+
+    def test_reimport_replaces_not_duplicates(self):
+        M.import_nims(self._xlsx(), self.out)
+        M.import_nims(self._xlsx(), self.out)
+        self.assertEqual(sum(r.dataset == "NIMS-ITR" for r in M.load(str(self.out))), 6)
+
+    def test_csv_import(self):
         p = self.tmp / "nims.csv"
         with p.open("w", newline="") as fh:
             w = csv.writer(fh)
             w.writerow(HEAD)
-            w.writerows(ROWS)
-        return p
-
-    def test_csv_import_converts_units_and_keeps_project_rows(self):
-        info = M.import_nims(self._csv(), self.out)
-        self.assertEqual((info["imported"], info["skipped"], info["kept"]), (3, 1, 8))
-        recs = M.load(str(self.out))
-        au = [r for r in recs if r.pair == frozenset({"Au", "Si"})]
-        self.assertEqual(sorted(r.h for r in au), [200.0, 400.0])      # 1/(5e-9), 1/(2.5e-9)
-        self.assertTrue(any(r.pair == frozenset({"Al", "Al2O3"}) for r in recs))
-        text = self.out.read_text()
-        self.assertIn("CC BY 4.0", text)
-        self.assertIn("zenodo.3564173", text)
-        # the explicit Ti adhesion layer is left out of the reference, not mixed in
-        ref = M.reference("Au", "Si", 300.0, str(self.out))
-        self.assertEqual([r.h for r in ref.records], [200.0])
-
-    def test_reimport_replaces_not_duplicates(self):
-        M.import_nims(self._csv(), self.out)
-        M.import_nims(self._csv(), self.out)
-        self.assertEqual(sum(r.dataset == "NIMS-ITR" for r in M.load(str(self.out))), 3)
-
-    def test_xlsx_import(self):
-        import openpyxl
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "ITR dataset"
-        ws.append(["Interfacial thermal resistance dataset"])        # a title row above
-        ws.append(HEAD)
-        for r in ROWS:
-            ws.append(r)
-        wb.create_sheet("ITR Reference").append(["id-R", "reference"])
-        p = self.tmp / "nims.xlsx"
-        wb.save(p)
-        self.assertEqual(M.import_nims(p, self.out)["imported"], 3)
+            w.writerows([["" if c is None else c for c in r] for r in ROWS])
+        # a CSV has no references sheet, so a repeat cannot be matched to its paper
+        # and is kept rather than guessed away
+        info = M.import_nims(p, self.out)
+        self.assertEqual((info["imported"], info["duplicates_of_project_rows"]), (7, 0))
 
     def test_unrecognised_table_is_refused(self):
         p = self.tmp / "bad.csv"
@@ -171,8 +240,9 @@ class TestAgent(unittest.TestCase):
         s = Session(n_samples=100)
         s.intake = intake_from_dict(self.JOINT)
         out = s.handle("run")
-        self.assertIn("Measured Si/Al: 115-193 MW/m²K", out)
+        self.assertIn("Measured Si/Al: ", out)
         self.assertIn("In use: 321 MW/m²K (DMM placeholder)", out)
+        self.assertIn(Code.KAPITZA_REFERENCE, s.result.flags.codes())     # within the range
         s.handle(f"ingest {ROOT / 'tests/data/md_runs/sial_plumbing'}")
         out = s.handle("run")
         self.assertIn("In use: 445 MW/m²K (MD)", out)
@@ -183,8 +253,14 @@ class TestAgent(unittest.TestCase):
         from openkapitza.agent.mcp_server import OpenKapitzaTools
         t = OpenKapitzaTools(n_samples=100)
         t.set_inputs({k: str(v) for k, v in self.JOINT.items()})
+        t.set_inputs({"h_K_MW": "2000"})                    # far above any Al/Si measurement
+        t.run_joint()
+        codes = {f.code for f in t.s.result.flags}
+        self.assertIn("KAPITZA_ABOVE_MEASURED", codes)      # noted for a user's own value
+        t.clear_input("h_K_MW")
+        t.s.handle(f"ingest {ROOT / 'tests/data/md_runs/sial_plumbing'}")
         codes = {m["code"] for m in t.run_joint()["must_report"]}
-        self.assertIn("KAPITZA_ABOVE_MEASURED", codes)      # cautions are passed on too
+        self.assertIn("KAPITZA_POTENTIAL_BIAS", codes)      # cautions are passed on too
 
 
 if __name__ == "__main__":

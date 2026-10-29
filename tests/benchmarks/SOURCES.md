@@ -87,9 +87,11 @@ The same eight rows seed `openkapitza/data/itr_measured.csv`, the reference
 table `md/measured.py` checks every h_K against (`tests/test_measured.py`
 keeps the two identical). The NIMS interfacial-thermal-resistance dataset
 (Wu, Zhan, Hou, Fang & Xu, Sci. Data 7, 36 (2020); Zenodo
-10.5281/zenodo.3564173; CC BY 4.0) is added with
-`python -m openkapitza.md.measured import FILE`: ITR in 1e-9 m²K/W is converted
-to h = 1/ITR and tagged `NIMS-ITR` with the original reference id.
+10.5281/zenodo.3564173; CC BY 4.0) is imported (28 Oct, 1,322 rows) with
+`python -m openkapitza.md.measured import ITR_dataset.xlsx`: conductance from its
+TBC column, materials and interlayers parsed from the Interface string, damaged
+samples marked, the Hopkins 2010 repeat dropped; each row keeps its original
+paper as the source.
 
 ## Grease TIMs — `tim_greases.csv`
 

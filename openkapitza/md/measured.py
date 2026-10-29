@@ -34,8 +34,8 @@ from ..schema.flags import Code, FlagSet, Severity
 
 DATA = Path(__file__).resolve().parents[1] / "data" / "itr_measured.csv"
 COLUMNS = ("id", "material_a", "material_b", "raw_a", "raw_b", "interlayer",
-           "temperature_K", "method", "preparation", "film_thickness_nm",
-           "h_MW_m2K", "h_sd_MW_m2K", "dataset", "source")
+           "temperature_K", "method", "preparation", "condition", "modified",
+           "film_thickness_nm", "h_MW_m2K", "h_sd_MW_m2K", "dataset", "source")
 T_WINDOW_K = 50.0
 OUTSIDE = 1.25            # a value beyond 1.25x the measured extremes is flagged
 
@@ -82,6 +82,8 @@ class Record:
     thickness_nm: float | None
     dataset: str
     source: str
+    condition: str = ""
+    modified: bool = False          # deliberately damaged (irradiated, implanted)
 
     @property
     def pair(self) -> frozenset:
@@ -119,7 +121,9 @@ def load(path: str | None = None) -> tuple[Record, ...]:
                 method=row.get("method", ""), preparation=row.get("preparation", ""),
                 interlayer=row.get("interlayer", ""),
                 thickness_nm=_num(row.get("film_thickness_nm")),
-                dataset=row.get("dataset", ""), source=row.get("source", "")))
+                dataset=row.get("dataset", ""), source=row.get("source", ""),
+                condition=row.get("condition") or "",
+                modified=(row.get("modified") or "").strip().lower() == "yes"))
     return tuple(out)
 
 
@@ -131,6 +135,7 @@ class Reference:
     widened: bool = False            # no point within the window: all temperatures used
     proxy_note: str | None = None
     n_excluded_layers: int = 0       # rows with an explicit interlayer, left out
+    n_modified: int = 0              # deliberately damaged samples, left out
 
     @property
     def values(self) -> list[float]:
@@ -150,18 +155,33 @@ class Reference:
 
     @property
     def sources(self) -> list[str]:
-        return sorted({r.source for r in self.records})
+        """Distinct publications (a dataset row number is not a source)."""
+        return sorted({r.source.split("; via ")[0] for r in self.records})
 
     def summary(self) -> str:
+        if getattr(self, "_summary", None) is None:     # cached: Reference objects are
+            self._summary = self._make_summary()        # shared through the lookup cache
+        return self._summary
+
+    def _make_summary(self) -> str:
         a, b = self.pair
         n, ns = len(self.records), len(self.sources)
         temps = sorted({round(r.T) for r in self.records if r.T})
         tdesc = (f"{temps[0]}-{temps[-1]} K" if len(temps) > 1 else f"{temps[0]} K") if temps \
             else "temperature not stated"
         methods = ", ".join(sorted({r.method for r in self.records if r.method})) or "method n/a"
-        ox = sum(r.oxide_or_layer for r in self.records)
-        cond = (f"; {ox} of {n} with an oxide or interlayer" if 0 < ox < n
-                else "; all with an oxide or interlayer" if ox == n else "")
+        oxd = [r.h for r in self.records if r.oxide_or_layer]
+        cln = [r.h for r in self.records if not r.oxide_or_layer]
+        if oxd and cln:
+            cond = (f"; clean {min(cln):.0f}-{max(cln):.0f} (n={len(cln)}), with an oxide "
+                    f"{min(oxd):.0f}-{max(oxd):.0f} (n={len(oxd)})")
+        else:
+            cond = "; all with an oxide or interlayer" if oxd else ""
+        left = [f"{self.n_excluded_layers} with other interlayers" if self.n_excluded_layers else "",
+                f"{self.n_modified} damaged samples" if self.n_modified else ""]
+        left = [x for x in left if x]
+        if left:
+            cond += f"; left out: {', '.join(left)}"
         s = (f"Measured {a}/{b}: {self.lo:.0f}-{self.hi:.0f} MW/m²K (median {self.median:.0f}; "
              f"{n} value{'s' if n > 1 else ''} from {ns} source{'s' if ns > 1 else ''}, "
              f"{methods}, {tdesc}{cond})")
@@ -171,19 +191,37 @@ class Reference:
 
 
 def reference(a_key: str, b_key: str, T: float, path: str | None = None) -> Reference | None:
-    """Measured values for the pair near temperature T, or None if there are none."""
+    """Measured values for the pair near temperature T, or None if there are none.
+
+    Cached (the Monte Carlo calls this once per sample); `load.cache_clear()` and
+    `reference.cache_clear()` after changing the table in-process.
+    """
+    # keyed on the loaded table's identity: reloading (load.cache_clear) gives a new one
+    return _reference(a_key, b_key, round(float(T), 1), path, id(load(path)))
+
+
+reference.cache_clear = lambda: _reference.cache_clear()     # type: ignore[attr-defined]
+
+
+@lru_cache(maxsize=256)
+def _reference(a_key: str, b_key: str, T: float, path: str | None,
+               _table_id: int) -> Reference | None:
     a, b = canonical(a_key), canonical(b_key)
+    _table = load(path)
     notes = [CANONICAL[k][1] for k in (a_key, b_key) if k in CANONICAL and CANONICAL[k][1]]
-    rows = [r for r in load(path) if r.pair == frozenset((a, b))]
+    rows = [r for r in _table if r.pair == frozenset((a, b))]
     if not rows:
         return None
+    n_mod = sum(r.modified for r in rows)
+    rows = [r for r in rows if not r.modified] or rows
     plain = [r for r in rows if not _explicit_layer(r)]
     excluded = len(rows) - len(plain)
     rows = plain or rows                        # all have layers: show them, they say so
     near = [r for r in rows if r.T is not None and abs(r.T - T) <= T_WINDOW_K]
     widened = not near
     return Reference(pair=(a, b), records=near or rows, T=T, widened=widened,
-                     proxy_note="; ".join(notes) or None, n_excluded_layers=excluded if plain else 0)
+                     proxy_note="; ".join(notes) or None, n_excluded_layers=excluded if plain else 0,
+                     n_modified=n_mod)
 
 
 def _explicit_layer(r: Record) -> bool:
@@ -255,87 +293,168 @@ def potential_bias(pair: frozenset, potential: str, flags: FlagSet) -> str | Non
 
 
 # ---- importing the NIMS dataset ----------------------------------------------------------
+# The released ITR_dataset.xlsx (sheet "ITR"): id | interface id | Interface | interlayer
+# (0/1) | Thermal Boundary Conductance (MW/m2K) | itr (10-9 m2K/W) | Temperature (K) |
+# Measurement method | Film 1 | Film preparation method | Film thickness (nm) | substrate
+# (Film2) | Substrate details | Substrate pretreatment | Interfacial properties |
+# Reference (id-R); sheet "ITR References": id-R | Title | Authors | Journal | DOI.
 _HEAD = {
-    "interface": ("interface",), "interlayer": ("interlayer",),
-    "itr": ("itr",), "temperature": ("measuring temperature", "temperature"),
-    "method": ("measurement method", "measuring method", "method"),
-    "film": ("film 1", "film1"), "film_prep": ("film 1 preparation", "preparation method"),
-    "thickness": ("film 1 thickness", "thickness"),
-    "substrate": ("substrate (film 2)", "substrate", "film 2"),
-    "ref": ("id-r", "reference id", "ref"), "id": ("id",),
+    "id": ("id",), "interface": ("interface",), "interlayer": ("interlayer",),
+    "tbc": ("thermal boundary conductance",), "itr": ("itr",),
+    "temperature": ("temperature", "measuring temperature"),
+    "method": ("measurement method", "measuring method"),
+    "film": ("film 1",), "film_prep": ("film preparation method", "film 1 preparation"),
+    "thickness": ("film thickness", "film 1 thickness"),
+    "substrate": ("substrate (film2)", "substrate (film 2)", "substrate"),
+    "pretreat": ("substrate pretreatment",), "props": ("interfacial properties",),
+    "ref": ("reference (id-r)", "id-r", "reference"),
 }
+_DAMAGE = re.compile(r"\d[\d.*eE+]*\s*protons|(?<!non-)\birradiated\b|ion dose|implanted to",
+                     re.I)
 
 
 def _find(headers: list[str], key: str) -> int | None:
-    low = [h.strip().lower() for h in headers]
+    low = [re.sub(r"\s+", " ", str(h)).strip().lower() for h in headers]
+    for cand in _HEAD[key]:                      # exact, then prefix
+        if cand in low:
+            return low.index(cand)
     for cand in _HEAD[key]:
         for i, h in enumerate(low):
-            if h == cand:
-                return i
-    for cand in _HEAD[key]:
-        for i, h in enumerate(low):
-            if h.startswith(cand) and not (key == "film" and "prep" in h or
-                                           key == "film" and "thick" in h):
+            if h.startswith(cand):
                 return i
     return None
 
 
-def _rows_from(path: Path) -> list[list]:
+def _sheet(path: Path, want: str) -> list[list]:
     if path.suffix.lower() in (".xlsx", ".xlsm"):
         import openpyxl
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        name = next((n for n in wb.sheetnames if "itr" in n.lower() and "ref" not in n.lower()),
-                    wb.sheetnames[0])
+        names = wb.sheetnames
+        if want == "refs":
+            name = next((n for n in names if "ref" in n.lower()), None)
+            if name is None:
+                return []
+        else:
+            name = next((n for n in names if "itr" in n.lower() and "ref" not in n.lower()),
+                        names[0])
         return [[("" if c is None else c) for c in r] for r in wb[name].iter_rows(values_only=True)]
+    if want == "refs":
+        return []
     with path.open(encoding="utf-8-sig", newline="") as fh:
         return list(csv.reader(fh))
 
 
-def import_nims(src: Path | str, out: Path | str = DATA, scale: float = 1e-9) -> dict:
+def _references(rows: list[list]) -> dict[str, str]:
+    """id-R -> 'First author et al., Journal (DOI)'."""
+    if not rows:
+        return {}
+    h = [str(c).strip().lower() for c in rows[0]]
+    get = lambda r, k: str(r[h.index(k)]).strip() if k in h and h.index(k) < len(r) else ""
+    out = {}
+    for r in rows[1:]:
+        rid = get(r, "id-r")
+        if not rid:
+            continue
+        auth = re.split(r",| and ", get(r, "authors"))[0].strip()
+        surname = auth.split()[-1] if auth else "?"
+        doi = re.sub(r"\s+", "", get(r, "doi"))
+        out[_key(rid)] = f"{surname} et al., {re.sub(chr(10), ' ', get(r, 'journal')).strip()}" + \
+            (f" ({doi})" if doi else "")
+    return out
+
+
+def _key(x) -> str:
+    v = _num(x)
+    return str(int(v)) if v is not None and v == int(v) else str(x).strip()
+
+
+def _cite_tokens(text: str) -> set[str]:
+    """Article numbers / DOI fragments ('085307', '10.1103/physrevb.82.085307' -> {'085307'})."""
+    return set(re.findall(r"(?<![\d.])\d{5,7}(?![\d])", text or ""))
+
+
+def _is_oxide_of(layer: str, sides: tuple[str, str]) -> bool:
+    """SiO2 on Si, AlOx on Al: a native or grown oxide of a neighbour."""
+    m = re.match(r"(?:a-)?([A-Z][a-z]?)O", layer)
+    return bool(m) and any(m.group(1) == re.match(r"[A-Z][a-z]?", s).group(0)
+                           for s in sides if re.match(r"[A-Z][a-z]?", s))
+
+
+def import_nims(src: Path | str, out: Path | str = DATA) -> dict:
     """Convert the NIMS ITR table (Wu et al. 2020) into itr_measured.csv rows.
 
-    The paper gives ITR in units of 1e-9 m^2K/W (`scale`); h = 1/ITR. Rows already
-    imported (dataset 'NIMS-ITR') are replaced, the project's own rows kept.
+    Materials come from the `Interface` string (film/.../substrate; middle parts
+    are interlayers). An oxide of a neighbour is recorded as an oxide (kept);
+    any other interlayer is recorded and left out of the reference range.
+    Deliberately damaged samples are marked `modified`. Rows that repeat one of
+    the project's own (same pair, h within 0.5 %, T within 5 K) are dropped.
+    Re-importing replaces earlier NIMS rows.
     """
-    rows = _rows_from(Path(src))
-    hi = next(i for i, r in enumerate(rows) if any("itr" in str(c).lower() for c in r))
+    src = Path(src)
+    rows = _sheet(src, "itr")
+    hi = next(i for i, r in enumerate(rows)
+              if any(str(c).strip().lower().startswith(("itr", "thermal boundary")) for c in r))
     headers = [str(c) for c in rows[hi]]
     col = {k: _find(headers, k) for k in _HEAD}
-    if col["itr"] is None or (col["film"] is None and col["interface"] is None):
-        raise ValueError(f"{src}: no ITR / material columns found in {headers}")
-    new, skipped = [], 0
+    if (col["tbc"] is None and col["itr"] is None) or col["interface"] is None:
+        raise ValueError(f"{src}: no conductance / ITR or Interface column in {headers}")
+    refs = _references(_sheet(src, "refs"))
+    out = Path(out)
+    own = [r for r in _read_raw(out) if r.get("dataset") != "NIMS-ITR"]
+    own_keys = [(frozenset((canonical(r["material_a"]), canonical(r["material_b"]))),
+                 _num(r["h_MW_m2K"]), _num(r["temperature_K"]), _cite_tokens(r["source"]))
+                for r in own]
+    new, skipped, dupes = [], 0, 0
     for r in rows[hi + 1:]:
-        g = lambda k: (str(r[col[k]]).strip() if col[k] is not None and col[k] < len(r) else "")
-        itr = _num(g("itr"))
-        if not itr or itr <= 0:
+        g = lambda k: (re.sub(r"\s+", " ", str(r[col[k]])).strip()
+                       if col[k] is not None and col[k] < len(r) else "")
+        h = _num(g("tbc")) if col["tbc"] is not None else None
+        if h is None:
+            itr = _num(g("itr"))
+            h = 1e3 / itr if itr and itr > 0 else None      # 1e-9 m2K/W -> MW/m2K
+        parts = [x.strip() for x in g("interface").split("/") if x.strip()]
+        if not h or h <= 0 or len(parts) < 2:
             skipped += 1
             continue
-        a, b = g("film"), g("substrate")
-        if (not a or not b) and "/" in g("interface"):
-            a, b = (x.strip() for x in g("interface").split("/", 1))
-        if not a or not b:
-            skipped += 1
+        a, b = canonical(parts[0]), canonical(parts[-1])
+        mids = [canonical(x) for x in parts[1:-1]]
+        layer = "/".join(mids)
+        if mids and all(_is_oxide_of(m, (a, b)) for m in mids):
+            layer += " (native or grown oxide)"
+        T = _num(g("temperature"))
+        pair = frozenset((a, b))
+        rid = _key(g("ref"))
+        cite = _cite_tokens(refs.get(rid, ""))
+        if any(p == pair and hv and abs(h / hv - 1) < 0.005 and ct & cite and
+               (T is None or tv is None or abs(T - tv) <= 5) for p, hv, tv, ct in own_keys):
+            dupes += 1                       # the same measurement from the same paper
             continue
-        h = 1.0 / (itr * scale) / 1e6
-        new.append({"id": f"NIMS-{g('id') or len(new) + 1}", "material_a": canonical(a),
-                    "material_b": canonical(b), "raw_a": a, "raw_b": b,
-                    "interlayer": g("interlayer"), "temperature_K": g("temperature"),
-                    "method": g("method"), "preparation": g("film_prep"),
+        cond = g("props")
+        new.append({"id": f"NIMS-{_key(g('id')) or len(new) + 1}", "material_a": a,
+                    "material_b": b, "raw_a": parts[0], "raw_b": parts[-1],
+                    "interlayer": layer, "temperature_K": g("temperature"),
+                    "method": g("method"),
+                    "preparation": "; ".join(x for x in (g("film_prep"), g("pretreat"))
+                                             if x and x.lower() != "none")[:200],
+                    "condition": "" if cond.lower() == "none" else cond[:120],
+                    "modified": "yes" if _DAMAGE.search(cond) else "",
                     "film_thickness_nm": g("thickness"), "h_MW_m2K": f"{h:.4g}",
                     "h_sd_MW_m2K": "", "dataset": "NIMS-ITR",
-                    "source": f"Wu et al., Sci. Data 7, 36 (2020), Zenodo 10.5281/zenodo.3564173; "
-                              f"original reference {g('ref')}"})
-    out = Path(out)
-    keep = [r for r in _read_raw(out) if r.get("dataset") != "NIMS-ITR"]
+                    "source": f"{refs.get(rid, 'reference ' + rid)}; via Wu et al., Sci. Data 7, "
+                              f"36 (2020), NIMS ITR dataset row {_key(g('id'))}"})
     with out.open("w", encoding="utf-8", newline="") as fh:
         fh.write(_HEADER_COMMENT)
         w = csv.DictWriter(fh, fieldnames=COLUMNS)
         w.writeheader()
-        for row in keep + new:
-            w.writerow({k: row.get(k, "") for k in COLUMNS})
+        for row in own + new:
+            w.writerow({k: row.get(k, "") or "" for k in COLUMNS})
     load.cache_clear()
-    return {"imported": len(new), "skipped": skipped, "kept": len(keep), "path": str(out),
-            "pairs": len({frozenset((x["material_a"], x["material_b"])) for x in new})}
+    return {"imported": len(new), "skipped": skipped, "duplicates_of_project_rows": dupes,
+            "kept": len(own), "path": str(out),
+            "pairs": len({frozenset((x["material_a"], x["material_b"])) for x in new}),
+            "with_other_interlayers": sum(bool(x["interlayer"]) and "oxide" not in x["interlayer"]
+                                          for x in new),
+            "modified": sum(x["modified"] == "yes" for x in new)}
 
 
 _HEADER_COMMENT = (
@@ -344,7 +463,9 @@ _HEADER_COMMENT = (
     "# (tests/benchmarks/SOURCES.md). dataset 'NIMS-ITR': Wu, Zhan, Hou, Fang & Xu,\n"
     "# 'Physical and chemical descriptors for predicting interfacial thermal resistance',\n"
     "# Sci. Data 7, 36 (2020), doi:10.1038/s41597-020-0373-2; data Zenodo\n"
-    "# 10.5281/zenodo.3564173, CC BY 4.0 (attribution as above; converted, not altered).\n")
+    "# 10.5281/zenodo.3564173, CC BY 4.0. Changes: conductance taken from its TBC column;\n"
+    "# materials and interlayers parsed from the Interface string and names normalised;\n"
+    "# damaged samples marked; rows repeating a 'project' row from the same paper dropped.\n")
 
 
 def _read_raw(path: Path) -> list[dict]:
@@ -360,16 +481,14 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m openkapitza.md.measured", description=main.__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     i = sub.add_parser("import", help="add the NIMS ITR table (xlsx or csv)")
-    i.add_argument("file")
-    i.add_argument("--scale", type=float, default=1e-9,
-                   help="ITR unit in m^2K/W (the paper's table: 1e-9)")
+    i.add_argument("file", help="ITR_dataset.xlsx from Zenodo 10.5281/zenodo.3564173")
     s = sub.add_parser("show", help="measured values for a pair")
     s.add_argument("a")
     s.add_argument("b")
     s.add_argument("T", nargs="?", type=float, default=300.0)
     a = ap.parse_args(argv)
     if a.cmd == "import":
-        print(import_nims(a.file, scale=a.scale))
+        print(import_nims(a.file))
     else:
         ref = reference(a.a, a.b, a.T)
         print(ref.summary() if ref else f"No measured values for {a.a}/{a.b}.")

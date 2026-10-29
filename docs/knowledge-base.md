@@ -2194,10 +2194,66 @@ caution. With only Hopkins' as-prepared surfaces in the table, "highest
 measured" is 193; the cleaner ~350–380 measurements arrive with the NIMS
 import. The summary names its source count, so it does not overclaim.
 
-### Data access
+### The NIMS dataset, imported
 
-The NIMS dataset (Wu et al., Sci. Data 7, 36 (2020), CC BY 4.0) is on Zenodo
-(10.5281/zenodo.3564173). Neither Zenodo nor NIMS MDR is reachable from this
-workspace (proxy 403). The importer reads the paper's Table 1 layout from
-.xlsx or .csv; it is tested on synthetic files in that layout. The real
-files' exact headers are unverified until they are supplied.
+Wu et al., Sci. Data 7, 36 (2020); Zenodo 10.5281/zenodo.3564173; CC BY 4.0.
+The user supplied the files (Zenodo is not reachable from this workspace).
+`ITR_dataset.xlsx` imports as 1,322 rows over 119 pairs into
+`openkapitza/data/itr_measured.csv`; the attribution and the changes made are
+in its header. Four facts from the real file, none visible in the paper's
+Table 1:
+
+- **The `interlayer` column is a 0/1 flag.** The layer materials are inside
+  the `Interface` string (`Au/Ti/a-SiO2/Si`): film first, substrate last,
+  interlayers between.
+- **SiO₂ often marks a native oxide.** Hopkins 2010's as-received samples are
+  "Al/SiO2/Si". An oxide of a neighbour is kept and counted as oxide. Any other
+  layer (Ti, Ge, GaN/AlN, polymers: 481 rows) is recorded but left out of the
+  pair's range.
+- **Some samples were deliberately damaged** (proton irradiation down to 26
+  MW/m²K for Al/Si; 20 rows). They are marked `modified` and left out. The
+  "non-irradiated" controls stay.
+- **Hopkins 2010 is in both tables.** The repeat (same pair, h within 0.5 %,
+  T within 5 K, and the same article number) is dropped, so it is not counted
+  twice. One row's substrate column contradicts its Interface string (Al/Si
+  with substrate "Al"); the Interface string is used.
+
+Si/Al at 300 ± 50 K is now 35–380 MW/m²K: 40 values from 11 papers; clean
+35–380 (n = 20), with an oxide 50–191 (n = 20); 65 with other layers and 16
+damaged left out. The DMM (321) and the MEAM run (445, 1.17× the top) are
+within the 1.25× band. The MEAM bias caution still applies. Part of the spread
+is the measurement itself: Ma et al.'s values rise 172 → 218 MW/m²K with the
+TDTR pump spot size alone.
+
+### The surrogate test: not worth adding (28 Oct)
+
+`scripts/evaluate_itr_surrogate.py` fits a Gaussian process (Matérn 5/2 +
+white noise, standardised descriptors) and boosted trees to the authors'
+training table (692 rows, 66 pairs, 35 descriptors), in log10 h:
+
+| model | random 5-fold | leave-pair-out |
+|---|---|---|
+| Gaussian process | rms 0.18, within 2× 92 % | rms 0.28, within 2× 74 % |
+| boosted trees | rms 0.17, within 2× 92 % | rms 0.25, within 2× 80 % |
+| training median | — | rms 0.49, within 2× 39 % |
+
+Holding out the pair raises the error by half, as Foss & Aksamija found. That
+is the regime OpenKapitza would use it in. Against our Debye DMM, on the rows
+our database can compute (Al/Si, Ge/Si; same-material bonded wafers
+excluded):
+
+| rows | DMM | GP leave-pair-out |
+|---|---|---|
+| all (178) | rms 0.39, within 2× 37 % | rms 0.22, within 2× 85 % |
+| no interlayer (56) | rms 0.33, within 2× 64 % | rms 0.33, within 2× 59 % |
+
+The GP wins overall only by learning the interlayer flag ("oxide present →
+lower"). On clean interfaces, the quantity DMM and MD describe, it is no
+better. The measured check already reports the oxide effect with real data for
+the pair, so the surrogate adds nothing for the pairs this package can run.
+DMM sits a median 1.6× above clean measurements (2.1× with oxides), consistent
+with its role as an upper estimate. **Decision: no surrogate.** Revisit if the
+material database grows to materials without Debye data (DMM cannot run, a
+descriptor model could), or if oxide/bonded interfaces are modelled
+explicitly. The training table is not committed; the script reads it from the
+Zenodo files.
