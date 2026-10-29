@@ -49,6 +49,16 @@ from .planner import Plan, plan
 HELP = __doc__.split("Commands at any prompt:")[1]
 
 
+_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
+_SPACES = dict.fromkeys(map(ord, "\u00a0\u2007\u202f\u2009\u200a\u3000"), " ")
+
+
+def _clean(text: str) -> str:
+    """Typed or pasted text, with the characters copying from a web page brings in
+    (non-breaking and thin spaces, zero-width marks) turned into plain spaces."""
+    return text.translate(_INVISIBLE).translate(_SPACES).strip()
+
+
 def _path(text: str) -> str:
     """A path as typed: '~' and $VARS expanded, surrounding quotes and spaces dropped."""
     import os
@@ -122,7 +132,7 @@ class Session:
 
     # ---- input -----------------------------------------------------------------
     def handle(self, text: str) -> str:
-        t = text.strip()
+        t = _clean(text)
         while t.startswith(">"):                 # a pasted prompt marker ("> jobs ...")
             t = t[1:].lstrip()
         low = t.lower()

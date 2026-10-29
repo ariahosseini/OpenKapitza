@@ -237,6 +237,11 @@ class TestSessionLoop(JobLoopBase):
         self.assertIn("no prepared job named", s.handle("submit nope local"))
         self.assertIn("plan names no MD jobs", s.handle("submit plan"))
 
+    def test_pasted_unicode_spaces_are_plain_spaces(self):
+        s = Session(lmp=self.lmp)
+        for txt in (f"jobs\u00a0{self.root}", f"\u200bjobs {self.root}", f"\ufeffjobs\u202f{self.root}"):
+            self.assertIn("No jobs submitted yet", s.handle(txt), repr(txt))
+
     def test_pasted_prompt_marker_is_ignored(self):
         s = Session(lmp=self.lmp)
         self.assertIn("No jobs submitted yet", s.handle(f"> jobs {self.root}"))
