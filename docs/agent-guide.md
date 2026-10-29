@@ -127,6 +127,15 @@ The screwed heat sink (`examples/agent/heatsink_screwed.yaml`):
   with no estimate that could matter), or *in use* (an ingested MD result
   replaced the placeholder; its own caveats follow). When recommended, the
   route for the pair and the prepared cluster jobs are named.
+- **Measured for the pair** (under the MD line, when the reference table has
+  the pair): the measured range, median, sources and how many had an oxide or
+  interlayer, next to the h_K in use. A value above 1.25× the highest
+  measurement is a caution: real interfaces (oxide, roughness, interdiffusion)
+  usually conduct worse than an ideal one. Below the lowest is a warning: it
+  points at the model or the run. The measurement is never swapped in; if your
+  interface is prepared like the measured ones, `set h_K_MW=...` uses it.
+  Published biases of the MD potential are listed too (Al/Si MEAM: 20–30 %
+  high). See all measured values: `python -m openkapitza.md.measured show Al Si`.
 - **What to watch**: up to six caveats, warnings first. `report` prints all of
   them with their remedies.
 - **Best next measurements**: the measurements that would remove the active

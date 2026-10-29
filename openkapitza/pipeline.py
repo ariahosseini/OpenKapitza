@@ -199,6 +199,9 @@ def run_continuum(
     # -- interfacial term ---------------------------------------------------
     if kapitza is None:
         kapitza = dmm_conductance(a, b, inputs.temperature, flags)
+    # reference only: where the h_K in use sits against measured values for the pair
+    from .md.measured import check_kapitza
+    check_kapitza(a.key, b.key, inputs.temperature.si, kapitza.h_K.si, kapitza.source, flags)
 
     # -- out-of-flatness (macro) constriction ----------------------------------
     macro = None

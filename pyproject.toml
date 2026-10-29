@@ -40,4 +40,4 @@ mcp = ["mcp>=2.0"]
 include = ["openkapitza*"]
 
 [tool.setuptools.package-data]
-openkapitza = ["data/*.yaml"]
+openkapitza = ["data/*.yaml", "data/*.csv"]

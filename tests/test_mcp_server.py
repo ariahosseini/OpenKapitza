@@ -49,7 +49,8 @@ class TestTools(unittest.TestCase):
         self.assertIn("Joint conductance", d["explanation"])
         codes = {m["code"] for m in d["must_report"]}
         self.assertIn("KAPITZA_PLACEHOLDER", codes)       # no MD yet: must be said
-        self.assertTrue(all(m["severity"] in ("WARNING", "CRITICAL") for m in d["must_report"]))
+        self.assertTrue(all(m["severity"] in ("CAUTION", "WARNING", "CRITICAL")
+                            for m in d["must_report"]))
         self.assertIn("phase_a", d["defaults_used"])
         self.assertGreater(d["result"]["h_joint_W_m2K"], 0)
 

@@ -2130,3 +2130,74 @@ still a plumbing number, not a converged one.
   flags. The instructions (pass on every `must_report` item, say which values
   were defaulted, never invent inputs, confirm before spending compute) are
   guidance to the model, not enforcement. The guide says so.
+
+## 15. ML for interface resistance, and the measured-data check (28 Oct 2026)
+
+### Survey: is an ML quick-estimate layer worth having?
+
+Two families (notes in `docs/papers.yaml`):
+
+- **Descriptor regressions on tables** (Zhan 2017; Wu 2019; Foss & Aksamija
+  2023). Good in-distribution. Held out by material, error grows several-fold
+  (Foss: RMSE < 5 → 20–30 MW/m²K, failing at descriptor extremes). That is
+  exactly the case where OpenKapitza would want a quick estimate.
+- **Machine-learned potentials inside MD** (Rajabpour 2024 Si/diamond: Tersoff
+  ~3× high, MTP within 10 % of experiment; Khot 2025 Al/Si: DeePMD 380 ± 33
+  against ~350–379 measured, a 2NN MEAM 20–30 % high). The evidence for
+  accuracy is here.
+
+Two cautions decided the design:
+
+- **Measured and simulated values are different quantities.** A measurement
+  includes oxide, roughness, interdiffusion and adhesion layers; ideal-interface
+  MD does not. Al/Si: 115–193 MW/m²K on as-prepared surfaces (Hopkins 2010),
+  ~350–380 for clean ones. Ga₂O₃/SiC: 550–700 (NEP, ideal) against 140–162
+  measured (Liu 2026), so an accurate potential is still 4× off a real
+  interface. A surrogate trained on measurements and an MD answer for an ideal
+  interface must not be mixed silently.
+- **The Kapitza term is often small in the joints this package targets** (14–19 %
+  in the Si/Al run of §14). The quick estimate matters mostly for the
+  MD/no-MD decision and for bonded faces.
+
+Decision: no separate "ML agent". Three steps in order:
+1. A measured-data check in the core (built, below).
+2. A Tier-2 potential route for Si/Al (P4-1).
+3. A regression surrogate only if it beats the DMM in a leave-one-pair-out
+   test on the measured table (pending the data).
+
+### The check as built
+
+`md/measured.py`, called from `run_continuum` for every bare joint:
+
+- **Matching.** Database keys map to measured names (`Al6061` → Al with a note,
+  `Ni200` → Ni). Raw table names are normalised (`Si(100)` → Si, `sapphire` →
+  Al2O3). Rows with a deliberate interlayer (Ti, Cr...) are left out; native
+  oxides are kept and counted.
+- **Temperature.** Only points within ±50 K are used; if none, all
+  temperatures are used and the summary says so.
+- **Outcomes.**
+  - Within 1.25× of the measured extremes: INFO.
+  - Above: CAUTION. An ideal interface usually conducts better, so it
+    over-states a real joint.
+  - Below: WARNING. An ideal interface conducting worse than real ones points
+    at the model.
+  - A user's own h_K is only noted.
+- **Remedy, never substitution:** `set h_K_MW=<median>`.
+- **Potential bias:** a caution when the MD potential has a published bias for
+  the pair (Al/Si MEAM → Khot 2025). Reported, never corrected.
+- **MCP:** `must_report` now carries cautions as well as warnings, so the
+  model passes the check on.
+
+On the Si/Al joint: the DMM (321 MW/m²K) is 1.7× the highest of the eight
+Hopkins points. The MEAM plumbing run (445) is 2.3×, plus the MEAM bias
+caution. With only Hopkins' as-prepared surfaces in the table, "highest
+measured" is 193; the cleaner ~350–380 measurements arrive with the NIMS
+import. The summary names its source count, so it does not overclaim.
+
+### Data access
+
+The NIMS dataset (Wu et al., Sci. Data 7, 36 (2020), CC BY 4.0) is on Zenodo
+(10.5281/zenodo.3564173). Neither Zenodo nor NIMS MDR is reachable from this
+workspace (proxy 403). The importer reads the paper's Table 1 layout from
+.xlsx or .csv; it is tested on synthetic files in that layout. The real
+files' exact headers are unverified until they are supplied.

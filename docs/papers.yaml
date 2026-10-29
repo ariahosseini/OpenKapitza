@@ -184,8 +184,8 @@
   cite: Rajabpour, Mortazavi, Mirchi, El Hajj, Guo, Zhuang & Merabia, arXiv:2407.15404
   status: partial
   topics: [machine-learned potential, MTP, interface conductance, Tersoff overestimate]
-  findings: Tersoff over-estimates Si/diamond interface conductance ~3x against an interface-trained MTP within 10 % of experiment; Tier 2 means trained on the interface.
-  kb: ["8.4"]
+  findings: Tersoff over-estimates Si/diamond interface conductance ~3x against an interface-trained MTP (trained on ~9,000 AIMD configurations, NEMD with length extrapolation) within 10 % of experiment; Tier 2 means trained on the interface.
+  kb: ["8.4", "15"]
 
 - key: wei2025
   cite: Wei et al., Chin. Phys. B 34 (2025), reservoir length in NEMD
@@ -256,3 +256,85 @@
   topics: [microhardness, Brinell, Vickers coefficients, correlation, tool steel]
   findings: c1, c2 from Brinell hardness for 1.30-7.60 GPa (cubic fits); does not reach soft Cu or pure Al.
   kb: ["12.2", "12.11"]
+
+# ---- machine learning for interface thermal resistance (surveyed 28 Oct) -------------
+- key: khot2025
+  cite: K. Khot, B. Xiao, Z. Han, Z. Guo, Z. Xiong & X. Ruan, "Phonon local non-equilibrium at Al/Si interface from machine learning molecular dynamics", J. Appl. Phys. 137, 115301 (2025)
+  status: partial
+  topics: [Al/Si, DeePMD, neural-network potential, MEAM bias, NEMD, electron-phonon, Tier 2]
+  used_for: md/measured.py BIASES (Al/Si MEAM caution)
+  findings: >
+    DeePMD potential trained on DFT for bulk Al, bulk Si and the interface;
+    NEMD with size extrapolation and the electron-phonon part subtracted gives
+    380 +- 33 MW/m2K at 300 K, against ~350 consensus and 379 by TDTR. A
+    classical 2NN MEAM over-estimates by 20-30 %. Our Jelinek MEAM plumbing run
+    (445 +- 173) sits on that side; whether their MEAM is the same
+    parameterisation is not verified. The obvious Tier-2 route for Si/Al.
+  kb: ["15"]
+
+- key: wu2020itrdata
+  cite: Y.-J. Wu, T. Zhan, Z. Hou, L. Fang & Y. Xu, "Physical and chemical descriptors for predicting interfacial thermal resistance", Sci. Data 7, 36 (2020); data Zenodo 10.5281/zenodo.3564173 (CC BY 4.0)
+  status: partial
+  topics: [dataset, interfacial thermal resistance, measured, descriptors, machine learning]
+  used_for: md/measured.py import_nims (column layout from their Table 1)
+  findings: >
+    1,318 measured ITR points, 457 interface samples, 54 materials, 87 papers;
+    columns include interlayer, temperature, method, film preparation and
+    thickness, so the conditions travel with each value. Descriptors for
+    298 materials (the abstract says 289). ITR in 1e-9 m2K/W.
+  needed_for: the data files themselves (Zenodo is not reachable from here)
+  kb: ["15"]
+
+- key: wu2019itrml
+  cite: Y.-J. Wu, L. Fang & Y. Xu, "Predicting interfacial thermal resistance by machine learning", npj Comput. Mater. 5, 56 (2019)
+  status: partial
+  topics: [machine learning, surrogate, SVM, Gaussian process, LSBoost, screening]
+  findings: >
+    SVM, Gaussian process and boosted trees on material, compound and process
+    descriptors; reported "96 %" predictive performance; screened >80,000
+    pairs from 293 materials, top candidates checked against one prior
+    measurement (Bi/Si). In-distribution accuracy; not a basis for new pairs.
+  kb: ["15"]
+
+- key: zhan2017itrml
+  cite: T. Zhan, L. Fang & Y. Xu, "Prediction of thermal boundary resistance by the machine learning method", Sci. Rep. 7, 7109 (2017)
+  status: partial
+  topics: [machine learning, surrogate, Gaussian process, SVR, AMM, DMM]
+  findings: GPR and SVR on measured TBR beat AMM/DMM on their data; film thickness is an important descriptor (the measured quantity carries film effects).
+  kb: ["15"]
+
+- key: foss2023tbc
+  cite: C. Foss & Z. Aksamija, "Machine learning enables robust prediction of thermal boundary conductance of 2D substrate interfaces", arXiv:2301.12639 (2023)
+  status: partial
+  topics: [machine learning, 2D materials, extrapolation, leave-one-out, Gaussian process]
+  findings: >
+    5,460 computed (DFT + Boltzmann) values for 156 2D/3D pairs; RMSE < 5
+    MW/m2K in-sample, but leave-one-material-out R2 ~0.75 and RMSE 20-30
+    MW/m2K, failing for materials at descriptor extremes. The held-out test is
+    the one that matters for a new pair.
+  kb: ["15"]
+
+- key: liu2026nep
+  cite: Liu, Shen, Cao, Xue, Wu, Lin, Mortazavi, Peng, Szlufarska & Wang, arXiv:2605.05620 (2026), Ga2O3/SiC with a neuroevolution potential
+  status: partial
+  topics: [NEP, Ga2O3, SiC, ideal interface vs experiment]
+  findings: >
+    NEP NEMD gives 550-700 MW/m2K for ideal Ga2O3/SiC; measured samples with
+    thin oxide or bonded interfaces are 140-162. An accurate potential on an
+    ideal interface still misses a real one by ~4x: interface structure, not
+    the potential, limits the comparison.
+  kb: ["15"]
+
+- key: sun2025gandiamond
+  cite: Z. Sun et al., "Heat transport exploration through the GaN/diamond interfaces using machine learning potential", Int. J. Heat Mass Transfer 241, 126724 (2025)
+  status: partial
+  topics: [NEP, GaN, diamond, termination]
+  findings: TBR 2.2-3.3 m2K/GW at 300 K depending on the bonded species (C-N ~25 % lower than C-Ga); compared with DMM only, not experiment.
+  kb: ["15"]
+
+- key: deng2024soft
+  cite: B. Deng et al., "Overcoming systematic softening in universal machine learning interatomic potentials by fine-tuning", arXiv:2405.07105 (2024)
+  status: partial
+  topics: [universal potential, foundation model, softening, fine-tuning, phonons]
+  findings: Universal MLIPs systematically under-predict energy-surface curvature (soft phonons); fine-tuning on a little target data corrects it. A foundation model needs fine-tuning before it is a Tier-2 route.
+  kb: ["15"]

@@ -229,8 +229,12 @@ class Session:
                         if self.result is not None and self.result.stack is None else None)
                 kap = to_kapitza(hit, a, b, T, spot, flags)
                 self.md_used = hit
-        return run_continuum(joint, kapitza=kap, flags=flags,
-                             with_uncertainty=with_uncertainty, n_samples=self.n_samples)
+        result = run_continuum(joint, kapitza=kap, flags=flags,
+                               with_uncertainty=with_uncertainty, n_samples=self.n_samples)
+        if self.md_used is not None and joint.fill is None:
+            from ..md.measured import potential_bias
+            potential_bias(self.md_used.pair, self.md_used.potential, result.flags)
+        return result
 
     def _md_into_bond_faces(self, joint, T: float, flags) -> None:
         """Use ingested MD at a bonded joint's faces where the materials match."""

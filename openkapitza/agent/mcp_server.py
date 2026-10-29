@@ -17,7 +17,8 @@ point:
               every number, attaches every warning, and refuses what it cannot
               support
 
-Every result carries `must_report`: the warnings and cautions the answer is not
+Every result carries `must_report`: the cautions, warnings and critical flags
+(most severe first) the answer is not
 honest without. The instructions tell the model to pass them on, and not to
 invent inputs. Defaults are listed separately so the model can say which values
 were assumed. Anything that spends compute (`submit_jobs`) or changes a deck is
@@ -144,7 +145,8 @@ class OpenKapitzaTools:
         r, p = self.s.result, self.s.plan
         d = result_to_dict(r, p, self.s.intake, self.s.md_used)
         flags = list(r.flags.flags) if hasattr(r, "flags") else []
-        must = [_flag(f) for f in flags if f.severity.name in ("WARNING", "CRITICAL")]
+        must = [_flag(f) for f in sorted(flags, key=lambda f: -f.severity)
+                if f.severity.name in ("CAUTION", "WARNING", "CRITICAL")]
         return {"explanation": explain(r, p), "result": d,
                 "must_report": must,
                 "defaults_used": dict(self.s.intake.defaulted),
@@ -268,7 +270,7 @@ def build_server(potentials: str | None = None, lmp: str | None = None,
         "clear_input": "Remove one input so it is asked again or defaults.",
         "show_inputs": "Inputs so far, the defaults accepted, what is missing.",
         "run_joint": "Compute the joint. Returns the plain-language explanation, the full "
-                     "result, must_report (warnings to pass on) and the defaults used.",
+                     "result, must_report (cautions and warnings to pass on) and the defaults used.",
         "what_if": "Re-run with one changed input and compare; the inputs are not changed.",
         "sweep": "One-parameter sweep. values: 'start:stop:n' (add ':log' for log spacing) "
                  "or 'v1,v2,...'.",

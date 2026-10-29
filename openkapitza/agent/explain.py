@@ -32,6 +32,9 @@ def confidence_word(result) -> str:
             Severity.CAUTION: "moderate", Severity.INFO: "good"}[worst]
 
 
+_KSRC = {"dmm_debye": "DMM placeholder", "md": "MD", "user": "your value"}
+
+
 def explain(result, plan: Plan) -> str:
     net = result.primary
     h, R = net.h_joint.si, net.R_total.si
@@ -67,6 +70,13 @@ def explain(result, plan: Plan) -> str:
     # atomistic route
     lines.append("")
     lines.append(f"Atomistic (MD) calculation: {plan.md} — {plan.md_reason}.")
+    if plan.measured:
+        k = result.kapitza
+        if k is not None:
+            lines.append(f"  {plan.measured}. In use: {k.h_K.si / 1e6:.0f} MW/m²K "
+                         f"({_KSRC.get(k.source, k.source)}).")
+        else:
+            lines.append(f"  {plan.measured}.")
     if plan.md_caveats:
         for f in plan.md_caveats:
             lines.append(f"  [{_SEV[f.severity]}] {f.message[5:]}")

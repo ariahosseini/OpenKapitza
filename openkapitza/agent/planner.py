@@ -61,6 +61,7 @@ class Plan:
     caveats_hidden: int = 0
     md_caveats: list = field(default_factory=list)    # the ingested MD run's own, ranked
     md_caveats_hidden: int = 0
+    measured: str | None = None                       # measured h for the pair, if any
 
 
 _ORDER = {Severity.CRITICAL: 0, Severity.WARNING: 1, Severity.CAUTION: 2, Severity.INFO: 3}
@@ -134,6 +135,11 @@ def plan(result, md_used=None) -> Plan:
         md, why = "in use", (f"h_K = {md_used.h_K / 1e6:.4g} ± {md_used.uncertainty / 1e6:.3g} "
                              f"MW/m²K from {md_used.potential} ({conv}); before it, {why}")
     p = Plan(md=md, md_reason=why)
+    if result.stack is None:
+        from ..md.measured import reference
+        ref = reference(inputs.material_a.key, inputs.material_b.key, inputs.temperature.si)
+        if ref is not None:
+            p.measured = ref.summary()
     if md not in ("not needed", "in use"):
         route = MD_ROUTES.get(pair)
         if route:

@@ -83,6 +83,14 @@ here (321) is 1.66× the best value. Tested in `tests/test_kapitza_measured.py`.
 This is the first measured target for the Kapitza term (the area-scaling
 bridge itself is still untested, below).
 
+The same eight rows seed `openkapitza/data/itr_measured.csv`, the reference
+table `md/measured.py` checks every h_K against (`tests/test_measured.py`
+keeps the two identical). The NIMS interfacial-thermal-resistance dataset
+(Wu, Zhan, Hou, Fang & Xu, Sci. Data 7, 36 (2020); Zenodo
+10.5281/zenodo.3564173; CC BY 4.0) is added with
+`python -m openkapitza.md.measured import FILE`: ITR in 1e-9 m²K/W is converted
+to h = 1/ITR and tagged `NIMS-ITR` with the original reference id.
+
 ## Grease TIMs — `tim_greases.csv`
 
 Five commercial greases, ASTM D5470 at 139 kPa, BLT 29–266 µm: DeVoto et al.,
