@@ -237,6 +237,11 @@ class TestSessionLoop(JobLoopBase):
         self.assertIn("no prepared job named", s.handle("submit nope local"))
         self.assertIn("plan names no MD jobs", s.handle("submit plan"))
 
+    def test_pasted_prompt_marker_is_ignored(self):
+        s = Session(lmp=self.lmp)
+        self.assertIn("No jobs submitted yet", s.handle(f"> jobs {self.root}"))
+        self.assertIn("Inputs so far", s.handle(">> show"))
+
     def test_tilde_paths_are_expanded(self):
         import os
         home = os.environ.get("HOME")

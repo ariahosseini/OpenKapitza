@@ -123,6 +123,8 @@ class Session:
     # ---- input -----------------------------------------------------------------
     def handle(self, text: str) -> str:
         t = text.strip()
+        while t.startswith(">"):                 # a pasted prompt marker ("> jobs ...")
+            t = t[1:].lstrip()
         low = t.lower()
         try:
             if low in ("quit", "exit", "q"):
