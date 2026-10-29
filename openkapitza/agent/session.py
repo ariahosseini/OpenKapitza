@@ -47,6 +47,12 @@ from .intake import Intake
 from .planner import Plan, plan
 
 HELP = __doc__.split("Commands at any prompt:")[1]
+
+
+def _path(text: str) -> str:
+    """A path as typed: '~' and $VARS expanded, surrounding quotes and spaces dropped."""
+    import os
+    return os.path.expandvars(os.path.expanduser(text.strip().strip('"').strip("'")))
 _LOOKUP_PREFIX = {"lammps": ("lammps",), "papers": ("papers",), "paper": ("papers",),
                   "repo": ("repo",), "docs": ("repo",)}
 
@@ -158,10 +164,10 @@ class Session:
                 return self._sweep(t[6:])
             if low.startswith("save "):
                 from .io import save_session
-                return f"Saved to {save_session(self, t[5:].strip())}."
+                return f"Saved to {save_session(self, _path(t[5:]))}."
             if low.startswith("load "):
                 from .io import load_session
-                load_session(self, t[5:].strip())
+                load_session(self, _path(t[5:]))
                 return (f"Loaded {t[5:].strip()} ({len(self.md)} MD result(s)).\n"
                         + self.prompt())
             if low.startswith("export "):
@@ -278,6 +284,7 @@ class Session:
                 f"'set {name}={value}' to keep it.")
 
     def _ingest(self, path: str) -> str:
+        path = _path(path)
         from .ingest import IngestError, ingest
         try:
             found = ingest(path)
@@ -335,6 +342,7 @@ class Session:
         return "\n".join(out)
 
     def _export(self, path: str) -> str:
+        path = _path(path)
         import json
         from .io import result_to_dict
         if self.result is None:
@@ -351,6 +359,7 @@ class Session:
         return render(self.result)
 
     def _prepare(self, folder: str) -> str:
+        folder = _path(folder) if folder else folder
         if self.plan is None:
             raise FieldError("run first")
         if not self.plan.cluster_jobs:
@@ -399,7 +408,7 @@ class Session:
             if w in ("local", "slurm"):
                 backend = w
             elif w.startswith("lmp="):
-                lmp = w[4:]
+                lmp = _path(w[4:])
             elif w.startswith("np="):
                 launcher = f"mpirun -np {int(w[3:])}"
             else:
@@ -432,7 +441,7 @@ class Session:
     def _jobs(self, arg: str) -> str:
         if arg:
             from pathlib import Path
-            self.jobs_root = str(Path(arg).resolve())
+            self.jobs_root = str(Path(_path(arg)).resolve())
         book = self._book()
         events = book.refresh()
         out = self._report_events(book, events)

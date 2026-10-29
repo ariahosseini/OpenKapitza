@@ -237,6 +237,19 @@ class TestSessionLoop(JobLoopBase):
         self.assertIn("no prepared job named", s.handle("submit nope local"))
         self.assertIn("plan names no MD jobs", s.handle("submit plan"))
 
+    def test_tilde_paths_are_expanded(self):
+        import os
+        home = os.environ.get("HOME")
+        os.environ["HOME"] = str(self.tmp)
+        try:
+            s = Session(lmp=self.lmp)
+            self.assertIn("No jobs submitted yet", s.handle("jobs ~/jobs"))
+            self.assertEqual(s.jobs_root, str(self.root.resolve()))
+            s.handle("save ~/s.json")
+            self.assertTrue((self.tmp / "s.json").is_file())
+        finally:
+            os.environ["HOME"] = home
+
     def test_save_load_keeps_job_folder(self):
         s = Session(lmp=self.lmp)
         s.handle(f"jobs {self.root}")
