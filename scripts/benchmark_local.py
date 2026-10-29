@@ -117,8 +117,14 @@ def run(lmp: str, deck: Path, np_: int, launcher: str, timeout: float) -> dict:
     shutil.copytree(deck, wd)
     cmd = ([lmp] if launcher == "none" else [launcher, "-np", str(np_), lmp]) + \
         ["-in", "nemd.in", "-log", "log.lammps", "-screen", "none"]
+    env = dict(os.environ)
+    if platform.system() == "Darwin":
+        # macOS's per-user TMPDIR is too long for Open MPI's shared-memory socket path
+        env["TMPDIR"] = "/tmp"
+        env.setdefault("OMPI_CC", "clang")
+        env.setdefault("OMPI_CXX", "clang++")
     t0 = time.time()
-    p = subprocess.run(cmd, cwd=wd, capture_output=True, text=True, timeout=timeout)
+    p = subprocess.run(cmd, cwd=wd, capture_output=True, text=True, timeout=timeout, env=env)
     wall = time.time() - t0
     log = (wd / "log.lammps").read_text(errors="replace") if (wd / "log.lammps").is_file() else ""
     if p.returncode != 0 or not log:
