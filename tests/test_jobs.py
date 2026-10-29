@@ -96,7 +96,8 @@ class JobLoopBase(unittest.TestCase):
         while time.time() - t0 < timeout:
             book = JobBook.open(self.root)
             events += book.refresh()
-            if not any(e.status in ("submitted", "running") for e in book.entries.values()):
+            if not any(e.status in ("submitted", "running", "queued")
+                       for e in book.entries.values()):
                 return book, events
             time.sleep(0.1)
         self.fail("jobs did not stop")
@@ -105,6 +106,7 @@ class JobLoopBase(unittest.TestCase):
 class TestLocalLoop(JobLoopBase):
     def test_every_outcome_is_classified(self):
         book = JobBook.open(self.root)
+        book.config["local_slots"] = len(self.JOBS)          # all at once (fake jobs are tiny)
         evs = book.submit(["all"], backend="local", lmp=self.lmp)
         self.assertEqual(sum(e.what == "started" for e in evs), len(self.JOBS))
         book, events = self.settle(book)
@@ -160,6 +162,38 @@ class TestLocalLoop(JobLoopBase):
         self.settle(book)
         self.assertEqual((self.root / "sial_pp" / "run.sh").read_text(), "#!/bin/bash\n# prepared\n")
 
+    def test_local_jobs_run_one_after_another(self):
+        slow = _exe(self.tmp / "slowish_lmp",
+                    "#!/bin/bash\nsleep 0.6\ncp \"$FIX\"/log.lammps \"$FIX\"/temperature_profile.dat "
+                    "\"$FIX\"/reservoir_energy.dat .\n")
+        book = JobBook.open(self.root)
+        evs = book.submit(["sial_pp", "lost", "nan"], backend="local", lmp=str(slow))
+        self.assertEqual([e.what for e in evs], ["started", "queued", "queued"])
+        self.assertEqual(book._local_busy(), 1)
+        peak, t0 = 1, time.time()
+        while time.time() - t0 < 20:
+            book = JobBook.open(self.root)
+            book.refresh()
+            peak = max(peak, book._local_busy())
+            if all(book.entries[n].status == "completed" for n in ("sial_pp", "lost", "nan")):
+                break
+            time.sleep(0.1)
+        self.assertEqual(peak, 1)                                    # never two at once
+        for n in ("sial_pp", "lost", "nan"):
+            self.assertEqual(book.entries[n].status, "completed", n)
+        order = sorted(("sial_pp", "lost", "nan"), key=lambda n: book.entries[n].handle["submitted_at"])
+        self.assertEqual(order, ["sial_pp", "lost", "nan"])          # in the order queued
+
+    def test_queued_job_can_be_cancelled(self):
+        slow = _exe(self.tmp / "slow2_lmp", "#!/bin/bash\nsleep 30\n")
+        book = JobBook.open(self.root)
+        book.submit(["sial_pp", "lost"], backend="local", lmp=str(slow))
+        self.assertEqual(book.entries["lost"].status, "queued")
+        ev = book.cancel(["lost"])
+        self.assertIn("removed from the local queue", ev[0].message)
+        book.cancel(["sial_pp"])
+        self.assertEqual(book.refresh(), [])                         # nothing left to start
+
     def test_selection_and_errors(self):
         book = JobBook.open(self.root)
         with self.assertRaises(JobError):
@@ -185,7 +219,8 @@ class TestSessionLoop(JobLoopBase):
         out = s.handle(f"jobs {self.root}")
         self.assertIn("No jobs submitted yet", out)
         out = s.handle("submit sial_pp bad_input local")
-        self.assertIn("Submitted 2 job(s)", out)
+        self.assertIn("Submitted 1 job(s)", out)
+        self.assertIn("1 queued to run one after another", out)
         out = s.handle("watch 0.1")
         self.assertIn("sial_pp: finished", out)
         self.assertIn("Measured:", out)                       # ingested automatically

@@ -2100,6 +2100,35 @@ re-ran from 858 to 905 kW/m²K with the MD caveats attached: 39 % error,
 single cell, mean T 260 K against 300 K. The loop is verified; the number is
 still a plumbing number, not a converged one.
 
+### Measured on the user's Apple M3 Pro (28 Oct)
+
+`scripts/benchmark_local.py`: 5 performance + 6 efficiency cores, 18 GB,
+LAMMPS stable_30Sep2026 built with Homebrew and Open MPI. The rates in
+atom-steps per second are total, with per core in brackets:
+
+| potential | np = 4 | np = 5 | np = 8 |
+|---|---|---|---|
+| Tersoff (Si/Ge, 35,840 atoms) | 4.2e6 (1.05e6) | **5.2e6** (1.04e6) | 3.6e6 (4.5e5) |
+| MEAM (Si/Al, 28,836 atoms) | 4.5e5 (1.12e5) | 5.7e5 (1.13e5) | **6.2e5** (7.7e4) |
+
+- **Scaling from 4 to 5 ranks is perfect.** Adding efficiency cores (np = 8)
+  makes Tersoff 31 % slower, because every rank waits for the slowest. MEAM,
+  with more work per atom, gains 9 %.
+- **One M3 performance core is 2.3× the cost model's Tersoff figure** and
+  1.5× a cloud container core, for both potentials.
+- **Sizes of all 22 prepared jobs here:**
+  - Every Tersoff job, including the whole Si/Ge campaign: 0.3–5.3 h each,
+    ~33 h in total.
+  - Si/Al phonon-only: ~40 h. Si/Al two-temperature: ~40 h, more with the
+    TTM fix.
+  - Si/Cu: ~51 h.
+  - Everything: ~164 h, about a week of continuous running.
+- **The job loop launched every local job at once.** With 16 campaign rungs
+  that is 80 ranks on 11 cores. Fixed: local jobs queue and run one at a
+  time (`LOCAL_SLOTS`).
+- Sustained runs may be slower than the 30–130 s benchmark if the laptop
+  throttles; the first long job's log will show it.
+
 ### Four defects found building it
 
 - **`tests/test_rag.py` broke the documented test command.** It was written

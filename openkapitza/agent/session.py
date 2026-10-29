@@ -421,8 +421,10 @@ class Session:
             self.lmp = lmp
         lines = [f"  {ev.name}: {ev.message}" for ev in events]
         started = sum(ev.what == "started" for ev in events)
+        queued = sum(ev.what == "queued" for ev in events)
         nh = sum(book.entries[ev.name].node_hours or 0 for ev in events if ev.what == "started")
-        head = f"Submitted {started} job(s)" + (f", ~{nh:.1f} node-hours" if nh else "") + ":"
+        head = f"Submitted {started} job(s)" + (f", ~{nh:.1f} node-hours" if nh else "") + \
+            (f"; {queued} queued to run one after another on this machine" if queued else "") + ":"
         return "\n".join([head] + lines + [
             "Nothing waits on them. 'jobs' polls once; 'watch' polls until they stop. "
             "Finished jobs are measured and used automatically."])
@@ -476,7 +478,8 @@ class Session:
                 events = book.refresh()
                 for line in self._report_events(book, events):
                     say(line)
-                live = [e for e in book.entries.values() if e.status in ("submitted", "running")]
+                live = [e for e in book.entries.values()
+                        if e.status in ("submitted", "running", "queued")]
                 if not live:
                     say("Nothing running.")
                     break

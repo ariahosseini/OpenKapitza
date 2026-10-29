@@ -31,6 +31,12 @@ from .runner import Resources
 #            5.6e5  Si/Ge 4,960 atoms, cloud x86, NPT, 2 jobs on 2 cores, 22 Oct
 #   sw       5.0e5  SW-Si 2,048 atoms, cloud x86, NVE + Langevin, 22 Oct
 #   meam     9.3e4  Si/Al (Jelinek MEAM) 6,680 atoms, cloud x86, NPT/NVT, 22 Oct
+#   tersoff  1.04e6 per P-core  Si/Ge 35,840 atoms, Apple M3 Pro, np=4-5, 28 Oct
+#            (scripts/benchmark_local.py; np=8 adds E-cores and is SLOWER: 3.6e6 total
+#            vs 5.2e6 at np=5)
+#   meam     1.13e5 per P-core  Si/Al 28,836 atoms, Apple M3 Pro, np=4-5, 28 Oct
+#            (np=8: 6.2e5 total, +9 % over np=5)
+# Per-machine rates live in ~/.config/openkapitza/throughput.json (local_estimate).
 # Re-measure on the cluster with one short run before the campaign.
 THROUGHPUT = {
     "sw": 5.0e5,          # Stillinger-Weber, 3-body (measured, see above)

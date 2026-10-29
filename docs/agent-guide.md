@@ -308,6 +308,9 @@ job with its hours here and a verdict: here overnight (≤ 10 h), here but long
 (≤ 48 h), or cloud. After that, `submit ... local` states the measured time:
 "~6.2 h here at np=5". Use one rank per performance core: on Apple Silicon,
 efficiency cores are about half as fast, and every rank waits for the slowest.
+Local jobs run **one at a time**: each already uses the fast cores, so the
+rest wait in a queue (`queued` in `jobs`) and start, in order, as each one
+finishes. That needs polling: keep `watch` running, or poll from cron.
 
 Nothing waits on a job: each poll checks once and returns, and the state is
 kept in `DIR/jobs.json`. A new session picks the jobs up with `jobs DIR`, and

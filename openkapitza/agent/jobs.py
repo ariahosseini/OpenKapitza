@@ -43,6 +43,7 @@ from ..compute.runner import JobHandle, JobSpec, JobState, LocalRunner, SlurmRun
 
 BOOK_FILE = "jobs.json"
 MAX_ATTEMPTS = 3
+LOCAL_SLOTS = 1           # local jobs at once: each already uses every fast core (np)
 WALLTIME_GROWTH = 1.5
 WALLTIME_CAP_HOURS = 72.0
 DONE_MARKER = "OPENKAPITZA_DONE"
@@ -70,8 +71,9 @@ class JobEntry:
     name: str                              # as in manifest.json ("campaign/r03" etc.)
     workdir: str
     backend: str = ""
-    status: str = "prepared"               # prepared | submitted | running | completed |
-                                           # failed | cancelled | ingested | gave_up
+    status: str = "prepared"               # prepared | queued | submitted | running |
+                                           # completed | failed | cancelled | ingested |
+                                           # gave_up   (queued: local, waiting for a slot)
     attempts: int = 0
     handle: dict | None = None
     diagnosis: dict | None = None
@@ -159,14 +161,42 @@ class JobBook:
         self.config["backend"] = backend
         events = []
         for e in self.select(names):
-            if e.status in ("submitted", "running") and not resubmit:
-                events.append(Event(e.name, "skipped", "already running"))
+            if e.status in ("submitted", "running", "queued") and not resubmit:
+                events.append(Event(e.name, "skipped", f"already {e.status}"))
                 continue
             if e.status in ("completed", "ingested") and not resubmit:
                 events.append(Event(e.name, "skipped", "already finished"))
                 continue
+            if backend == "local" and self._local_busy() >= self.local_slots:
+                # a local job already takes every fast core: run one after another
+                e.status, e.backend, e.diagnosis = "queued", "local", None
+                e.log("queued (local, waiting for a free slot)")
+                events.append(Event(e.name, "queued",
+                                    f"queued: runs when the {self._local_busy()} local job(s) "
+                                    f"ahead of it finish" + _local_note(
+                                        e, self.config.get("launcher", ""))))
+                continue
             events.append(self._launch(e, backend))
         self.save()
+        return events
+
+    @property
+    def local_slots(self) -> int:
+        return int(self.config.get("local_slots", LOCAL_SLOTS))
+
+    def _local_busy(self) -> int:
+        return sum(1 for e in self.entries.values()
+                   if e.backend == "local" and e.status in ("submitted", "running"))
+
+    def _start_queued(self) -> list[Event]:
+        """Start queued local jobs, in the order they were queued, while slots are free."""
+        events = []
+        queued = [e for e in self.entries.values() if e.status == "queued"]
+        queued.sort(key=lambda e: next((h for h in e.history if "queued" in h), ""))
+        for e in queued:
+            if self._local_busy() >= self.local_slots:
+                break
+            events.append(self._launch(e, "local"))
         return events
 
     def _launch(self, e: JobEntry, backend: str, walltime_hours: float | None = None) -> Event:
@@ -205,6 +235,11 @@ class JobBook:
     def cancel(self, names: list[str]) -> list[Event]:
         events = []
         for e in self.select(names):
+            if e.status == "queued":
+                e.status = "cancelled"
+                e.log("cancelled while queued")
+                events.append(Event(e.name, "cancelled", "removed from the local queue"))
+                continue
             if e.status not in ("submitted", "running") or not e.handle:
                 continue
             h = JobHandle(**e.handle)
@@ -256,6 +291,7 @@ class JobBook:
                 e.log(f"failed: {d.summary}")
                 why = (f" after {e.attempts} attempts" if d.auto_resubmit else "")
                 events.append(Event(e.name, "failed", d.summary + why, d))
+        events += self._start_queued()
         self.save()
         return events
 
