@@ -294,6 +294,21 @@ After `prepare jobs DIR`, the agent can run them and bring the results back.
 > watch 300                         # poll every 5 min until nothing runs
 ```
 
+**On your own machine**, measure it first. On a Mac, `bash
+scripts/mac_setup_lammps.sh` builds the same LAMMPS (stable_30Sep2026, MANYBODY,
+MEAM, EXTRA-FIX, EXTRA-COMPUTE, OpenMP if Apple's compiler takes Homebrew's
+libomp) with Homebrew and Open MPI, and prints the next command:
+
+    python3 scripts/benchmark_local.py --lmp ~/lammps-openkapitza/build/lmp \
+        --potentials ~/lammps-openkapitza/potentials          # --np 4 5 8 by default
+
+It times short Si/Ge Tersoff and Si/Al MEAM decks at each rank count, saves
+the rates to `~/.config/openkapitza/throughput.json`, and lists every prepared
+job with its hours here and a verdict: here overnight (≤ 10 h), here but long
+(≤ 48 h), or cloud. After that, `submit ... local` states the measured time:
+"~6.2 h here at np=5". Use one rank per performance core: on Apple Silicon,
+efficiency cores are about half as fast, and every rank waits for the slowest.
+
 Nothing waits on a job: each poll checks once and returns, and the state is
 kept in `DIR/jobs.json`. A new session picks the jobs up with `jobs DIR`, and
 a cron job or scheduled task can poll with no session at all:

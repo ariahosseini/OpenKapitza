@@ -14,7 +14,10 @@ on it.
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..schema.flags import Code, FlagSet, Severity
 from .runner import Resources
@@ -168,3 +171,36 @@ def resources_for(
         partition=partition,
         account=account,
     )
+
+
+# ---- measured rates for THIS machine (scripts/benchmark_local.py) -------------------
+DEFAULT_CALIBRATION = Path(os.environ.get(
+    "OPENKAPITZA_THROUGHPUT", Path.home() / ".config" / "openkapitza" / "throughput.json"))
+
+
+def load_calibration(path: Path | str | None = None) -> dict | None:
+    """The benchmark's measured rates, or None if this machine was never measured."""
+    p = Path(path) if path else DEFAULT_CALIBRATION
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def local_estimate(n_atoms: int, n_timesteps: int, potential: str,
+                   calibration: dict | None = None) -> dict | None:
+    """Hours for a run on the measured machine at its fastest rank count.
+
+    Uses the measured total rate (atom-steps per second at the best `np`), so
+    parallel efficiency is already in it. None when the machine or the
+    potential was not measured: then fall back to `estimate_cost`.
+    """
+    cal = calibration if calibration is not None else load_calibration()
+    if not cal:
+        return None
+    s = cal.get("styles", {}).get(potential.lower().split("/")[0])
+    if not s:
+        return None
+    secs = n_atoms * n_timesteps / s["atom_steps_per_s"]
+    return {"hours": secs / 3600.0, "np": s["best_np"], "machine": cal.get("processor") or
+            cal.get("host", "this machine"), "measured": cal.get("date")}

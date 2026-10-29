@@ -93,7 +93,8 @@ Routes today: Si/Al and Si/Cu (Jelinek MEAM, passes the elastic gate), Si/Ge
 melt-quenched a-SiO₂). None has a converged, validated h_K yet. `scripts/prepare_cluster.py`
 writes every job, validated and costed (22 jobs, ~70 node-hours);
 [`docs/cluster-runbook.md`](docs/cluster-runbook.md) says what to run in what
-order. The agent submits them (`submit plan`, on SLURM or locally), polls,
+order; `scripts/benchmark_local.py` times your own machine on the same decks
+and says which jobs fit it. The agent submits them (`submit plan`, on SLURM or locally), polls,
 retries what the cluster broke (timeouts, node failures), diagnoses input and
 physics failures with knowledge-base citations without "fixing" them, and
 measures finished runs into the joint automatically.

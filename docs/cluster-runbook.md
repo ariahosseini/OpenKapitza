@@ -65,6 +65,12 @@ run the base campaign rung for ~20 ps on its planned core count, read
 `openkapitza/compute/resources.py` (atom-steps per core-second). A job
 killed at the wall loses everything; the safety factor is only 2x.
 
+`scripts/benchmark_local.py --lmp LMP --potentials DIR [--np 16 32 64]` does
+this automatically on any machine where `mpirun` runs: short Si/Ge Tersoff and
+Si/Al MEAM decks, MD segments timed from `Loop time`, the rates saved to
+`~/.config/openkapitza/throughput.json`, and every prepared job sized from
+them.
+
 ## 3. Equilibration time (P1-12)
 
 Write the campaign (step 4) first, then run only the base rung `r00_*` with

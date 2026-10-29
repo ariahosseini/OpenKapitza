@@ -77,6 +77,8 @@ class JobEntry:
     diagnosis: dict | None = None
     history: list[str] = field(default_factory=list)
     node_hours: float | None = None
+    atoms: int | None = None
+    steps: int | None = None
 
     def log(self, msg: str) -> None:
         self.history.append(f"{time.strftime('%Y-%m-%d %H:%M')} {msg}")
@@ -129,7 +131,8 @@ class JobBook:
             if j["name"] not in self.entries:
                 self.entries[j["name"]] = JobEntry(
                     name=j["name"], workdir=str(self.root / j["name"]),
-                    node_hours=j.get("node_hours"))
+                    node_hours=j.get("node_hours"), atoms=j.get("atoms"),
+                    steps=j.get("steps"))
 
     # ---- selection -------------------------------------------------------------
     def select(self, names: list[str]) -> list[JobEntry]:
@@ -194,7 +197,10 @@ class JobBook:
         e.backend, e.status, e.diagnosis = backend, "submitted", None
         e.attempts += 1
         e.log(f"submitted ({backend}, attempt {e.attempts}, id {handle.native_id})")
-        return Event(e.name, "started", f"submitted on {backend} (id {handle.native_id})")
+        msg = f"submitted on {backend} (id {handle.native_id})"
+        if backend == "local":
+            msg += _local_note(e, self.config.get("launcher", ""))
+        return Event(e.name, "started", msg)
 
     def cancel(self, names: list[str]) -> list[Event]:
         events = []
@@ -410,6 +416,26 @@ def _set_walltime(script: Path, hours: float) -> None:
     new = f"#SBATCH --time={_walltime(hours)}"
     s = _TIME.sub(new, s) if _TIME.search(s) else s.replace("#!/bin/bash\n", f"#!/bin/bash\n{new}\n", 1)
     script.write_text(s)
+
+
+def _local_note(e: JobEntry, launcher: str) -> str:
+    """'; ~6.2 h here at np=5 (measured 2026-10-28)' when this machine was benchmarked."""
+    from ..compute.resources import local_estimate
+    if not e.atoms or not e.steps:
+        return ""
+    try:
+        from ..md.campaign import read_spec
+        style = read_spec(Path(e.workdir))[0].pair_style
+    except Exception:                       # no spec: no estimate, never a failure
+        return ""
+    est = local_estimate(e.atoms, e.steps, style)
+    if est is None:
+        return ("; no measured speed for this machine (scripts/benchmark_local.py gives one)")
+    m = re.search(r"-np\s+(\d+)", launcher)
+    ranks = f"np={m.group(1)}" if m else "serial"
+    tip = "" if m and int(m.group(1)) == est["np"] else f"; fastest at np={est['np']}"
+    return (f"; ~{est['hours']:.1f} h here at np={est['np']} (measured {est['measured']}), "
+            f"running {ranks}{tip}")
 
 
 def _default_backend() -> str:
