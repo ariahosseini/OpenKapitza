@@ -48,6 +48,19 @@ WALLTIME_GROWTH = 1.5
 WALLTIME_CAP_HOURS = 72.0
 DONE_MARKER = "OPENKAPITZA_DONE"
 OUTPUTS = ("temperature_profile.dat",)
+# what each kind of deck prints at its end and must leave behind (spec.json kind)
+_FINISH = {"nemd": (DONE_MARKER, "temperature_profile.dat"),
+           "emd": ("OPENKAPITZA_EMD_DONE", "emd_temperatures.dat")}
+
+
+def _finish_for(wd: Path) -> tuple[str, str]:
+    """End marker and main output for the job in `wd` (NEMD unless spec.json says)."""
+    try:
+        from ..md.campaign import read_spec
+        kind = read_spec(wd)[1]
+    except Exception:
+        kind = "nemd"
+    return _FINISH.get(kind, _FINISH["nemd"])
 
 
 class JobError(ValueError):
@@ -361,15 +374,16 @@ def diagnose(wd: Path, state: JobState, handle: JobHandle | None = None) -> Diag
     text = "\n".join((native, err, log[-20000:], out[-20000:]))
 
     if state is JobState.COMPLETED:
-        missing = [f for f in OUTPUTS if not (wd / f).is_file()]
-        if DONE_MARKER not in log and DONE_MARKER not in out:
-            return Diagnosis("output", f"Exited 0 but never reached {DONE_MARKER}",
+        marker, output = _finish_for(wd)
+        missing = [] if (wd / output).is_file() else [output]
+        if marker not in log and marker not in out:
+            return Diagnosis("output", f"Exited 0 but never reached {marker}",
                              "The run stopped early without an error, or the log was not "
                              "captured. Nothing to measure.", fixes=[
                                  "Look at the end of log.lammps; resubmit if it was cut off."])
-        if missing or _header_only(wd / OUTPUTS[0]):
+        if missing or _header_only(wd / output):
             return _with_citations(Diagnosis(
-                "output", "Finished, but the temperature profile is empty",
+                "output", f"Finished, but {output} is missing or empty",
                 "LAMMPS exits 0 when fix ave/chunk never writes a frame (known silent "
                 "failure).", fixes=["Check profile_every × profile_frames against the "
                                     "production length."]),

@@ -339,6 +339,20 @@ class TestDiagnose(unittest.TestCase):
             (Path(d) / "log.lammps").write_text("Step Temp\n")
             self.assertEqual(diagnose(Path(d), JobState.COMPLETED).kind, "output")
 
+    def test_emd_job_has_its_own_end_marker_and_output(self):
+        """An EMD deck ends with OPENKAPITZA_EMD_DONE and writes emd_temperatures.dat
+        (sige_emd on the M3 Pro was wrongly called a failure before this)."""
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            wd = Path(d)
+            spec = json.loads((FIX / "spec.json").read_text())
+            spec["kind"] = "emd"
+            (wd / "spec.json").write_text(json.dumps(spec))
+            (wd / "log.lammps").write_text('print "OPENKAPITZA_EMD_DONE"\nOPENKAPITZA_EMD_DONE\n')
+            self.assertEqual(diagnose(wd, JobState.COMPLETED).kind, "output")   # no series yet
+            (wd / "emd_temperatures.dat").write_text("# t Ta Tb\n0 300 300\n")
+            self.assertEqual(diagnose(wd, JobState.COMPLETED).kind, "ok")
+
     def test_fixture_is_ok(self):
         self.assertEqual(diagnose(FIX, JobState.COMPLETED).kind, "ok")
 
