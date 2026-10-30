@@ -249,7 +249,8 @@ def _emd_cross_check(wd: Path, nemd: MDResult) -> dict | None:
         nemd.notes.append(f"EMD job {wd.name} unreadable: {exc}")
         return None
     check(res, nemd.flags, h_nemd=nemd.h_K)
-    return {"h": res.h, "h_err": res.h_err, "ratio_nemd_over_emd": res.ratio_nemd}
+    return {"h": res.h, "h_err": res.h_err, "ratio_nemd_over_emd": res.ratio_nemd,
+            "h_fast": res.h_fast, "slow_weight": res.slow_weight}
 
 
 # ---- applying ------------------------------------------------------------------

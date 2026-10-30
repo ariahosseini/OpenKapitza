@@ -2376,20 +2376,54 @@ decks are pending. Measured with `agent.ingest` on the staged outputs.
 
 **EMD cross-check (sige_emd).** It completed (16 M steps, 5.4 h); the job
 loop first called it a failure because the diagnosis expected the NEMD end
-marker (fixed: per-kind marker and output). Result: h = 32 ± 9 MW/m²K, so
-NEMD/EMD = 15.6, outside the expected 1–10 (~3 for Si/Ge, Merabia &
-Termentzidis). The series is 209 relaxation times long (EMD_SHORT, ~5–10 %).
-That does not explain a factor 5 beyond expectation. The EMD cell is tiny
-(2 nm slabs, 6,656 atoms), and the fluctuation method's slow time mixes slab
-conduction into the interface time when slabs are thin. **Open:** EMD
-slab-size dependence before either number is trusted against the other.
+marker (fixed: per-kind marker and output). The two-exponential fit, slow
+time taken as the interface, gives h = 32 ± 9 MW/m²K, so NEMD/EMD = 15.6,
+outside the expected 1–10 (~3 for Si/Ge, Merabia & Termentzidis).
+
+*Re-analysis (30 Oct).* The number is not determined by this run:
+- **Two decays, neither clearly the interface.** τ_fast = 1.3 ps (23 % of
+  the variance, h = 1.86 GW/m²K) and τ_slow = 77 ps (73 %, h = 32 MW/m²K).
+  The NEMD value, 485 MW/m²K, implies τ = C_r/(hA) = 5.1 ps, between the two.
+  A single exponential gives h from 575 (fit over the first 10 % of the
+  decay) to 20 MW/m²K (whole tail), depending only on the window.
+- **The fluctuations have the canonical size.** var(ΔT) = 28.9 K² against
+  k_BT²/C_r = 25.4 K² (ratio 1.14), so the series is an equilibrium one and
+  the extra slow variance is not a drift or a heating artefact.
+- **Not energy leakage.** E_a + E_b is conserved to 0.16 K (σ), and its
+  autocorrelation is 0.14 by 1 ps. The kinetic-temperature ΔT shows the same
+  slow shape at about half the amplitude.
+- **Reproducible.** The normalised ACF at 50 ps is 0.28, 0.35, 0.41, 0.38 in
+  the four 4 ns quarters; beyond ~100 ps it is noise (209 slow times in the
+  run gives ±0.07).
+- **Leading suspect: slow phonon modes spanning both slabs.** The mobile
+  slabs are 2.5 nm each (4,736 atoms). The lumped model assumes each slab is
+  internally at one temperature and exchanges energy only through the
+  interface. A long-wavelength mode extended across both slabs carries a
+  fixed share of its energy on each side, so its amplitude fluctuations move
+  ΔT and decay at the mode's anharmonic lifetime (tens to hundreds of ps for
+  low-frequency acoustic modes in Si at 300 K), not at C_r/(hA). This is a
+  hypothesis, not a measurement.
+
+*What changed.* `check()` now raises EMD_TWO_TIMESCALES (WARNING) when the
+two decays are more than 10× apart and each carries more than 15 % of the
+variance, reporting the h bracket rather than the slow-component value; the
+ingest result carries h_fast and the slow weight. *Diagnostic, if wanted:*
+the same run with slabs twice as long (≈10 h on the M3 Pro). An interface
+time doubles with the slab heat capacity; a mode lifetime does not. Until
+then EMD is a cross-check that did not resolve, and the NEMD numbers stand on
+their own convergence evidence.
 
 **Si/a-SiO₂ (Tersoff, 4 nm cells).**
 - **Strong bonding:** 1.17 ± 0.25 GW/m²K, inside Chen, Zhang & Li's 2012
   bracket (≈1.2, strong).
-- **Weak bonding:** 1.06 ± 0.29 against ≈0.23 for weak. The "weak" cell
-  conducts like a strongly bonded interface; relaxation may have bonded it
-  (§4, "an anneal can leave the interface…"). Check the interface bonding in
-  `relaxed.data`.
+- **Weak bonding:** 1.06 ± 0.29 against ≈0.23 for weak. Bonding checked
+  in `relaxed.data` (30 Oct): interface O coverage went from 0 % as built to
+  21 % after relaxation (22 of 25 dangling O bonded across), while the
+  strong cell stayed at 116 % (117 % built). So relaxation partly bonds the
+  weak cell, but 21 % is still far from strong, and the two cells conduct
+  alike. **The 4 nm cells cannot resolve bonding:** the a-SiO₂ slab's own
+  resistance (~3 × 10⁻⁹ m²K/W) is comparable to the interface's, the jump is
+  ~6 K ± 15 %, and the fit uses ~8 bins. Fix: the 8 nm glass quenched at
+  10¹² K/s (P2-5 commands).
 - **Both runs:** NEMD_FLUX_INCONSISTENT (hot/cold fluxes 13–15 % apart);
   the weak run also has NEMD_POOR_FIT. Small cells; not yet quotable.

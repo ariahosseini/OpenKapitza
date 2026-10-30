@@ -114,6 +114,10 @@ def autocorrelation(x: np.ndarray) -> np.ndarray:
 # mean-subtracted ACF), with 15 % and 7 % scatter. Fitting down to 0.5 ACF(0)
 # gave the least scatter of the windows tried (0.2-0.6).
 MIN_DURATION_TAU = 500.0
+# Two decays this far apart, each carrying this much of the variance, leave h
+# undetermined (first Si/Ge run: 1.3 ps / 77 ps, 23 % / 73 %).
+TWO_TIMESCALE_SEP = 10.0
+TWO_TIMESCALE_WEIGHT = 0.15
 
 
 def fit_tau(t: np.ndarray, acf: np.ndarray, *, lo: float = 1.0, hi: float = 0.5) -> float:
@@ -176,6 +180,11 @@ class EMDResult:
     ratio_nemd: float | None = None
     tau_fast: float | None = None    # s, biexponential fit only
     slow_weight: float | None = None
+
+    @property
+    def h_fast(self) -> float | None:
+        """h if the FAST biexponential component were the interface."""
+        return self.c_r / (self.area * self.tau_fast) if self.tau_fast else None
 
 
 def h_from_series(time_ps: np.ndarray, dT: np.ndarray, n_a: int, n_b: int,
@@ -249,6 +258,26 @@ def check(result: EMDResult, flags: FlagSet, *, h_nemd: float | None = None,
             remedy=f"Run >= {MIN_DURATION_TAU:.0f} tau of production.",
             duration_in_tau=n_tau,
         )
+    if result.tau_fast and result.slow_weight is not None:
+        sep = result.tau / result.tau_fast
+        w = result.slow_weight
+        if sep > TWO_TIMESCALE_SEP and TWO_TIMESCALE_WEIGHT < w < 1 - TWO_TIMESCALE_WEIGHT:
+            flags.add(
+                Code.EMD_TWO_TIMESCALES, Severity.WARNING,
+                f"The dT autocorrelation has two well-separated decays "
+                f"({result.tau_fast * 1e12:.2g} ps, weight {1 - w:.0%}; "
+                f"{result.tau * 1e12:.3g} ps, weight {w:.0%}). The lumped two-slab model "
+                f"behind h = C_r/(A tau) has one; h lies between "
+                f"{result.h / 1e6:.3g} (slow) and {result.h_fast / 1e6:.3g} MW/m^2K (fast) "
+                f"and is not determined by this run. In the first Si/Ge run (KB section 17) "
+                f"the slow part was not energy leakage and did not scale like an interface "
+                f"time; slow-relaxing phonon modes that span both slabs are the leading "
+                f"suspect.",
+                remedy="Treat EMD as unresolved. Diagnose with a run whose slabs are twice "
+                       "as long (an interface time doubles, a mode lifetime does not) or "
+                       "at a higher temperature (mode lifetimes shorten ~1/T).",
+                h_slow=result.h, h_fast=result.h_fast, separation=sep, slow_weight=w,
+            )
     if bulk is not None:
         r_bulk = max(L / k for L, k in bulk)
         if r_bulk > 0.2 / result.h:

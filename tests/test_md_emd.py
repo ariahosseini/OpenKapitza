@@ -48,6 +48,21 @@ class Analysis(unittest.TestCase):
         self.assertLess(r.tau_fast / 1e-12, 2.0)
         self.assertAlmostEqual(r.slow_weight, 0.5, delta=0.1)
 
+    def test_two_separated_timescales_leave_h_undetermined(self):
+        dt = 0.02
+        slow = _ou(25.0, 400_000, dt, sigma=6.0, seed=3)
+        fast = _ou(0.3, 400_000, dt, sigma=6.0, seed=4)
+        t = np.arange(len(slow)) * dt
+        r = h_from_series(t, slow + fast, 600, 600, 5e-18, model="biexp")
+        f = FlagSet(); check(r, f)
+        flag = next(x for x in f.flags if x.code == Code.EMD_TWO_TIMESCALES)
+        self.assertEqual(flag.severity, Severity.WARNING)
+        self.assertGreater(r.h_fast, 10 * r.h)
+        # a clean single process is not flagged
+        one = _ou(14.0, 400_000, dt, seed=5)
+        f = FlagSet(); check(h_from_series(t, one, 600, 600, 5e-18), f)
+        self.assertNotIn(Code.EMD_TWO_TIMESCALES, f.codes())
+
     def test_short_series_is_flagged(self):
         dT = _ou(14.0, 100_000, 0.01); t = np.arange(len(dT)) * 0.01   # ~70 tau
         f = FlagSet(); check(h_from_series(t, dT, 1000, 1000, 4.8e-18), f)
