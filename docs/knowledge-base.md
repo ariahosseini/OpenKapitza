@@ -2340,3 +2340,56 @@ before the failure.
 
 On the 16 nm and shorter decks the relaxation length is unchanged; only the
 ramp and the report are added.
+
+## 17. First campaign results: Si/Ge, Si/SiO₂, EMD (M3 Pro, 28–30 Oct 2026)
+
+18 of 22 prepared jobs ran locally (5 ranks, Apple M3 Pro). Not run: r07
+(failed, §16) and the three MEAM jobs. The r06/r07 re-runs on the fixed
+decks are pending. Measured with `agent.ingest` on the staged outputs.
+
+**Si/Ge, Tersoff (SiCGe), 300 K** (MW/m²K; base cell r00 = 483 ± 20):
+
+| axis | values | verdict (5 % tolerance) |
+|---|---|---|
+| cross-section 2.2 / 3.3 / 4.3 / 5.4 / 6.5 nm | 493, 493, 483, 478, 503 | unresolved: 5.0 ± 4.1 % |
+| length 8 / 16 / 32 / 64 nm | 499, 483, 528 (unsettled, §16), — | open: re-runs pending |
+| duration 250 / 500 / 1000 ps | 482, 483, 489 | unresolved: 1.1 ± 4.7 % |
+| ΔT 20 / 40 / 60 K | 402 (NEMD_UNEQUILIBRATED), 483, 465 | FLUX_NONLINEAR 17.6 %, driven by the 20 K run |
+| reservoir 1 / 2 / 4 nm | 505, 483, 514 | unresolved: 6.3 ± 7.6 % |
+| spot pressure 2 GPa, stress / strain | 485, 523 | — |
+
+- **"Unresolved" is honest, not a failure.** Every change is inside its
+  noise, but ±4–8 % errors cannot certify 5 %. The error bars are probably
+  understated 2–3× as well (NEMD_ERROR_UNDERSTATED on most rungs).
+- **Like for like it is close to the literature.** h_K ≈ 485 at 16 nm
+  against Feng et al. (PRB 99, 045301, 2019): 450 at ~152 nm with the same
+  Tersoff potential on lattice-matched Ge. That is +8 % with a
+  relaxed-mismatch cell. The 266–368 range comes from other potentials and
+  methods; comparing against it (as said on 29 Oct) mixes potentials.
+- **The 20 K run did not reach steady state** (the jump trends +71 ± 13 %
+  across production). At half the temperature difference the signal is half;
+  it needs a longer steady stage to count.
+- **Spot pressure.** Relaxation Pzz over the slab: 1.89 (stress) and 1.87
+  (strain) GPa under 2 GPa. The relax guard first judged the whole-box value
+  (1.76) and flagged both. The headroom above the piston dilutes it by
+  5–7 %; fixed, it is now judged over the slab.
+
+**EMD cross-check (sige_emd).** It completed (16 M steps, 5.4 h); the job
+loop first called it a failure because the diagnosis expected the NEMD end
+marker (fixed: per-kind marker and output). Result: h = 32 ± 9 MW/m²K, so
+NEMD/EMD = 15.6, outside the expected 1–10 (~3 for Si/Ge, Merabia &
+Termentzidis). The series is 209 relaxation times long (EMD_SHORT, ~5–10 %).
+That does not explain a factor 5 beyond expectation. The EMD cell is tiny
+(2 nm slabs, 6,656 atoms), and the fluctuation method's slow time mixes slab
+conduction into the interface time when slabs are thin. **Open:** EMD
+slab-size dependence before either number is trusted against the other.
+
+**Si/a-SiO₂ (Tersoff, 4 nm cells).**
+- **Strong bonding:** 1.17 ± 0.25 GW/m²K, inside Chen, Zhang & Li's 2012
+  bracket (≈1.2, strong).
+- **Weak bonding:** 1.06 ± 0.29 against ≈0.23 for weak. The "weak" cell
+  conducts like a strongly bonded interface; relaxation may have bonded it
+  (§4, "an anneal can leave the interface…"). Check the interface bonding in
+  `relaxed.data`.
+- **Both runs:** NEMD_FLUX_INCONSISTENT (hot/cold fluxes 13–15 % apart);
+  the weak run also has NEMD_POOR_FIT. Small cells; not yet quotable.
