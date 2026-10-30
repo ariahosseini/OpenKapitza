@@ -123,6 +123,15 @@ def check_relax_settle(log: Path, spec: NEMDSpec, flags: FlagSet) -> dict | None
     # the averaged window is loaded in both modes (stress: throughout; strain:
     # the load stage re-averages), so Pzz is judged about the applied load
     target = spec.spot_pressure_GPa or 0.0
+    if "pzz_mean_bar" in r:
+        # LAMMPS divides the virial by the whole box, which includes the empty
+        # headroom above the piston: rescale to the slab the atoms occupy
+        # (Si/Ge: x1.05-1.07; under a 2 GPa load 1.76 -> 1.88 GPa).
+        f = _slab_factor(Path(log), spec)
+        if f:
+            r["pzz_mean_bar_box"] = r["pzz_mean_bar"]
+            r["pzz_mean_bar"] *= f
+            r["slab_factor"] = f
     problems = []
     if abs(r["dz"]) > RELAX_DZ_MAX_ANG:
         problems.append(f"the wall had to be moved {r['dz']:+.2f} A to its mean position "
@@ -139,6 +148,25 @@ def check_relax_settle(log: Path, spec: NEMDSpec, flags: FlagSet) -> dict | None
                          "scale it with the column length).",
                   wall_dz_ang=r["dz"])
     return r
+
+
+def _slab_factor(log: Path, spec: NEMDSpec) -> float | None:
+    """Box height / slab top (relaxed top wall + its thickness), or None."""
+    import re
+    deck = log.parent / "nemd.in"
+    relaxed = parse_relaxed_positions(log)
+    if not deck.is_file() or not relaxed:
+        return None
+    m = re.search(r"^region\s+simbox\s+block(?:\s+\S+){4}\s+\S+\s+(\S+)", deck.read_text(),
+                  re.M)
+    if not m:
+        return None
+    try:
+        zhi = float(m.group(1))
+    except ValueError:
+        return None
+    top = relaxed["wall_hi_zmin"] + spec.geometry.wall_thickness * M_TO_ANG
+    return zhi / top if top > 0 and zhi >= top else None
 
 
 def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,

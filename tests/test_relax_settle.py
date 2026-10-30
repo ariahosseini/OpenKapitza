@@ -111,6 +111,23 @@ class TestGuard(unittest.TestCase):
         self.assertEqual(codes, [Code.NEMD_RELAX_UNSETTLED])
         self.assertIn("against the applied 2", msgs[0])
 
+    def test_pzz_is_rescaled_from_the_whole_box_to_the_slab(self):
+        """sige_spot_stress on the M3 Pro: whole-box 1.762 GPa under a 2 GPa load is
+        1.889 GPa over the slab (box 406.75 A, wall at 369.40 A + 10 A thick)."""
+        loaded = sige(16, spot_pressure_GPa=2.0, spot_pressure_mode="stress")
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "nemd.in").write_text(
+                "region          simbox block 0.0 43.4480 0.0 43.4480                 "
+                "0.0 406.7501 units box\n")
+            log = Path(d) / "log.lammps"
+            log.write_text(NEW_LOG.format(dz=-0.15, pzz=17620.0)
+                           + "OPENKAPITZA_RELAXED wall_hi_zmin 369.3995 top_a 1 bottom_b 2\n")
+            f = FlagSet()
+            r = check_relax_settle(log, loaded, f)
+        self.assertAlmostEqual(r["slab_factor"], 406.7501 / 379.3995, places=6)
+        self.assertAlmostEqual(r["pzz_mean_bar"] / 1e4, 1.889, places=3)
+        self.assertEqual(len(f), 0)                 # 0.11 GPa under the load: settled
+
     def test_no_piston_no_check(self):
         r, codes, _ = self.check(OLD_LOG.format(dz=5.0), sige(16, relax_z=False))
         self.assertIsNone(r)
