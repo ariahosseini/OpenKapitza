@@ -106,7 +106,11 @@ def frame_fluxes(reservoir_path: Path, frame_ends_steps: list[int], window_steps
 
 
 RELAX_DZ_MAX_ANG = 0.5          # wall correction beyond this: the column had not settled
-RELAX_PZZ_MAX_GPA = 0.05        # mean Pzz residual over the window, about the load
+# Mean whole-box Pzz over the window, about the load. Calibrated on the M3 Pro
+# campaign: settled 16 nm Si/Ge cells (wall correction 0.13-0.15 A, h_K
+# consistent across nine rungs) sit at +0.065 to +0.084 GPa, ~0.05 % strain and
+# negligible for h_K. 0.05 GPa (the first setting) flagged every settled cell.
+RELAX_PZZ_MAX_GPA = 0.2
 
 
 def check_relax_settle(log: Path, spec: NEMDSpec, flags: FlagSet) -> dict | None:

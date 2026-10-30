@@ -2328,9 +2328,12 @@ before the failure.
 3. **Guard.** The deck prints `OPENKAPITZA_WALLFIX dz … pzz_mean_bar …` (mean
    Pzz over the averaging window, re-averaged over the load stage in strain
    mode). `measure_kapitza` raises `NEMD_RELAX_UNSETTLED` (WARNING) if
-   |dz| > 0.5 Å or |mean Pzz − applied load| > 0.05 GPa. For older logs, dz
+   |dz| > 0.5 Å or |mean Pzz − applied load| > 0.2 GPa. For older logs, dz
    comes from the echoed `displace_atoms` line: on the campaign it flags r06
-   only.
+   only. The first Pzz threshold, 0.05 GPa, was not calibrated and flagged
+   every settled cell. The settled 16 nm cells read +0.065 to +0.084 GPa
+   (whole-box Pzz, walls and headroom included; ~0.05 % strain). 0.2 GPa is
+   ~2.5× that, and the production gate stays at 1 GPa on the slab stress.
 4. **A re-run sets aside every output** of its predecessor (profile, energy
    log, relaxed structure), not only the log, so it is never measured from
    the old run's files.
