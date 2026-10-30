@@ -165,7 +165,9 @@ class JobBook:
 
     # ---- submission ------------------------------------------------------------
     def submit(self, names: list[str], backend: str | None = None, lmp: str | None = None,
-               launcher: str = "", resubmit: bool = False) -> list[Event]:
+               launcher: str = "", resubmit: bool = False, fresh: bool = False) -> list[Event]:
+        """`resubmit` of a job that died of an infrastructure cause resumes from its
+        last checkpoint when there is one; `fresh` starts it over regardless."""
         backend = backend or self.config.get("backend") or _default_backend()
         if lmp:
             self.config["lmp"] = lmp
@@ -189,7 +191,11 @@ class JobBook:
                                     f"ahead of it finish" + _local_note(
                                         e, self.config.get("launcher", ""))))
                 continue
-            events.append(self._launch(e, backend))
+            resume = None
+            if resubmit and not fresh and e.status in ("failed", "gave_up", "cancelled") and \
+                    (e.diagnosis or {}).get("kind") in ("infrastructure", None):
+                resume = _try_resume(e)
+            events.append(self._launch(e, backend, resume_step=resume))
         self.save()
         return events
 
@@ -212,12 +218,15 @@ class JobBook:
             events.append(self._launch(e, "local"))
         return events
 
-    def _launch(self, e: JobEntry, backend: str, walltime_hours: float | None = None) -> Event:
+    def _launch(self, e: JobEntry, backend: str, walltime_hours: float | None = None,
+                resume_step: int | None = None) -> Event:
         wd = Path(e.workdir)
         if not (wd / "nemd.in").is_file():
             raise JobError(f"{e.name}: {wd}/nemd.in not found")
-        # a re-run must not be measured from its predecessor's outputs
-        for stale in ("job.done", "log.lammps", "stdout.log", "stderr.log",
+        deck, log = ("resume.in", "none") if resume_step else ("nemd.in", "log.lammps")
+        # a re-run must not be measured from its predecessor's outputs (a resumed
+        # one continues them: md/checkpoint.py has cut them back to the checkpoint)
+        for stale in () if resume_step else ("job.done", "log.lammps", "stdout.log", "stderr.log",
                       "temperature_profile.dat", "reservoir_energy.dat", "relaxed.data",
                       "emd_temperatures.dat"):
             p = wd / stale
@@ -229,6 +238,8 @@ class JobBook:
                 raise JobError("SLURM is not available here (no sbatch on PATH). Run on the "
                                "cluster login node, or submit with 'local'.")
             script = wd / "submit.sbatch"
+            if resume_step:
+                script = _resume_script(script)
             if walltime_hours:
                 _set_walltime(script, walltime_hours)
             handle = runner.submit_script(script, e.name)
@@ -237,13 +248,14 @@ class JobBook:
             if shutil.which(lmp.split()[0]) is None and not Path(lmp.split()[0]).is_file():
                 raise JobError(f"LAMMPS executable {lmp!r} not found; give it with "
                                "'submit ... lmp=/path/to/lmp'")
-            cmd = f"{self.config.get('launcher', '')} {lmp} -in nemd.in -log log.lammps".strip()
+            cmd = f"{self.config.get('launcher', '')} {lmp} -in {deck} -log {log}".strip()
             handle = LocalRunner().submit(JobSpec(name=e.name, command=cmd, workdir=wd))
         e.handle = json.loads(handle.to_json())
         e.backend, e.status, e.diagnosis = backend, "submitted", None
         e.attempts += 1
-        e.log(f"submitted ({backend}, attempt {e.attempts}, id {handle.native_id})")
-        msg = f"submitted on {backend} (id {handle.native_id})"
+        how = f", resumed from production step {resume_step:,}" if resume_step else ""
+        e.log(f"submitted ({backend}, attempt {e.attempts}, id {handle.native_id}{how})")
+        msg = f"submitted on {backend} (id {handle.native_id}){how}"
         if backend == "local":
             msg += _local_note(e, self.config.get("launcher", ""))
         return Event(e.name, "started", msg)
@@ -283,10 +295,12 @@ class JobBook:
                 if e.status != "running":
                     e.status = "running"
                     e.log("running")
+                _prune(Path(e.workdir), keep=2)
                 continue
             d = diagnose(Path(e.workdir), state, h)
             e.diagnosis = asdict(d)
             if d.kind == "ok":
+                _prune(Path(e.workdir), keep=0)
                 e.status = "completed"
                 e.log("completed")
                 events.append(Event(e.name, "finished", d.summary, d))
@@ -296,12 +310,14 @@ class JobBook:
                     wall = min(WALLTIME_CAP_HOURS,
                                _get_walltime(Path(e.workdir) / "submit.sbatch") * WALLTIME_GROWTH)
                 e.log(f"failed: {d.summary}; resubmitting")
-                self._launch(e, e.backend, walltime_hours=wall)
+                step = _try_resume(e)
+                self._launch(e, e.backend, walltime_hours=wall, resume_step=step)
                 extra = f" with walltime {wall:.1f} h" if wall else ""
+                how = (f"it resumes from its checkpoint at production step {step:,}" if step
+                       else "no usable checkpoint, so it starts over")
                 events.append(Event(e.name, "resubmitted",
                                     f"{d.summary}. Resubmitted{extra} (attempt {e.attempts} of "
-                                    f"{MAX_ATTEMPTS}); the deck has no restart files, so it "
-                                    "starts over.", d))
+                                    f"{MAX_ATTEMPTS}); {how}.", d))
             else:
                 e.status = "gave_up" if d.auto_resubmit else "failed"
                 e.log(f"failed: {d.summary}")
@@ -420,6 +436,42 @@ def diagnose(wd: Path, state: JobState, handle: JobHandle | None = None) -> Diag
     return Diagnosis("unknown", f"Stopped ({state.value}) with no error in the logs"
                      + (f", exit status {rc}" if rc is not None else ""),
                      fixes=["Read stderr.log and the end of log.lammps."])
+
+
+def _try_resume(e: JobEntry) -> int | None:
+    """Cut a dead NEMD job's outputs back to its newest checkpoint and write
+    resume.in; the production step, or None (start over)."""
+    wd = Path(e.workdir)
+    try:
+        from ..md.campaign import read_spec
+        from ..md.checkpoint import prepare_resume
+        spec, kind, _ = read_spec(wd)
+        if kind != "nemd" or getattr(spec, "ttm", None) is not None:
+            return None
+        return prepare_resume(wd, spec)
+    except Exception as exc:              # never block a resubmission on this
+        e.log(f"no resume ({type(exc).__name__}: {exc}); starting over")
+        return None
+
+
+def _prune(wd: Path, keep: int) -> None:
+    try:
+        from ..md.checkpoint import prune
+        prune(wd, keep)
+    except OSError:
+        pass
+
+
+def _resume_script(script: Path) -> Path:
+    """resume.sbatch: submit.sbatch running resume.in, appending to the log."""
+    text = script.read_text()
+    new = re.sub(r"\s-log\s+log\.lammps", "", text)
+    new = re.sub(r"-in\s+nemd\.in", "-in resume.in -log none", new)
+    if new == text:
+        raise JobError(f"{script}: no '-in nemd.in' to point at resume.in")
+    out = script.with_name("resume.sbatch")
+    out.write_text(new)
+    return out
 
 
 def _header_only(p: Path) -> bool:

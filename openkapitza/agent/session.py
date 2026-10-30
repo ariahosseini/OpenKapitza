@@ -28,7 +28,9 @@ Commands at any prompt:
     jobs [DIR]           poll once: status, diagnosis of failures, finished jobs
                          ingested automatically; DIR attaches an existing job folder
     watch [SECONDS]      poll until nothing is running (Ctrl-C stops watching only)
-    resubmit <job>       after you fixed what a diagnosis named;  cancel <job>
+    resubmit <job> [fresh]  after you fixed what a diagnosis named; a job killed
+                         by the machine resumes from its checkpoint unless 'fresh'
+    cancel <job>
     save FILE / load FILE        the session (inputs, defaults, ingested MD)
     export FILE.json             the last result as JSON
     lookup <question>    search our docs, paper notes and the LAMMPS manual, with
@@ -514,8 +516,10 @@ class Session:
         from .jobs import JobError
         book = self._book()
         try:
-            events = (book.submit(names, resubmit=True, lmp=self.lmp) if action == "resubmit"
-                      else book.cancel(names))
+            fresh = "fresh" in names
+            names = [n for n in names if n != "fresh"]
+            events = (book.submit(names, resubmit=True, lmp=self.lmp, fresh=fresh)
+                      if action == "resubmit" else book.cancel(names))
         except JobError as e:
             raise FieldError(str(e)) from e
         return "\n".join(f"  {ev.name}: {ev.message}" for ev in events) or "Nothing to do."

@@ -94,6 +94,7 @@ heterostructures (fcc on diamond) live in `md/nemd.py`. Script:
 | ID | Item | Status |
 |---|---|---|
 | H-1 | Repository is public (`github.com/ariahosseini/OpenKapitza`). A deliberate decision, not a default. | waiting on Aria |
+| H-3 | **Restart files for long runs.** **Built 30 Oct** (`md/checkpoint.py`, KB §18): production writes a restart file per profile frame; the job loop resumes a run killed by the machine from the newest one (`resubmit <job> fresh` to start over). Checked end to end with LAMMPS. Open: the stages before production (41 % of sial_pp) are not checkpointed. Old decks must be regenerated. | built |
 | H-2 | README stale sections. **Closed**: data-status and Phase 2 rewritten; the action-items block moved to `docs/history-action-items.md`. | closed |
 
 ## Cluster run list

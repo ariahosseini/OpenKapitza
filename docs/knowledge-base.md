@@ -2427,3 +2427,57 @@ their own convergence evidence.
   10¹² K/s (P2-5 commands).
 - **Both runs:** NEMD_FLUX_INCONSISTENT (hot/cold fluxes 13–15 % apart);
   the weak run also has NEMD_POOR_FIT. Small cells; not yet quotable.
+
+## 18. Checkpointed production: a killed run resumes (30 Oct 2026)
+
+The 40–50 h MEAM jobs (sial_pp, sicu_pp) are too long to restart from zero
+after a reboot, a crash or a walltime limit, so NEMD production now
+checkpoints and the job loop resumes from the newest checkpoint.
+
+**Deck.** Production writes `restart.<step>.bin` at every profile-frame
+boundary (`NEMDSpec.checkpoint_frames = 1`; 0 turns it off): eight per run
+at the default eight frames. Not for TTM decks, whose electron grid the
+restart file does not hold.
+
+**Resume** (`md/checkpoint.py`). `prepare_resume` takes the newest restart
+file whose step is in `reservoir_energy.dat`, cuts the outputs back to it
+(whole profile frames up to the step, energy rows up to and including it),
+and writes `resume.in`, which:
+- reads the restart file and re-issues what LAMMPS does not store: pair
+  coefficients, regions, computes, the fixes alive at production, the
+  variables they use, thermo settings. They are found by replaying the
+  original deck's commands (fix/unfix, compute/uncompute) up to its
+  production `run`, so it works for any deck the builder writes;
+- appends to the output files (`append`, not `file`) and to log.lammps
+  (`log ... append`; LAMMPS is started with `-log none`);
+- offsets the Langevin tallies by their checkpoint values, since a re-created
+  fix starts its tally at zero, and writes time as step·dt, because `time`
+  restarts at zero after `read_restart` (both measured);
+- runs one step before defining the output fixes, so the checkpoint row kept
+  from the killed run is not written twice, then `run N upto`;
+- gives the reservoirs fresh random seeds.
+
+**Job loop.** An infrastructure failure (timeout, node, killed) resubmits
+from the checkpoint when one is usable, else from the start, and says which.
+`resubmit <job>` after such a failure also resumes; `resubmit <job> fresh`
+starts over. Running jobs keep the newest two restart files; a finished job
+keeps none. On SLURM the resume uses `resume.sbatch`, a copy of
+`submit.sbatch` pointed at `resume.in`.
+
+**Checked with LAMMPS** (Si/Ge, 5,216 atoms, 8,000 production steps):
+killed after the 4,000-step checkpoint, resumed, then measured. The energy
+series is continuous with no repeated rows, all eight frames are present,
+and `measure_kapitza` reads it like an uninterrupted run. The trajectories
+differ after the checkpoint (fresh Langevin seeds), so h differs within noise.
+This is tests/test_checkpoint.py's end-to-end case; it runs when
+OPENKAPITZA_TEST_LMP and OPENKAPITZA_TEST_POTENTIALS are set.
+
+**Known limits.**
+- Only production is protected. Relaxation, equilibration and the steady
+  stage are 41 % of a sial_pp run (≈16 h on the M3 Pro); a run killed there
+  starts over.
+- After a resume, the run-health checks see only the resumed part of the
+  production thermo, because LAMMPS buffers its log and the killed part's
+  production rows are often missing from it.
+- Decks prepared before this change have no checkpoints: regenerate them
+  (scripts/prepare_cluster.py) before submitting.

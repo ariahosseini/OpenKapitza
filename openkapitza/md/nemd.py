@@ -352,6 +352,10 @@ class NEMDSpec:
     production_steps: int = 2_000_000
     profile_every: int = 100
     profile_frames: int = 8
+    # Production writes a LAMMPS restart file every this many profile frames
+    # (0: none), so a killed long run resumes from the last one instead of
+    # starting over (md/checkpoint.py; the job loop does it). Not for TTM decks.
+    checkpoint_frames: int = 1
     damping_fs: float = 100.0
     # Barostat x and y together (one scale factor). Right when the surface is
     # elastically isotropic in-plane -- cubic (100), (111), hexagonal (0001) --
@@ -578,8 +582,8 @@ variable        syy equal pyy*v_slabf
 variable        szz equal pzz*v_slabf
 thermo_style    custom step temp press pxx pyy pzz f_hot f_cold v_sxx v_syy v_szz
 thermo_modify   temp tmobile
-run             {production_steps}
-
+{checkpoint_on}run             {production_steps}
+{checkpoint_off}
 print           "OPENKAPITZA_DONE area_m2 {area:.6e} interface_z_ang {interface_ang:.4f}"
 """
 
@@ -964,6 +968,20 @@ def _piston_gamma(spec: NEMDSpec) -> float:
     return mass * AMU_A_PS2_IN_EV_A / spec.piston_damp_ps
 
 
+def profile_window(spec: NEMDSpec) -> int:
+    """Steps per temperature-profile frame (Nfreq of the production ave/chunk)."""
+    return max(spec.profile_every,
+               (spec.production_steps // spec.profile_frames // spec.profile_every)
+               * spec.profile_every)
+
+
+def checkpoint_every(spec: NEMDSpec) -> int:
+    """Steps between production restart files; 0 when the deck writes none."""
+    if spec.ttm is not None or getattr(spec, "checkpoint_frames", 0) <= 0:
+        return 0
+    return profile_window(spec) * spec.checkpoint_frames
+
+
 def build_input_deck(spec: NEMDSpec) -> str:
     """Render the LAMMPS input deck for this run."""
     g = spec.geometry
@@ -1078,8 +1096,20 @@ def build_input_deck(spec: NEMDSpec) -> str:
         * spec.profile_every,
     )
     n_samples = max(1, window // spec.profile_every)
+    ckpt = checkpoint_every(spec)
+    if ckpt:
+        checkpoint_on = (
+            "# Checkpoints: a restart file at every profile-frame boundary, named by\n"
+            "# timestep, so a killed run resumes (md/checkpoint.py) instead of\n"
+            "# starting over. The job loop keeps the newest two.\n"
+            f"restart         {ckpt} restart.*.bin\n")
+        checkpoint_off = "restart         0\n"
+    else:
+        checkpoint_on = checkpoint_off = ""
 
     return DECK.format(
+        checkpoint_on=checkpoint_on,
+        checkpoint_off=checkpoint_off,
         structure_block=structure_block,
         element_a=spec.element_a,
         element_b=spec.element_b,
