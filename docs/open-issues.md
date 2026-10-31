@@ -30,6 +30,30 @@ Last updated: 23 Oct 2026 (agent guide and README restructure; P0-10 unloading, 
 | P1-11 | **Throughput on the cluster.** Cost model now uses measured 4.5e5 (Tersoff) / 5.0e5 (SW) atom-steps per core-second from this container and a laptop. | **cluster** | One short run on the cluster; update `compute/resources.py`. |
 | P1-12 | **Equilibration time and the steady-state criterion.** Measured on the 400 ps, 2.2 nm Si/Ge run: reservoir-power drift resolvable only to 59 % (2σ) — STATISTICS-LIMITED everywhere; the campaign's largest rungs would reach ~13–27 %. The per-frame jump is far better resolved (11.6 % block error), so `measure_kapitza` now also tests the jump's trend across frames. `plan_campaign.py` uses a 100 ps placeholder for `steady_steps`. | **cluster** | Steady time set from the base rung's per-frame jump trend, not from power drift alone. |
 
+## Scenario coverage — every interface a real joint has (31 Oct)
+
+The MD layer is only trusted for the interfaces it has been run on. This is the
+list of interface classes a PCB/package/die joint actually contains, and what
+each needs. Converged = a number with convergence evidence; built = deck and
+analysis exist, no converged number.
+
+| ID | Interface class | Example in a joint | Physics that must be in the model | Status | Where it runs |
+|---|---|---|---|---|---|
+| S-1 | Bonded semiconductor/semiconductor | Si/Ge, SiC/GaN epitaxy | phonons; strain; length convergence | Si/Ge **converged at 16 nm**, length axis rising to 64 nm (re-run with longer steady stage); SiC/GaN: no cross potential (Tier 2) | laptop / GPU |
+| S-2 | Semiconductor/oxide | Si/native SiO₂, gate and passivation oxides | amorphous structure, bonding density | built, 4 nm cells cannot resolve bonding → 8 nm, 10¹² K/s glass (P2-3, P2-5) | laptop (long) |
+| S-3 | Metal/semiconductor | Al or Cu metallisation on Si | phonons **and** electron–phonon coupling in the metal | phonon-only and two-temperature (TTM) decks built; series e-ph band; nothing converged (P1-6, P1-14) | GPU / cluster |
+| S-4 | Metal/metal | Cu/Ni/Sn in solder joints and UBM, die-attach | electrons carry the heat across; phonon MD is the wrong tool | not started: electrons dominate, ~4 GW/m²K measured for Al/Cu (Gundrum, Cahill & Averback, PRB 72, 245426, 2005), small next to constriction; to be estimated (electron DMM / Wiedemann–Franz) and stated, not simulated — intermetallics (Cu₆Sn₅, Cu₃Sn) are the exception and need bulk k instead | estimate only |
+| S-5 | Non-bonded (van der Waals) solid contact | pressed surfaces without chemical bonding, weakly bonded oxides | cross-interface force strength; contact pressure | **built 31 Oct** (`structure/nonbonded.py`): Tersoff per side, LJ across (UFF, scalable); first Si/Ge runs at 0 and 1 GPa running | laptop |
+| S-6 | Adsorbed gas at the contact spots | air- or He-filled package: a physisorbed layer between asperity tips | gas–solid LJ; coverage; pressure | **built 31 Oct**: Ar monolayer between Si and Ge (He, Ne, N₂ available; N₂ as a sphere); first run at 1 GPa running | laptop |
+| S-7 | Adsorbed water / organic contamination | assembly in humid air, flux residue | a water model (TIP4P/SPC/E) and a hydrocarbon force field | not started; needs potentials beyond Tersoff/LJ | laptop |
+| S-8 | Native oxide on metal | Al₂O₃ on Al, Cu₂O on Cu | metal–oxide potential (COMB, ReaxFF, or MLIP) | not started; measured target exists (Hopkins: oxide ≈ 1.7–1.9 × 10⁻⁹ m²K/W on Al/Si) | GPU |
+| S-9 | Disordered interface | intermixing, nanoscale roughness, dislocations | atomic disorder at the plane | not started; feasible on Si/Ge with Tersoff (swapped layers, rough steps) | laptop |
+| S-10 | Gas in the gaps between asperities | every joint not in vacuum | rarefied gas conduction, accommodation | **done at the continuum level** (gap model, accommodation bands; MD accommodation He/Ni, Ar/Ni); air on Cu/Al open (P5-4) | laptop |
+| S-11 | Operating temperature range | 300–400 K in service, cryogenic for some | anharmonicity; quantum statistics below θ_D | everything so far at 300 K; quantum correction warned, not applied | laptop |
+
+Order of work: S-5/S-6 (running) → S-9 → S-2 (8 nm) → S-11 (400 K on Si/Ge) →
+S-7 (water) → S-3 on GPU → S-8. S-4 is an estimate, not a simulation.
+
 ## Phase 0 — continuum core
 
 Built and validated for the contact path: 207 measured points (Ni 200, SS 304,

@@ -391,6 +391,10 @@ class NEMDSpec:
     # file, its element list, a parameter file, then the type map). Give the
     # full argument list after "* *", and every extra file to stage.
     coeff_args: str | None = None
+    # Full pair section (pair_style + pair_coeff lines), replacing pair_style /
+    # coeff_args: hybrid set-ups such as a Tersoff solid on each side coupled
+    # only by Lennard-Jones (structure/nonbonded.py).
+    pair_block: str | None = None
     extra_files: tuple[str, ...] = ()
     # Atom types on each side of the interface. One element per side is
     # (1,) / (2,); a read-in cell with several species per side lists them all
@@ -968,6 +972,15 @@ def _piston_gamma(spec: NEMDSpec) -> float:
     return mass * AMU_A_PS2_IN_EV_A / spec.piston_damp_ps
 
 
+def _pair_block_rest(block: str) -> str:
+    """The pair_coeff (and pair_modify) lines of a pair block: everything after
+    its leading pair_style line, which fills the template's pair_style slot."""
+    lines = [ln for ln in block.strip().splitlines() if ln.strip()]
+    if not lines[0].startswith("pair_style"):
+        raise ValueError("pair_block must start with a pair_style line")
+    return "\n".join(lines[1:])
+
+
 def profile_window(spec: NEMDSpec) -> int:
     """Steps per temperature-profile frame (Nfreq of the production ave/chunk)."""
     return max(spec.profile_every,
@@ -1113,9 +1126,10 @@ def build_input_deck(spec: NEMDSpec) -> str:
         structure_block=structure_block,
         element_a=spec.element_a,
         element_b=spec.element_b,
-        pair_style=spec.pair_style,
+        pair_style=(spec.pair_block.strip().splitlines()[0].split(None, 1)[1]
+                    if spec.pair_block else spec.pair_style),
         pair_file=spec.pair_file,
-        pair_coeff_line=(f"pair_coeff      * * {spec.coeff_args}" if spec.coeff_args
+        pair_coeff_line=(_pair_block_rest(spec.pair_block) if spec.pair_block else f"pair_coeff      * * {spec.coeff_args}" if spec.coeff_args
                          else f"pair_coeff      * * {spec.pair_file} "
                               f"{pair_labels[0]} {pair_labels[1]}"),
         timestep_ps=spec.timestep_fs * FS_TO_PS,
