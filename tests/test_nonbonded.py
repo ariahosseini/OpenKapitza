@@ -153,7 +153,7 @@ class SweepScript(unittest.TestCase):
             names = [j["name"] for j in json.loads((root / "manifest.json").read_text())["jobs"]]
             self.assertEqual(names, ["campaign/r00", "nonbonded/bonded_ref", "nonbonded/Ar_c1_p1"])
             self.assertTrue((root / "nonbonded" / "Ar_c1_p1" / "interface.data").is_file())
-            self.assertEqual(len(m.cases()), 19)
+            self.assertEqual(len(m.cases()), 20)
 
 
 if __name__ == "__main__":

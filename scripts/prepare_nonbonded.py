@@ -14,7 +14,11 @@ jump is ~20 K, and each side is equilibrated at its expected temperature
 10-40 K jump, which is fine; the measured h does not use the guess.
 
 Cases:
-  bonded_ref                       the bonded interface, same method (the anchor)
+  bonded_ref                       the bonded interface (the anchor), LANGEVIN: imposed
+                                   flux under-reads a strong interface in a short cell
+                                   (KB 19, check 2), and at its flux the tally noise is small
+  lj1_p1_langevin                  LJ x1 at 1 GPa with Langevin reservoirs and 2 ns of
+                                   production: the method cross-check at this cell size
   lj{0.25,1,4}_p{0,0.5,1,2}        LJ-only contact, strength x load
   {Ar,N2,He}_c{1,0.5}_p1           a gas monolayer (full / half), 1 GPa
 """
@@ -58,7 +62,8 @@ def base():
 
 
 def cases():
-    out = {"bonded_ref": (None, None, H_BONDED)}
+    out = {"bonded_ref": (None, None, H_BONDED),
+           "lj1_p1_langevin": (NonbondedSpec(lj_scale=1.0), 1.0, H_LJ1[1.0])}
     for scale in (0.25, 1.0, 4.0):
         for p in (0.0, 0.5, 1.0, 2.0):
             h = min(H_BONDED, H_LJ1[p] * scale ** 0.75)
@@ -87,9 +92,15 @@ def main(argv=None) -> int:
         if a.only and name not in a.only:
             continue
         spec = copy.deepcopy(base())
-        spec.imposed_flux = h_guess * 1e6 * JUMP_K
-        spec.presplit_K = JUMP_K
         spec.spot_pressure_GPa = p
+        if name in ("bonded_ref", "lj1_p1_langevin"):
+            spec.flux_mode, spec.imposed_flux = "langevin", None
+            if name == "lj1_p1_langevin":
+                spec.production_steps = 2_000_000
+                spec.presplit_K = 30.0      # most of the 40 K drive drops at the plane
+        else:
+            spec.imposed_flux = h_guess * 1e6 * JUMP_K
+            spec.presplit_K = JUMP_K
         wd = out / name
         if wd.exists():
             shutil.rmtree(wd)
@@ -103,9 +114,11 @@ def main(argv=None) -> int:
             info = write_job(wd, spec, nb, a.potentials.expanduser())
             atoms = info["atoms"]
         jobs.append({"name": f"nonbonded/{name}", "atoms": int(atoms), "steps": total_steps(spec),
+                     "flux_mode": spec.flux_mode,
                      "imposed_flux_W_m2": spec.imposed_flux, "h_guess_MW": round(h_guess, 1)})
-        print(f"{name:16} {atoms:7,} atoms  q = {spec.imposed_flux:.3g} W/m^2  "
-              f"(h guess {h_guess:.0f} MW/m^2K)")
+        drive = (f"q = {spec.imposed_flux:.3g} W/m^2" if spec.flux_mode == "heat"
+                 else "Langevin 320/280 K")
+        print(f"{name:16} {atoms:7,} atoms  {drive:22} (h guess {h_guess:.0f} MW/m^2K)")
     man = root / "manifest.json"
     data = json.loads(man.read_text()) if man.is_file() else {"jobs": []}
     names = {j["name"] for j in jobs}

@@ -2537,3 +2537,29 @@ right method for any interface well below the bonded one (S-5 to S-8).
 Next: a flux-imposed mode in the NEMD deck, then the sweeps on the M3 Pro:
 LJ strength ×¼, ×1, ×4 at 0 / 0.5 / 1 / 2 GPa; Ar, N₂, He at full and
 half coverage at 1 GPa.
+
+**Imposed-flux check (31 Oct, same small cells, `fix heat`).**
+
+| cell | Langevin (tally flux) | imposed flux | verdict |
+|---|---|---|---|
+| van der Waals, 1 GPa | 87 ± 68 | **71 ± 7**, jump 20–37 K | agree; error 10× smaller |
+| bonded | 429 ± 47, jump 22–31 K | 152 ± 16, jump 54 → 95 K and still rising (NEMD_UNEQUILIBRATED) | disagree |
+
+At the bonded cell's flux the hot side kept heating: by its heat capacity
+(~1,900 atoms) at 0.3 K/ps, only about half the imposed power crossed the
+interface at a 75 K jump. Each side stayed flat (no internal gradient):
+these 6 nm slabs are near-ballistic. HEX rescales the velocities already
+present and so pumps the modes the reservoir holds without re-thermalising
+them. Langevin's random force does re-thermalise them, acting as the
+scattering a short cell lacks. When the interface is the bottleneck (van der
+Waals), modes have time to relax and the two drives agree. When the
+interface conducts well, an imposed-flux run in a short cell measures mode
+non-equilibrium, not the interface. That is a known reservoir dependence of
+NEMD in small cells. Mean temperature: steady within 0.2 K (bonded), and
++3.5 K over 150 ps in the loaded van der Waals cell (settling or HEX drift).
+The sweep watches it.
+
+**Rule adopted.** Imposed flux for interfaces well below the bonded one
+(S-5 to S-8), Langevin for bonded ones. The sweep carries a Langevin
+van der Waals case with 2 ns of production at the full cell size, to check
+the agreement there.
