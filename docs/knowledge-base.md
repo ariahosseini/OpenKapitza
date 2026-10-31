@@ -2352,7 +2352,7 @@ decks are pending. Measured with `agent.ingest` on the staged outputs.
 | axis | values | verdict (5 % tolerance) |
 |---|---|---|
 | cross-section 2.2 / 3.3 / 4.3 / 5.4 / 6.5 nm | 493, 493, 483, 478, 503 | unresolved: 5.0 ± 4.1 % |
-| length 8 / 16 / 32 / 64 nm | 499, 483, 528 (unsettled, §16), — | open: re-runs pending |
+| length 8 / 16 / 32 / 64 nm | 499, 483, 518 ± 34 (re-run), 729 ± 84 all frames / ≈600–640 after the transient (re-run, NEMD_UNEQUILIBRATED) | rising beyond 16 nm; 64 nm not at steady state (see below) |
 | duration 250 / 500 / 1000 ps | 482, 483, 489 | unresolved: 1.1 ± 4.7 % |
 | ΔT 20 / 40 / 60 K | 402 (NEMD_UNEQUILIBRATED), 483, 465 | FLUX_NONLINEAR 17.6 %, driven by the 20 K run |
 | reservoir 1 / 2 / 4 nm | 505, 483, 514 | unresolved: 6.3 ± 7.6 % |
@@ -2373,6 +2373,27 @@ decks are pending. Measured with `agent.ingest` on the staged outputs.
   (strain) GPa under 2 GPa. The relax guard first judged the whole-box value
   (1.76) and flagged both. The headroom above the piston dilutes it by
   5–7 %; fixed, it is now judged over the slab.
+
+**Length re-runs (31 Oct, fixed decks of §16).** Both finished with no lost
+atoms; the wall corrections were −0.50 Å (r06) and −0.82 Å (r07), just over
+the 0.5 Å guard but ≈0.1 % strain of their 64 and 128 nm columns, with slab
+Pzz 0.05 and 0.03 GPa.
+- **r06, 32 nm per side:** 518 ± 34 MW/m²K, jump flat across frames
+  (567 from the last half).
+- **r07, 64 nm per side:** 729 ± 84 over all frames, but the jump rises from
+  7.7 K to 16.3 K over the first five of eight frames and then holds (16.5,
+  16.3, 16.3 K): the 100 ps steady stage is too short for a 128 nm column.
+  The last three frames give ≈600 (frame h 615, 630, 552), the last half
+  639. Not quotable until re-run with a longer steady stage (≥ 400 ps).
+- **Reading.** h is flat from 8 to 16 nm and rises beyond (≈+7 % at 32 nm,
+  ≈+25–30 % at 64 nm), as expected when longer cells carry more
+  long-wavelength phonons. At 128 nm of column we are 35–40 % above Feng et
+  al.'s 450 at 152 nm, so the earlier "+8 % against Feng" compared a short
+  cell with a long reference. The cells also differ: ours strains Ge by
+  −4.0 % onto the Si lattice, Feng's uses lattice-matched Ge. Not a
+  like-for-like check until both are aligned.
+- **Steady stage.** The campaign's 100 ps is enough at 16 nm and not at 64
+  nm. r10 (ΔT 20 K) is re-run with 400 ps steady and 1 ns production.
 
 **EMD cross-check (sige_emd).** It completed (16 M steps, 5.4 h); the job
 loop first called it a failure because the diagnosis expected the NEMD end
