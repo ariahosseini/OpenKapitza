@@ -59,70 +59,43 @@ The same stainless-steel pair (σ = 1.2 µm, slope 0.08) in vacuum, air and
 helium, against contact pressure (`build_joint` + `run_continuum`, the call
 shown above):
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/joint_pressure-dark.png">
-  <img alt="Joint conductance against contact pressure for SS304 in vacuum, air and helium" src="docs/figures/joint_pressure-light.png">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/joint_pressure-dark.png"><img alt="Joint conductance against contact pressure for SS304 in vacuum, air and helium" src="docs/figures/joint_pressure-light.png"></picture>
 
 In vacuum all heat crosses at the contact spots, so h rises almost linearly
-with load (CMY). In air the gas gap carries most of it at low load, and
-helium, with ~6× air's conductivity, carries more. The agent reports the
-same split in words, with the uncertainty band and the next measurement
-that would narrow it. Across 570 measured points on steels, Ni and Al
-alloys, the contact model lands within RMS 13–15 % (table below).
+with load (CMY); in air the gas gap carries most of it at low load, and in
+helium (~6× air's conductivity) more. On 570 measured points the contact
+model lands within RMS 13–15 % (validation table below).
 
 ### The atomic interface: an MD measurement
 
-At each contact spot two solids meet atom to atom, and the interface itself
-resists heat (the Kapitza resistance). OpenKapitza writes, runs and measures
-LAMMPS non-equilibrium MD for it. A heat flow is driven from a hot to a cold
-reservoir and the temperature jump at the interface gives
-h_K = q / ΔT_K:
+At each contact spot the interface itself resists heat (Kapitza). OpenKapitza
+writes, runs and measures LAMMPS non-equilibrium MD for it: heat flows from a
+hot to a cold reservoir and the jump at the interface gives h_K = q / ΔT_K.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/nemd_profile-dark.png">
-  <img alt="Temperature profile through a Si/Ge NEMD cell with a jump at the interface" src="docs/figures/nemd_profile-light.png">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/nemd_profile-dark.png"><img alt="Temperature profile through a Si/Ge NEMD cell with a jump at the interface" src="docs/figures/nemd_profile-light.png"></picture>
 
-Before a number is trusted, the cell is varied one axis at a time. Here is
-Si/Ge with the Tersoff potential: 14 runs on an Apple M3 Pro laptop through
-the agent's local job loop.
+Before a number is trusted the cell is varied one axis at a time (Si/Ge,
+Tersoff; 14 runs on an M3 Pro laptop through the agent's job loop):
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/sige_convergence-dark.png">
-  <img alt="Si/Ge interface conductance against cross-section, length, duration, drive and reservoir size" src="docs/figures/sige_convergence-light.png">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/sige_convergence-dark.png"><img alt="Si/Ge interface conductance against cross-section, length, duration, drive and reservoir size" src="docs/figures/sige_convergence-light.png"></picture>
 
-Cross-section, duration, drive and reservoir size all agree with the base
-cell within error: **483 ± 20 MW/m²K at 16 nm per side**. Length does not.
-h rises beyond 16 nm as longer cells carry more long-wavelength phonons, and
-the 64 nm cell (hollow) had not reached steady state; it is being re-run with
-a longer settling stage. This is why the package reports a convergence
-verdict per axis rather than a single run. (Tersoff Si/Ge also fails the
-elastic-constant gate, which is stated with every Si/Ge number;
-[KB §17](docs/knowledge-base.md).)
+Four axes agree with the base cell: **483 ± 20 MW/m²K at 16 nm per side**.
+Length does not: h rises beyond 16 nm (more long-wavelength phonons), and
+the 64 nm cell (hollow) was not yet steady and is being re-run. Hence a
+convergence verdict per axis, not a single run ([KB §17](docs/knowledge-base.md)).
 
 ### What the interface is made of matters more than anything else
 
-Real contact spots are rarely clean, bonded crystal. The same Si/Ge contact
-with the chemical bond removed (van der Waals only), under load, and with a
-monolayer of adsorbed argon:
+Real contact spots are rarely clean, bonded crystal. The same contact with
+the bond removed (van der Waals only), under load, and with adsorbed argon:
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/interface_types-dark.png">
-  <img alt="Interface conductance for bonded, van der Waals and argon-layer Si/Ge contacts" src="docs/figures/interface_types-light.png">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/interface_types-dark.png"><img alt="Interface conductance for bonded, van der Waals and argon-layer Si/Ge contacts" src="docs/figures/interface_types-light.png"></picture>
 
-Losing the bond costs ~25×. A 1 GPa load, which is the stress inside a real
-asperity contact (the continuum side computes it per joint), recovers ~5×,
-and an adsorbed gas layer halves it again. These are small, short cells:
-the order is clear, the values are preliminary. For such resistive interfaces
-the flux is now imposed (orange) rather than read from the thermostats,
-which cuts the error 10×. A 20-case sweep is running (bond strength × load,
-Ar/N₂/He layers; [KB §19](docs/knowledge-base.md)).
-
-Figures: `python3 scripts/make_readme_figures.py` (the continuum curves are
-computed live; the MD panels read `docs/figures/data/md_results.json`).
+Losing the bond costs ~25×; 1 GPa, the stress inside a real asperity contact,
+recovers ~5×; an adsorbed gas layer halves it again. Small cells, so the
+values are preliminary; imposing the flux (orange) cuts the error 10×, and a
+20-case sweep is running ([KB §19](docs/knowledge-base.md)). Figures:
+`python3 scripts/make_readme_figures.py`.
 
 ## What the models cover
 
@@ -219,9 +192,6 @@ python3 -m unittest discover -s tests      # ~735 tests, ~40 s
 
 Phases 0–2 built. Phase 3 (agent) built: guided input, planning, files and
 sweeps, cited lookup, the MD job loop (submit, poll, diagnose, retry, ingest),
-and an MCP server for a language-model front end. MD runs locally on a
-laptop (benchmarked, queued, checkpointed). Under way: the interface-type
-sweep (van der Waals, adsorbed gas), the Si/Ge length axis, and the scenario
-list in [`docs/open-issues.md`](docs/open-issues.md) (oxides, disorder,
-water, metals with electrons on a GPU). Phase 4: machine-learned potentials
-for pairs without a validated route.
+and an MCP server; MD runs on a laptop (queued, checkpointed). Under way: the
+interface-type sweep, the Si/Ge length axis and the scenario list in
+[`docs/open-issues.md`](docs/open-issues.md); then Phase 4 ML potentials.
