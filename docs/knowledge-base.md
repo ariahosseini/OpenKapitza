@@ -2502,3 +2502,38 @@ OPENKAPITZA_TEST_LMP and OPENKAPITZA_TEST_POTENTIALS are set.
   production rows are often missing from it.
 - Decks prepared before this change have no checkpoints: regenerate them
   (scripts/prepare_cluster.py) before submitting.
+
+## 19. Non-bonded and gas-layer interfaces: first look (31 Oct 2026)
+
+Cells from `structure/nonbonded.py` (§ module docstring): Si/Ge column of
+2.2 nm cross-section and 6 nm per side, one Tersoff per side, UFF
+Lennard-Jones across, optionally an Ar monolayer (36 atoms) in the gap.
+50 ps steady, 150 ps production, 40 K drive, serial on this container.
+
+| cell | contact load | interface jump | h (MW/m²K) | flux mismatch hot/cold |
+|---|---|---|---|---|
+| bonded (reference) | 0 | 22–31 K | 429 ± 47 | 21 % |
+| van der Waals only | 0 | 29–59 K | 16 ± 35 | 144 % |
+| van der Waals only | 1 GPa | 17–32 K | 87 ± 68 | 53 % |
+| Ar monolayer | 1 GPa | 19–41 K | 46 ± 21 | 108 % |
+
+**What it shows.** The order is physical and the effects are large:
+removing the cross-interface bond costs ~25× at zero load. A 1 GPa contact
+pressure, the order of the stress at a real asperity contact, brings it back
+up ~5×. An adsorbed Ar layer at the same load halves it again. In these
+resistive cells nearly the whole 40 K drive drops at the interface.
+
+**Why the numbers are not yet quotable.** The interface jump is well
+resolved, but the heat flux is not. It is read from the Langevin
+reservoirs' energy tallies, whose noise does not shrink with the flux. At
+5–25× less flux than the bonded cell, the hot and cold tallies disagree by
+50–140 %, and per-frame h even goes negative. Running longer helps only as
+√t: matching the bonded cell's flux precision would take ~100× the time.
+
+**Fix: impose the flux instead of measuring it.** A constant-flux NEMD
+(`fix ehex`, or Müller-Plathe velocity swaps) adds and removes a set power
+exactly, so q has no noise and only the large ΔT is measured. That is the
+right method for any interface well below the bonded one (S-5 to S-8).
+Next: a flux-imposed mode in the NEMD deck, then the sweeps on the M3 Pro:
+LJ strength ×¼, ×1, ×4 at 0 / 0.5 / 1 / 2 GPa; Ar, N₂, He at full and
+half coverage at 1 GPa.
