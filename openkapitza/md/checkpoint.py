@@ -225,8 +225,9 @@ def build_resume_deck(deck: str, step: int, production_steps: int, dt_ps: float,
 
     # the reservoirs restart their tallies at zero: carry the accumulated energy
     for name, fix_id, e0 in (("ehot", "hot", e_hot0), ("ecold", "cold", e_cold0)):
-        if name in variables:
+        if name in variables and f"f_{fix_id}" in variables[name]:
             variables[name] = f"variable        {name} equal f_{fix_id}+{e0!r}"
+        # imposed-flux decks (fix heat) define them from the step: already continuous
     if "tnow" in variables:
         variables["tnow"] = f"variable        tnow equal step*{dt_ps!r}"
 

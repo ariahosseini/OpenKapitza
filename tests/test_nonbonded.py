@@ -95,5 +95,66 @@ class Cell(unittest.TestCase):
             self.assertEqual(extra["nonbonded"]["label"], "Ar1")
 
 
+class ImposedFlux(unittest.TestCase):
+    def test_heat_mode_deck(self):
+        from openkapitza.md.nemd import EV_PER_PS_IN_W, build_input_deck, heat_power_ev_ps
+        s = base()
+        s.flux_mode, s.imposed_flux, s.presplit_K = "heat", 1e9, 20.0
+        deck = build_input_deck(s)
+        self.assertEqual(validate_deck(deck), [])
+        f = heat_power_ev_ps(s, s.snapped_area)
+        self.assertAlmostEqual(f * EV_PER_PS_IN_W / s.snapped_area, 1e9)
+        self.assertEqual(deck.count(f"heat 1 {f:.8g}"), 2)          # steady and production
+        self.assertNotIn("langevin", deck)
+        self.assertIn(f"variable        ehot  equal {f:.8g}*step*0.001", deck)
+        self.assertIn("nvt temp 310.00 310.00", deck)
+        self.assertIn("nvt temp 290.00 290.00", deck)
+        self.assertIn("unfix           equil_b", deck)
+        s.imposed_flux = None
+        with self.assertRaises(ValueError):
+            build_input_deck(s)
+
+    def test_resume_keeps_the_imposed_energy_formula(self):
+        from openkapitza.md.checkpoint import build_resume_deck
+        from openkapitza.md.nemd import build_input_deck
+        s = base()
+        s.flux_mode, s.imposed_flux = "heat", 1e9
+        r = build_resume_deck(build_input_deck(s), 4000, s.production_steps, 0.001, 9.9, -9.9)
+        self.assertNotIn("+9.9", r)
+        self.assertIn("*step*0.001", r)
+
+    def test_spec_round_trip(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = base()
+            s.flux_mode, s.imposed_flux, s.presplit_K = "heat", 2e9, 15.0
+            write_job(d, s, NonbondedSpec())
+            r, _, _ = read_spec(d)
+            self.assertEqual((r.flux_mode, r.imposed_flux, r.presplit_K), ("heat", 2e9, 15.0))
+
+
+class SweepScript(unittest.TestCase):
+    def test_writes_every_case_and_registers_them(self):
+        import importlib.util
+        import json
+        p = REPO / "scripts" / "prepare_nonbonded.py"
+        spec = importlib.util.spec_from_file_location("prepare_nonbonded", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        with tempfile.TemporaryDirectory() as d:
+            pot = Path(d) / "pot"
+            pot.mkdir()
+            (pot / "SiCGe.tersoff").write_text("# placeholder\n")
+            root = Path(d) / "jobs"
+            root.mkdir()
+            (root / "manifest.json").write_text(json.dumps({"jobs": [{"name": "campaign/r00"}]}))
+            import contextlib, io
+            with contextlib.redirect_stdout(io.StringIO()):
+                m.main([str(root), "--potentials", str(pot), "--only", "bonded_ref", "Ar_c1_p1"])
+            names = [j["name"] for j in json.loads((root / "manifest.json").read_text())["jobs"]]
+            self.assertEqual(names, ["campaign/r00", "nonbonded/bonded_ref", "nonbonded/Ar_c1_p1"])
+            self.assertTrue((root / "nonbonded" / "Ar_c1_p1" / "interface.data").is_file())
+            self.assertEqual(len(m.cases()), 19)
+
+
 if __name__ == "__main__":
     unittest.main()

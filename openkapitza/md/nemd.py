@@ -395,6 +395,18 @@ class NEMDSpec:
     # coeff_args: hybrid set-ups such as a Tersoff solid on each side coupled
     # only by Lennard-Jones (structure/nonbonded.py).
     pair_block: str | None = None
+    # How the gradient is driven. "langevin": thermostatted reservoirs at
+    # T +- delta/2, flux read from their energy tallies (noisy at low h).
+    # "heat": `fix heat` adds imposed_flux (W/m^2) to the hot reservoir and
+    # removes it from the cold one each step, so q is exact and only the jump
+    # is measured -- for resistive interfaces (KB 19).
+    flux_mode: str = "langevin"
+    imposed_flux: float | None = None
+    # Equilibrate side A at T + presplit/2 and side B at T - presplit/2 instead
+    # of both at T. For a resistive interface nearly all of the drive drops at
+    # the plane, so this starts the run close to its steady state and skips a
+    # transient of C*dT/(2q) (~0.7 ns at 20 MW/m^2K, 16 nm slabs).
+    presplit_K: float | None = None
     extra_files: tuple[str, ...] = ()
     # Atom types on each side of the interface. One element per side is
     # (1,) / (2,); a read-in cell with several species per side lists them all
@@ -524,19 +536,18 @@ compute         tmobile gmobile temp
 # ---- equilibration --------------------------------------------------------
 velocity        gmobile create {t_init:.2f} {seed} mom yes rot yes dist gaussian
 {pressure_block}
-fix             equil gmobile nvt temp {temperature:.2f} {temperature:.2f} {damp_ps:.4f}
+{equil_fixes}
 thermo_modify   temp tmobile
 thermo          10000
 thermo_style    custom step temp pe etotal press
 run             {equilibrate_steps}
-unfix           equil
+{equil_unfix}
 {ttm_block}
 # ---- impose the gradient --------------------------------------------------
 # Langevin reservoirs on the ends only; the bulk runs NVE so the profile
 # between them is physical and not thermostatted into a straight line.
 fix             nve gmobile nve
-fix             hot  ghot  langevin {t_hot:.2f} {t_hot:.2f} {damp_ps:.4f} {seed_hot} tally yes
-fix             cold gcold langevin {t_cold:.2f} {t_cold:.2f} {damp_ps:.4f} {seed_cold} tally yes
+{reservoir_fixes}
 
 # Reach steady state before any averaging starts.
 run             {steady_steps}
@@ -553,8 +564,7 @@ reset_timestep  0
 # window only. The flux comes from these, never from a nominal setpoint.
 unfix           hot
 unfix           cold
-fix             hot  ghot  langevin {t_hot:.2f} {t_hot:.2f} {damp_ps:.4f} {seed_hot} tally yes
-fix             cold gcold langevin {t_cold:.2f} {t_cold:.2f} {damp_ps:.4f} {seed_cold} tally yes
+{reservoir_fixes}
 
 # Bin along z and average the temperature in each bin. The chunk ID
 # ("layers") MUST follow Nfreq and precede the values -- omitting it makes
@@ -564,8 +574,7 @@ compute         layers gmobile chunk/atom bin/1d z lower {bin_width:.4f} units b
 fix             profile gmobile ave/chunk {profile_every} {n_profile_samples} \
 {profile_window} layers temp file temperature_profile.dat
 {ttm_production}
-variable        ehot  equal f_hot
-variable        ecold equal f_cold
+{reservoir_vars}
 variable        tnow  equal time
 fix             energy all print {profile_every} "${{tnow}} ${{ehot}} ${{ecold}}" \
 file reservoir_energy.dat screen no title "# time[ps] E_hot[eV] E_cold[eV]"
@@ -584,7 +593,7 @@ variable        slabf equal lz/(bound(all,zmax)-bound(all,zmin))
 variable        sxx equal pxx*v_slabf
 variable        syy equal pyy*v_slabf
 variable        szz equal pzz*v_slabf
-thermo_style    custom step temp press pxx pyy pzz f_hot f_cold v_sxx v_syy v_szz
+thermo_style    custom step temp press pxx pyy pzz {reservoir_thermo} v_sxx v_syy v_szz
 thermo_modify   temp tmobile
 {checkpoint_on}run             {production_steps}
 {checkpoint_off}
@@ -981,6 +990,58 @@ def _pair_block_rest(block: str) -> str:
     return "\n".join(lines[1:])
 
 
+EV_PER_PS_IN_W = 1.602176634e-7
+
+
+def heat_power_ev_ps(spec: NEMDSpec, area_m2: float) -> float:
+    """fix heat power (eV/ps) for the imposed flux over this cross-section."""
+    if not spec.imposed_flux or spec.imposed_flux <= 0:
+        raise ValueError("flux_mode 'heat' needs a positive imposed_flux (W/m^2)")
+    return spec.imposed_flux * area_m2 / EV_PER_PS_IN_W
+
+
+def _reservoir_blocks(spec: NEMDSpec, area_m2: float) -> tuple[str, str]:
+    """(reservoir fix lines, ehot/ecold variable lines) for the flux mode."""
+    if spec.flux_mode == "langevin":
+        d = spec.damping_fs * FS_TO_PS
+        return (f"fix             hot  ghot  langevin {spec.t_hot:.2f} {spec.t_hot:.2f} {d:.4f} "
+                f"{spec.seed + 1} tally yes\n"
+                f"fix             cold gcold langevin {spec.t_cold:.2f} {spec.t_cold:.2f} {d:.4f} "
+                f"{spec.seed + 2} tally yes",
+                "variable        ehot  equal f_hot\nvariable        ecold equal f_cold")
+    if spec.flux_mode == "heat":
+        if spec.ttm is not None:
+            raise ValueError("flux_mode 'heat' is not combined with TTM")
+        f = heat_power_ev_ps(spec, area_m2)
+        dt = spec.timestep_fs * FS_TO_PS
+        return (f"# Imposed flux {spec.imposed_flux:.4g} W/m^2 = {f:.6g} eV/ps over the\n"
+                f"# cross-section: exact, so the flux carries no thermostat noise.\n"
+                f"fix             hot  ghot  heat 1 {f:.8g}\n"
+                f"fix             cold gcold heat 1 {-f:.8g}",
+                # cumulative energy in and out, from the production clock
+                f"variable        ehot  equal {f:.8g}*step*{dt!r}\n"
+                f"variable        ecold equal {-f:.8g}*step*{dt!r}")
+    raise ValueError(f"unknown flux_mode {spec.flux_mode!r}")
+
+
+def _equil_blocks(spec: NEMDSpec) -> tuple[str, str]:
+    d = spec.damping_fs * FS_TO_PS
+    T = spec.temperature
+    if not spec.presplit_K:
+        return (f"fix             equil gmobile nvt temp {T:.2f} {T:.2f} {d:.4f}",
+                "unfix           equil")
+    zi = spec.geometry.interface_z * M_TO_ANG
+    ta, tb = T + spec.presplit_K / 2, T - spec.presplit_K / 2
+    return (f"# Pre-split: each side starts at its expected steady temperature.\n"
+            f"region          eq_lo block INF INF INF INF INF {zi:.4f} units box\n"
+            f"group           eq_lo_all region eq_lo\n"
+            f"group           eq_a intersect eq_lo_all gmobile\n"
+            f"group           eq_b subtract gmobile eq_a\n"
+            f"fix             equil   eq_a nvt temp {ta:.2f} {ta:.2f} {d:.4f}\n"
+            f"fix             equil_b eq_b nvt temp {tb:.2f} {tb:.2f} {d:.4f}",
+            "unfix           equil\nunfix           equil_b")
+
+
 def profile_window(spec: NEMDSpec) -> int:
     """Steps per temperature-profile frame (Nfreq of the production ave/chunk)."""
     return max(spec.profile_every,
@@ -1110,6 +1171,9 @@ def build_input_deck(spec: NEMDSpec) -> str:
     )
     n_samples = max(1, window // spec.profile_every)
     ckpt = checkpoint_every(spec)
+    eq_fixes, eq_unfix = _equil_blocks(spec)
+    res_fixes, res_vars = _reservoir_blocks(spec, (spec.snapped_area if spec.structure_mode == "build"
+                                                   else g.area))
     if ckpt:
         checkpoint_on = (
             "# Checkpoints: a restart file at every profile-frame boundary, named by\n"
@@ -1122,6 +1186,11 @@ def build_input_deck(spec: NEMDSpec) -> str:
 
     return DECK.format(
         checkpoint_on=checkpoint_on,
+        reservoir_fixes=res_fixes,
+        equil_fixes=eq_fixes,
+        equil_unfix=eq_unfix,
+        reservoir_vars=res_vars,
+        reservoir_thermo="f_hot f_cold" if spec.flux_mode == "langevin" else "v_ehot v_ecold",
         checkpoint_off=checkpoint_off,
         structure_block=structure_block,
         element_a=spec.element_a,
