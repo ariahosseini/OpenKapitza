@@ -2354,7 +2354,7 @@ decks are pending. Measured with `agent.ingest` on the staged outputs.
 | cross-section 2.2 / 3.3 / 4.3 / 5.4 / 6.5 nm | 493, 493, 483, 478, 503 | unresolved: 5.0 ± 4.1 % |
 | length 8 / 16 / 32 / 64 nm | 499, 483, 518 ± 34 (re-run), 729 ± 84 all frames / ≈600–640 after the transient (re-run, NEMD_UNEQUILIBRATED) | rising beyond 16 nm; 64 nm not at steady state (see below) |
 | duration 250 / 500 / 1000 ps | 482, 483, 489 | unresolved: 1.1 ± 4.7 % |
-| ΔT 20 / 40 / 60 K | 402 (NEMD_UNEQUILIBRATED), 483, 465 | FLUX_NONLINEAR 17.6 %, driven by the 20 K run |
+| ΔT 20 / 40 / 60 K | 485 ± 35 (re-run 31 Oct: 400 ps steady, 1 ns production; was 402, NEMD_UNEQUILIBRATED), 483, 465 | linear within noise (±4 %); the earlier FLUX_NONLINEAR came from the unsteady 20 K run |
 | reservoir 1 / 2 / 4 nm | 505, 483, 514 | unresolved: 6.3 ± 7.6 % |
 | spot pressure 2 GPa, stress / strain | 485, 523 | — |
 
