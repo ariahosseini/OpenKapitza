@@ -111,6 +111,119 @@ values are preliminary; imposing the flux (orange) cuts the error 10×, and a
 | solder, sinter, die attach | layered stack + Kapitza faces, voids | `fill=bond_fill(...)` |
 | measured or MD interface conductance | replaces the DMM placeholder | `run_continuum(kapitza=...)`; agent `ingest` |
 
+## Equations
+
+What the code evaluates, in the order the pipeline uses it. Each module's
+docstring carries the full form, its fitted range and its source.
+
+**Surfaces and materials**
+
+```math
+\sigma = \sqrt{\sigma_a^2+\sigma_b^2},\qquad
+m = \sqrt{m_a^2+m_b^2},\qquad
+k_s = \frac{2k_ak_b}{k_a+k_b},\qquad
+\frac{1}{E'} = \frac{1-\nu_a^2}{E_a}+\frac{1-\nu_b^2}{E_b}
+```
+
+**Contact microhardness** (Song–Yovanovich, from the softer side's Vickers
+coefficients $c_1$, $c_2$, with $\sigma/m$ in µm):
+
+```math
+\frac{P}{H_c} = \left[\frac{P}{c_1\,(1.62\,\sigma/m)^{c_2}}\right]^{1/(1+0.071\,c_2)}
+```
+
+**Deformation regime**: plasticity index $\psi = E'm/H_c$; plastic for
+$\psi \ge 3$, elastic for $\psi \le 0.33$, both branches reported in between.
+
+**Contact-spot conductance**, per apparent area, with the real-area fraction
+$\xi = A_r/A_a$:
+
+```math
+\text{plastic (CMY):}\quad h_c = 1.25\,k_s\,\frac{m}{\sigma}\left(\frac{P}{H_c}\right)^{0.95},\qquad \xi = \frac{P}{H_c}
+```
+
+```math
+\text{elastic (Mikic):}\quad h_c = 1.55\,k_s\,\frac{m}{\sigma}\left(\frac{\sqrt{2}\,P}{m E'}\right)^{0.94},\qquad \xi = \frac{\sqrt{2}\,P}{m E'}
+```
+
+At light load the truncated-Gaussian form (Milanez et al. 2004) replaces
+$P/H_c$ and the separation below.
+
+**Gas gap** (lumped model, with the Yovanovich mean-plane separation):
+
+```math
+h_g = \frac{k_g}{Y+M},\qquad Y = 1.53\,\sigma\left(\frac{P}{H_c}\right)^{-0.097},\qquad
+M = \left(\frac{2-a_1}{a_1}+\frac{2-a_2}{a_2}\right)\frac{2\gamma}{(\gamma+1)\,Pr}\,\Lambda,\qquad
+\Lambda = \frac{\mu}{p}\sqrt{\frac{\pi R T}{2}}
+```
+
+$a_{1,2}$ are the thermal accommodation coefficients (sourced bands, or a
+short MD gas–surface scattering run); $h_g = 0$ in vacuum.
+
+**Out-of-flatness** (Bahrami 2004, crowned or warped faces): a macro
+constriction in series with the asperity one,
+
+```math
+R_L = \frac{(1-a_L/b_L)^{1.5}}{2\,k_s\,a_L}
+```
+
+with $a_L$ the macro-contact radius from the load, crown and roughness, and
+$b_L$ the joint radius.
+
+**The atomic interface** (Kapitza conductance $h_K$, per real contact area).
+Placeholder, Debye diffuse mismatch with the elastic cutoff:
+
+```math
+h_K^{\text{DMM}} = \frac{k_B}{8\pi^2}\left(\frac{k_BT}{\hbar}\right)^{3} S_{2,1}\,I(x_c)\,\alpha_{12},\qquad
+\alpha_{12} = \frac{S_{2,2}}{S_{2,1}+S_{2,2}},\qquad
+S_2 = \frac{1}{v_L^2}+\frac{2}{v_T^2},\qquad
+I(x) = \int_0^{x}\frac{u^4e^u}{(e^u-1)^2}\,du
+```
+
+Replaced by non-equilibrium MD when it matters. The heat flux $q$ comes
+from the reservoirs' energy (Langevin tallies, or imposed exactly for
+resistive interfaces), and $\Delta T_K$ is the jump between linear fits of
+the two bulk profiles, extrapolated to the interface plane:
+
+```math
+h_K = \frac{q}{\Delta T_K},\qquad q = \frac{|\Delta E_\text{hot}|+|\Delta E_\text{cold}|}{2\,A\,t}
+```
+
+Equilibrium cross-check: the slab temperature difference relaxes with time
+$\tau$, so
+
+```math
+h_K^{\text{EMD}} = \frac{C_r}{A\,\tau},\qquad C_r = \frac{C_aC_b}{C_a+C_b},\qquad C = 3Nk_B
+```
+
+On a metal side, electron–phonon coupling ($g$; lattice conductivity $k_p$)
+adds a resistance in series (Majumdar–Reddy), or is resolved directly by
+two-temperature MD:
+
+```math
+\frac{1}{h_K} = \frac{1}{h_{pp}}+\frac{1}{h_{ep}},\qquad h_{ep} = \sqrt{g\,k_p}
+```
+
+The MD is run at the stress inside a contact spot, $\approx H_c$ (GPa), not
+at the apparent pressure $P$ (MPa).
+
+**Combining the paths**, all per apparent area. $h_K$ is per real area, so
+it enters scaled by $\xi$; omitting that factor understates the Kapitza term
+by $10^2$–$10^3$:
+
+```math
+R_\text{solid} = \frac{1}{h_c}+\frac{1}{\xi\,h_K}\;(+R_L),\qquad
+h_\text{joint} = \frac{1}{R_\text{solid}}+h_g
+```
+
+**Filled and bonded joints** (grease, pad, PCM, solder, sinter) go through a
+series stack instead, each layer of thickness $t_i$ and conductivity $k_i$,
+with boundary resistances at the faces:
+
+```math
+R = R_{c,1}+\sum_i \frac{t_i}{k_i}+R_{c,2}
+```
+
 ## How well it is validated
 
 | test | data | result |
