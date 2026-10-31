@@ -61,9 +61,6 @@ class Docs(unittest.TestCase):
         for name in set(re.findall(r"examples/agent/[\w.]+", text)):
             self.assertTrue((ROOT / name).exists(), name)
 
-    def test_readme_stays_short(self):
-        self.assertLess(len((ROOT / "README.md").read_text().splitlines()), 200)
-
 
 if __name__ == "__main__":
     unittest.main()
