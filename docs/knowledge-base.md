@@ -2748,3 +2748,75 @@ Tersoff or MEAM interfaces.
    interfaces. Keep the slab-energy EMD.
 5. **Optional:** `zero yes` on the Langevin reservoirs, and
    `fix ave/correlate/long` for the EMD autocorrelation.
+
+## 21. The official LAMMPS tutorials, read for thermal analysis (31 Oct 2026)
+
+Source: the tutorials page, https://www.lammps.org/documentation/tutorials/.
+
+**What is on it, and what is thermal.**
+- **ICTP 2014, Plimpton: "Modeling Thermal Transport and Viscosity with
+  MD".** The only thermal tutorial on the page; read in full.
+- **Society of Rheology 2013:** of its twelve decks, "Common Equilibrium" and
+  "Common Non-Equilibrium Calculations" and their hands-on sessions mention
+  heat flow. The hands-on non-equilibrium session is viscosity only. The
+  equilibrium deck gives the Green–Kubo heat-flux form, but garbled in
+  extraction; use `compute_heat_flux.rst` (§20) for the formula.
+- **Gravelle et al., eight LiveCoMS tutorials (2025):** LJ fluid, nanotube
+  pulling, polymer in water, nanosheared electrolyte, reactive SiO₂, water
+  adsorption in silica, free energy, reactive MD. None is about heat
+  transport.
+- **Not read from here:** Tschopp's CAVS tutorials and the HPC-Carpentry
+  LAMMPS lesson are outside this session's network allowlist. Their titles
+  name no thermal tutorial.
+
+**What the thermal tutorial adds beyond §20.**
+
+1. **The scatter between methods on an easy system.** On the same LJ liquid
+   (ρ* = 0.6, T* = 1.35, r_c = 2.5σ), the tutorial reports κ = 3.41
+   (thermostats), 3.45 (Müller-Plathe), 3.39 (fix heat), 3.78 (Green–Kubo),
+   against Evans' ≈3.3. The `examples/KAPPA` README, another run of the same
+   scripts, gives 3.29 / 3.41 / 3.55 / 3.88. So the NEMD methods agree within
+   about ±5 % of each other, run to run, on a homogeneous fluid, and
+   Green–Kubo runs 10–15 % high at that length. *For us:* when two drives
+   disagree by more than this on one cell, the cause is physical or
+   methodological, not noise. That is the case for the bonded Si/Ge cell in
+   KB 19: Langevin 429 against HEX 152.
+2. **"Factors of 2 are easy to miss."** The tutorial's NEMD formula is
+   κ = ΔQ/(2·A·Δt)·Δz/ΔT. The 2 is there because a periodic cell carries the
+   flux both ways. *For us:* our cells are walled (`p p f`), so heat flows
+   one way and there is no factor 2. `flux_from_reservoirs` takes the mean of
+   the hot input and the cold output, not their sum, which is the correct
+   one-way form. Any periodic two-interface cell (for Müller-Plathe, or a
+   future mirrored design) must reintroduce the 2.
+3. **Electrons are not in the model.** "If electrons make large contribution
+   to κ, won't see it." This is the classical-potential form of our P1-14 and
+   S-3 caveat; the remedy is §7 (series e-ph band, TTM).
+4. **Gradients are unphysical.** NEMD needs "unphysically large temperature
+   gradients and heat fluxes ... orders of magnitude larger than expt."
+   *For us:* 40 K across ~40 nm is ~10⁹ K/m. The ΔT axis of the campaign
+   (20 / 40 / 60 K: 485 / 483 / 465, KB 17) is the check that h_K is still in
+   linear response. It is: within ±4 %.
+5. **Small systems have boundary effects; Green–Kubo convergence is hard to
+   judge.** Both are already built in: the length axis (still rising past
+   16 nm per side) and the EMD two-timescale flag (KB 17).
+6. **Command drift.** The tutorial profiles with `fix ave/spatial`, which
+   later releases replaced by `compute chunk/atom` + `fix ave/chunk` (what
+   our decks use). Old forum and tutorial scripts using `ave/spatial` do not
+   run on our build.
+
+**From the SoR decks.**
+- "Instantaneous kinetic temperature: not the thermodynamic temperature."
+  This is the reason our EMD uses slab *energy* fluctuations rather than the
+  kinetic-temperature difference (KB 17: the kinetic ΔT autocorrelation
+  drops to ~0.4 at 1 ps).
+- The sample output's warning "Temperature for thermo pressure is not for
+  group all" comes from `thermo_modify temp <mobile compute>`. Every one of
+  our NEMD logs prints it, by design, because the thermo temperature excludes
+  the frozen walls. It is harmless. The pressure columns our health check
+  reads (`v_sxx`, `v_syy`, `v_szz`) come from the virial, rescaled to the
+  slab volume.
+
+**Net.** Nothing in the tutorials contradicts the decks. The useful
+additions are three calibrations: method-to-method agreement of about
+±5 % for NEMD on a clean system, the factor-2 rule for periodic cells, and
+the electrons and gradient caveats. The manual (§20) remains the reference.
