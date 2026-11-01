@@ -198,8 +198,14 @@
   cite: Merabia & Termentzidis, NEMD vs equilibrium MD interface conductance
   status: partial
   topics: [NEMD, EMD, Green-Kubo, interface conductance definitions]
-  findings: NEMD and equilibrium MD measure different conductances; the expected NEMD/EMD ratio band (1-10) comes from this.
-  kb: ["8.3", "11"]
+  findings: >
+    NEMD and equilibrium MD measure different conductances; the expected
+    NEMD/EMD ratio band (1-10, ~3 for Si/Ge) comes from this. Method (read
+    31 Oct): energy autocorrelation of each solid in a periodic two-interface
+    cell, single exponential fitted from ~5 ps to the tenfold drop; EMD G
+    falls with length as G_inf[1 + c(xi/L)^1.5] because mode relaxation times
+    scale with L; heat-flux GK (Puech) gave no clean plateau. Slabs 10-50 a0.
+  kb: ["8.3", "11", "23"]
 
 - key: adnan2024
   cite: Adnan, Neupane & Feng, IJHMT 235, 126227 (2024)
@@ -551,3 +557,82 @@
   topics: [GaN/SiC, TDTR, interface structure, MD over-prediction]
   findings: 'As-bonded 169 MW/m2K (3 nm amorphous layer), 229 after anneal, against cited MD ~500: interface structure, not only the potential, opens the gap.'
   kb: ["8.4", "22"]
+
+# ---- 31 Oct 2026, third round (KB 23) ----
+
+- key: li2012mismatch
+  cite: 'X. Li & R. Yang, "Effect of lattice mismatch on phonon transmission and interface thermal conductance across dissimilar material interfaces", Phys. Rev. B 86, 054305 (2012)'
+  status: full
+  topics: [lattice mismatch, strain, Si/Ge, Tersoff, AGF, reconstruction]
+  findings: >
+    Ge-like Tersoff materials differing only in lattice constant; relaxed
+    mismatched interfaces lose transmission (disorder beats mode conversion);
+    h falls ~linearly with adhesion energy; 8 % mismatch ~-6.8 % vs matched,
+    1000 K anneal ~-3 % more. Coherently strained models may over-predict h
+    for real interfaces. Harmonic AGF, so inelastic channels omitted.
+  kb: ["23"]
+
+- key: dispersion2010sige
+  cite: 'Full-dispersion DMM and non-gray BTE for Si/Ge interfaces and superlattices, arXiv:1005.2578 (2010)'
+  status: partial
+  topics: [DMM, full dispersion, Si/Ge, superlattice]
+  findings: >
+    Full-dispersion DMM R ~2.72e-9 m2K/W (h ~370 MW/m2K) at 300 K; non-gray BTE
+    ~3.3e-9 (optical-to-acoustic transfer in Ge); measured short-period
+    superlattice resistance 3-5x below DMM. Authors not recorded here.
+  kb: ["23"]
+
+- key: gordiz2019sio2
+  cite: 'K. Gordiz, M. G. Muraleedharan & A. Henry, "Interface conductance modal analysis of a crystalline Si-amorphous SiO2 interface", J. Appl. Phys. (2019); arXiv:1807.06633'
+  status: partial
+  topics: [Si/SiO2, Tersoff, ICMA, interfacial modes, experimental sensitivity]
+  findings: >
+    ~650 MW/m2K at 600 K (Tersoff); extended modes ~74 %, localised interfacial
+    ~18 % from ~3 % of states. TDTR/FDTR/3-omega showed almost no sensitivity
+    to the Si/SiO2 boundary resistance: experimental validation is not
+    available. Glass quenched over 50 ns, interface annealed 2 ns at 1000 K.
+  kb: ["23"]
+
+- key: gundrum2005
+  cite: 'B. C. Gundrum, D. G. Cahill & R. S. Averback, "Thermal conductance of metal-metal interfaces", Phys. Rev. B 72, 245426 (2005)'
+  status: partial
+  topics: [metal/metal, Al/Cu, electrons, TDTR, electronic DMM]
+  findings: Al/Cu conductance an order of magnitude above phonon-mediated metal/dielectric (~4 GW/m2K); electronic DMM reproduces magnitude and linear T dependence.
+  kb: ["23"]
+
+- key: li2023metalmetal
+  cite: 'D. Li & J. Feser, "A study on the thermal conductance of interface between dissimilar metals", arXiv:2311.11220'
+  status: partial
+  topics: [metal/metal, TDTR, Al/Cu, Al/Ag, Al/Ni, electronic DMM, DFT]
+  findings: >
+    TDTR: Al/Cu 7-21 GW/m2K (likely 8.5-8.8), Al/Ag 4.2, Al/Fe ~16 (large
+    error), Al/Ni 1.7-2.6 against electronic DMM 11.3: free-electron DMM
+    over-predicts transition metals. Basis of the S-4 band 2-20 GW/m2K.
+  kb: ["23"]
+
+- key: prasher2005constriction
+  cite: 'R. S. Prasher, "Predicting the thermal resistance of nanosized constrictions", Nano Lett. 5, 2155 (2005)'
+  status: partial
+  topics: [constriction resistance, ballistic, Knudsen number, contact spots]
+  findings: >
+    Nanosized constrictions resist much more than macroscopic theory predicts;
+    Knudsen number (MFP / contact radius) controls like-material contacts, a
+    microscopic Biot number (with boundary resistance) unlike ones. Basis of
+    tracker P0-11. Formula not read here; our gray Sharvin+diffusive estimate
+    in KB 23 is our own.
+  kb: ["23"]
+
+- key: regner2013mfp
+  cite: 'K. T. Regner, D. P. Sellan, Z. Su, C. H. Amon, A. J. H. McGaughey & J. A. Malen, "Broadband phonon mean free path contributions to thermal conductivity measured using frequency domain thermoreflectance", Nat. Commun. 4, 1640 (2013)'
+  status: partial
+  topics: [silicon, phonon mean free path, FDTR, accumulation]
+  findings: 40 +- 5 % of crystalline Si's conductivity at 311 K from phonons with MFP > 1 um (MFPs probed 0.3-8 um).
+  kb: ["23"]
+
+- key: esfarjani2011si
+  cite: 'K. Esfarjani, G. Chen & H. T. Stokes, "Heat transport in silicon from first-principles calculations", Phys. Rev. B 84, 085204 (2011); arXiv:1107.5288'
+  status: partial
+  topics: [silicon, first principles, phonon mean free path]
+  findings: About half of Si's conductivity from MFP > 1 um (277 K); MFPs extend beyond 10 um; k 166 vs 174 W/mK measured.
+  kb: ["23"]
+

@@ -3017,3 +3017,157 @@ Our reports should say this explicitly whenever an MD h_K enters a joint.
    `sial_pp` as likely 20–30 % or more high.
 6. **S-5 sweep:** check against the pressure-linearity and bonding-saturation
    trends above.
+
+## 23. Third review round: strain, the EMD procedure, metals, oxide, and ballistic contact spots (31 Oct 2026)
+
+Aimed at the gaps the first two rounds (§8, §22) left: what strain does to
+h_K, how others actually run the equilibrium method, what metal/metal and
+Si/SiO₂ interfaces look like, and one question about the package itself.
+Does the macroscopic constriction formula still hold when contact spots are
+no bigger than the phonon mean free path?
+
+### Strain and lattice mismatch (for P1-16)
+
+- **Coherent strained cells over-predict.** Li & Yang (PRB 86, 054305, 2012)
+  made "Ge-like" Tersoff materials that differ from Ge only in lattice
+  constant, relaxed the mismatched interface by MD, and computed
+  transmission by AGF [li2012mismatch].
+  - Mismatch lowers transmission: the disorder left by relaxation outweighs
+    mode conversion. h falls roughly linearly with adhesion energy.
+  - At 8 % mismatch the relaxed interface is ~6.8 % below lattice-matched,
+    and annealing at 1000 K takes another ~3 % off.
+  - Their stated implication: models that strain one side to fit the other
+    ignore reconstruction and **may over-predict h for real interfaces**.
+- **Two separate effects, both pushing our number up.** Our single-lattice
+  build (1) compresses Ge by 4 %, stiffening it and moving its spectrum
+  toward Si's, and (2) forbids any misfit relaxation. Feng et al. remove (1)
+  by rescaling the Ge length scale; Li & Yang quantify (2) at a few percent.
+  So (1) is the larger, untested one.
+- **P1-16, refined.** Three cells, in order of cost:
+  - *rescaled Ge* (Feng's approach; same cell size as now, laptop);
+  - *strained Ge* (now);
+  - *relaxed incoherent*, with ~24 Si cells on ~23 Ge cells for 4 %. That is
+    ~13 nm on a side, a few hundred thousand atoms at 16 nm per side: a GPU
+    job.
+
+  The first against the second isolates the strain effect; the third bounds
+  the reconstruction effect.
+
+### Debye DMM against full dispersion
+
+A full-dispersion DMM for Si/Ge gives R ≈ 2.72×10⁻⁹ m²K/W (h ≈ 370 MW/m²K)
+(arXiv:1005.2578) [dispersion2010sige]. The same work finds the measured
+short-period superlattice resistance 3–5× below DMM, pointing to DMM
+over-predicting the resistance at epitaxial Si/Ge. Our placeholder is
+Debye DMM with the elastic cutoff (§3). Its value for any pair is an
+order-of-magnitude marker only. A full-dispersion DMM would need the
+potential's or DFT's dispersion (`fix phonon` / `dynamical_matrix`, §20, or
+Phonopy), and a measured or MD h_K replaces it anyway.
+
+### How others run the equilibrium method (for the KB 17 EMD puzzle)
+
+Merabia & Termentzidis (arXiv:1209.3485) [merabia], read in detail:
+- **What is correlated:** the energy autocorrelation of each solid's
+  mechanical energy, in a fully periodic cell with two interfaces (hence a
+  factor 2). That is what our slab-energy ΔT does, with one interface
+  between walls.
+- **Where they fit:** a single exponential from about **5 ps** until the
+  correlation has fallen **tenfold**, which excludes the fast initial drop.
+  That is our "slow" component. By their procedure our run gives
+  h ≈ 32 MW/m²K, and the 1.3 ps part is not the interface.
+- **Size:** EMD conductance decreases with length,
+  G(L) = G∞[1 + c(ξ/L)^{3/2}], and "for large systems, the EACF decays very
+  slowly, since the mode relaxation times scale with system length". Long-
+  wavelength modes slow the decay, the effect we suspected. Their slabs were
+  10–50 lattice constants; ours are ~5 (2.5 nm).
+- **Heat-flux Green–Kubo across the interface** (Puech) gave no clean
+  plateau even with 30 configurations, which is why they used the energy
+  correlation.
+- **Expected NEMD/EMD:** about 3 for Si/Ge, 4–10 typical, and more than 10
+  for similar solids.
+
+*So for us:* the slow-component reading of our run follows the published
+procedure, and the 15× ratio is probably not an EMD failure alone. Our NEMD
+is likely inflated by the strain (above), and the EMD slabs are smaller than
+anything Merabia ran. The next EMD run should use the strain-free cell with
+slabs ≥ 10 lattice constants (≥ 5.4 nm). Then compare the ratio with ~3,
+fitting from ~5 ps to the tenfold drop. The `EMD_TWO_TIMESCALES` flag stays:
+it marks exactly the case where the fit window decides the answer.
+
+### Si/a-SiO₂
+
+- Interface conductance modal analysis with Tersoff gives ~650 MW/m²K at
+  600 K. Extended modes carry ~74 %, localised interfacial modes ~18 % from
+  ~3 % of the states [gordiz2019sio2].
+- **Experiments barely see this interface.** TDTR, FDTR and 3ω showed "almost
+  no sensitivity" to the Si/SiO₂ boundary resistance in that work. An
+  experimental validation of P2-3 is not available, so Chen, Zhang & Li's MD
+  bracket remains the comparison.
+- In a joint the native-oxide boundary (~1–2×10⁻⁹ m²K/W) is negligible next
+  to constriction, so P2-3 matters for accuracy claims, not for joint totals.
+
+### Metal/metal interfaces (S-4)
+
+- Al/Cu conducts "an order of magnitude" above phonon-mediated
+  metal/dielectric interfaces, ~4 GW/m²K. An electronic DMM reproduces the
+  magnitude and the linear T dependence [gundrum2005].
+- Newer TDTR [li2023metalmetal]:
+  - Al/Cu 7–21 GW/m²K, most likely ~8.5–8.8;
+  - Al/Ag 4.2;
+  - Al/Ni 1.7–2.6, against an electronic DMM of 11.3: the free-electron DMM
+    over-predicts transition metals by ~5×.
+- **S-4 band:** clean metal/metal 2–20 GW/m²K, i.e. a boundary resistance of
+  0.05–0.5×10⁻⁹ m²K/W. That is negligible against constriction in any joint,
+  so it is stated, not simulated. Intermetallic layers (Cu₆Sn₅, Cu₃Sn) enter
+  through their bulk conductivity, not a Kapitza term.
+
+### Ballistic contact spots: a gap in the package
+
+- **The issue.** CMY treats each contact spot as a diffusive constriction,
+  R_spot = 1/(2 k_s a). Prasher (Nano Lett. 5, 2155, 2005)
+  [prasher2005constriction]: constriction resistance of nanosized contacts is
+  "much higher than those predicted using macroscopic approaches". For
+  like materials the controlling parameter is the Knudsen number
+  Kn = λ/a (mean free path over spot radius); for unlike materials, a
+  microscopic Biot number built on the boundary resistance.
+- **How long silicon's mean free paths are.**
+  - ~40 ± 5 % of Si's conductivity at 311 K comes from phonons with MFP
+    > 1 µm, by broadband FDTR [regner2013mfp].
+  - First-principles puts it at "almost half", with MFPs "well beyond 10
+    microns" [esfarjani2011si].
+  - Metals carry heat by electrons, with MFP of order 10–40 nm at 300 K.
+- **How big our spots are.** The package already computes the mean spot
+  radius (`contact/hardness.py`, Yovanovich):
+  a = (σ/m)·√(8/π)·e^{λ²/2}·erfc(λ/√2), with λ = √2·erfc⁻¹(2P/H_c).
+  - a/(σ/m) = 0.32, 0.38 and 0.48 at P/H_c = 10⁻⁴, 10⁻³ and 10⁻².
+  - A lapped metal (σ/m ≈ 10–30 µm) has spots of 4–11 µm.
+  - A polished semiconductor die (σ/m ≈ 1–3 µm) has spots of 0.4–1.1 µm,
+    the length of silicon's heat-carrying phonons.
+- **Size of the effect.** A simple estimate (ours, not from Prasher): add
+  the ballistic (Sharvin-type) resistance of an orifice, 4/(C v π a²) for a
+  gray phonon gas, to the diffusive one. Then R/R_diff ≈ 1 + (8/3π)·Kn with
+  λ = 3k/(Cv).
+  - For Si the gray λ is ~40 nm. With it, polished spots (a ≈ 0.4 µm) gain
+    ~9 %.
+  - Taking λ ≈ 1 µm for the long-MFP half of the spectrum gives ~3× at
+    a ≈ 0.4 µm and ~1.75× at 1.1 µm.
+  - The truth lies between. A spectral calculation (MFP accumulation against
+    the 1 + (8/3π)λ/a kernel) is the right estimate.
+  - Metals (λ ≈ 40 nm) are affected only at a ≲ 0.4 µm, i.e. σ/m ≲ 1 µm.
+- **Consequence.** For smooth semiconductor-to-semiconductor contacts (die
+  stacking, wafer bonding gone wrong, polished die on a spreader), the
+  package can under-estimate the constriction resistance by tens of percent
+  to ~2× today, with no flag. Tracker P0-11: compute Kn per side from the
+  spot radius and a per-material λ (phonon spectral for non-metals, electron
+  for metals), raise a CAUTION above Kn ≈ 0.1, and report the corrected
+  band.
+
+### What changed
+
+- Tracker:
+  - P1-16 refined (three cells);
+  - P1-8 (next EMD run: strain-free, ≥ 5.4 nm slabs, the Merabia fit
+    window);
+  - S-4 band (2–20 GW/m²K);
+  - new **P0-11** (ballistic contact-spot check).
+- Paper notes for every source above.
