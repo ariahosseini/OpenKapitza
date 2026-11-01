@@ -188,9 +188,11 @@ FIELDS: list[Field] = [
           unit="um", units=_LEN, lo=0.0, hi=1000.0, applies=bare),
     Field("slope_a", "Mean absolute asperity slope of surface A (profilometry Δa, "
           "dimensionless)? Leave blank if not measured.",
-          "Conductance is linear in the slope. If missing it is estimated from roughness "
-          "(Antonetti's correlation) and flagged: a weak correlation, off by 2x for some "
-          "finishes.",
+          "Conductance is linear in the slope. Take it from a stylus profilometer "
+          "(traces ~1 cm), not AFM or high-resolution optical profiles, which report "
+          "larger slopes and over-predict conductance. If missing it is estimated from "
+          "roughness (Antonetti's correlation) and flagged: a weak correlation, off by "
+          "2x for some finishes.",
           unit=None, lo=0.0, hi=2.0, applies=bare, required=no,
           default_reason="estimated from roughness and flagged"),
     Field("slope_b", "Mean absolute asperity slope of surface B? Leave blank if not "

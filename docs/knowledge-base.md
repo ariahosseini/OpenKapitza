@@ -3171,3 +3171,162 @@ it marks exactly the case where the fit window decides the answer.
   - S-4 band (2–20 GW/m²K);
   - new **P0-11** (ballistic contact-spot check).
 - Paper notes for every source above.
+
+## 24. Fourth review round: the macro scale and the electron contribution (31 Oct 2026)
+
+Builds on §8.1–8.2 (contact and gap), §7 (electron–phonon) and §12
+(benchmarks); only what is new is recorded here.
+
+### Contact conductance: what the slope really measures
+
+- **The slope is a property of the instrument as much as of the surface.**
+  Persson, Lorenz & Volokitin (EPJE 2010, arXiv:0908.3941) [persson2010heat]:
+  - The rms slope "is dominated by the shortest-wavelength roughness", which
+    makes slope-based theories ill-defined unless the measurement bandwidth
+    is fixed. Using the true (short-wavelength) slope of order 1 in a
+    CMY-like formula gives coefficients ~100× too large.
+  - In their elastic theory, contact conductance is set by the
+    long-wavelength roughness, through the rms height and E*. At low load it
+    is linear in nominal pressure, α ≈ p₀κ/(E*u₀), with u₀ of order the rms
+    roughness. One decade of wavevectors already gives the result within
+    ~10 % for Hurst exponent ~0.8.
+  - Contact area and contact resistance are not directly related: the real
+    area tends to zero as more roughness decades are resolved.
+  - Plasticity and adhesion act at short scales and matter little for
+    conduction.
+- **Why CMY still works.** CMY's 1.25/0.95 constants were fitted to slopes
+  measured with stylus profilometers on ~1 cm traces. Bahrami et al. averaged
+  eight 1 cm traces and found ~6 % scatter [bahrami2004scale]. So CMY's
+  slope is a calibrated, instrument-specific quantity. The same surface
+  profiled by AFM or high-resolution optics reports a several-times larger
+  m, and since h_c ∝ m, a several-times larger h_c.
+  - *Done:* the `CMY_SLOPE_ESTIMATED` flag and the agent's slope question now
+    say "stylus profilometer, ~1 cm traces, not AFM/optical", and name the
+    reason.
+  - *Open (P0-12):* record the instrument with the slope, and flag a slope
+    that comes from a high-resolution method.
+- **Two slope correlations disagree.**
+  - Antonetti et al., m = 0.125 σ^0.402 (σ in µm, fitted 0.216–9.6 µm), as
+    given by Yovanovich, Culham & Teertstra (Electronics Cooling 1997)
+    [yovanovich1997calc]. It is the one in `schema/inputs.py`; the citation
+    is now verified and the code no longer says "NEEDS VERIFICATION".
+  - Bahrami et al. 2004 used m ≈ 0.076 σ^0.52 for data sets without
+    measured slope [bahrami2004scale].
+  - At σ = 1 µm they differ 1.64× (0.125 vs 0.076); at 0.4 µm, 1.8×. The
+    flag now reports both and the ratio as the h_c uncertainty when the
+    slope is estimated.
+- **Multiscale asperity models do not escape the bandwidth question.** In
+  Jackson, Bhavnani & Ferguson's Fourier-level model (J. Heat Transfer 130,
+  081301, 2008), TCR is "significantly affected" by which frequency levels
+  are included, and two plausible TCR definitions differ greatly
+  [jackson2008multiscale]. With alleviation factors it lands near the
+  Yovanovich microhardness correlation. Scale-dependent yield strength
+  matters more than scale-dependent spreading. It is untested beyond nickel
+  and has no direct TCR validation.
+- **A scale-analysis cross-check.** Bahrami's model,
+  R_s = 0.565 H*(σ/m)/(k_s F) plus the macro term, reproduces >880 points at
+  13.8 % RMS. It agrees with CMY for 10⁻⁴ ≤ P/H ≤ 2×10⁻², and at light loads
+  predicts more resistance than the data, the truncation effect again (§12.1)
+  [bahrami2004scale].
+
+**Consequence.** Keep CMY, which is thermally calibrated, but treat its
+slope input as a protocol, not a material property. A Persson-type model
+(roughness power spectrum in, conductance out, slope-free) remains the
+natural alternative for surfaces characterised by PSD (e.g. AFM on polished
+dies), where CMY's slope is undefined. Tracker P0-12.
+
+### Very smooth contacts: near-field radiation and the gap
+
+For MEMS-smooth surfaces, Persson et al. estimate that evanescent-wave
+radiation across nanometre gaps reaches ~2 MW/m²K at d = 1 nm (SiO₂). The
+gas, radiative and solid-contact paths can be comparable there. For
+engineering roughness (σ ≳ 0.1 µm) radiation stays negligible, which matches
+Yovanovich's guidance. It becomes relevant only alongside the
+ballistic-spot issue (P0-11), i.e. for polished semiconductor contacts.
+
+### Validation data for metal joints in air (the README's open item)
+
+Singhal, Litke, Black & Garimella (IJHMT 48, 5446, 2005)
+[singhal2005tcc]: Al 6061-T6, brass, Cu 110 and SS 304, Ra = 1–15 µm, up to
+~6 MPa, **in air**, i.e. exactly the "Cu or Al joints in air" case the
+README lists as unvalidated. Their own model is within 2 % (Al, 1 µm) to
+26 % (Al, 15 µm). Measurement uncertainty averaged 15 % (3–70 %). The data
+are in figures only, so digitising them would give a diagnostic, not a
+validation (§6, "Digitised figure data"). Asking the authors for the tables
+is the route to a real benchmark.
+
+### Electrons
+
+**Series electron–phonon resistance on the metal side: how big for Al/Si.**
+Three independent estimates of the e-ph penalty:
+
+| source | method | penalty on h |
+|---|---|---|
+| Yang et al. 2014 | TTM-MD, ΔT from the lattice fit | −4 % |
+| Yang et al. 2014 | TTM-MD with electron ΔT, and the series formula | −21 to −23 % |
+| Khot et al. 2025 [khot2025] | DeePMD NEMD + e-ph | −9.5 % |
+
+Wang et al. 2012 found the series formula over-predicts the full TTM-MD
+resistance by 6–15 % (§7). Our `series_band` (Al/Si 460 → 347, −25 %) is
+therefore at or beyond the pessimistic end. It is correctly flagged as a
+lower bound on h; the likely penalty for Al is ~5–20 %. No change to the
+code; the KB now states the spread.
+
+**Direct metal-electron to semiconductor-phonon coupling.**
+- First principles for TiSi₂/Si: electron coupling to interfacial modes is
+  of the same order as to bulk metal phonons, and its conductance is
+  comparable to the phonon–phonon one. So the series picture "may not be a
+  valid approximation in general" and the channel acts in parallel
+  [sadasivam2015].
+- The 2023 ACS Nano review [giri2023review]: several near-equilibrium
+  experiments rule the mechanism out, and the direct hot-electron-to-phonon
+  interaction "has still yet to be directly experimentally observed".
+- Policy unchanged (§7): not modelled, flagged as a possible parallel channel
+  that would *raise* h. It is most plausible at silicide/Si and ohmic
+  interfaces.
+
+**Electrons in semiconductors.**
+- In Si the electronic conductivity stays below 1 W/mK even above 10²⁰ cm⁻³
+  (Wiedemann–Franz on measured σ) [liao2015dopedsi].
+- Heavy doping does matter through electron–phonon scattering of the
+  *lattice* conductivity: negligible below ~10¹⁸ cm⁻³, significant above
+  10¹⁹, up to −42 % for p-type at ~10²¹.
+- *For us:* a degenerately doped Si die or substrate has a lower k_s for the
+  constriction, not a different Kapitza term. Tracker P0-13: a doping input
+  (or flag) for Si that lowers k from handbook values above 10¹⁹ cm⁻³.
+- Electron–electron transfer across metal/semiconductor needs carrier
+  densities of ~10¹⁹–10²⁰ in a high-mobility semiconductor (Au/doped CdO,
+  ballistic injection) [giri2023review]. It is not a factor for Si packaging
+  joints.
+
+**Electrons at metal/metal contacts.**
+- The interfacial conductance is electronic, 2–20 GW/m²K (§23).
+- The constriction through metal contact spots is carried by electrons too,
+  so the k_s CMY uses must be the full (electronic) conductivity, as it is.
+  Electron mean free paths are tens of nm, so ballistic spots arise only for
+  σ/m ≲ 1 µm (§23).
+- Clean metal contacts obey Holm's electrical–thermal analogy: per spot, the
+  thermal conductance equals L·T times the electrical conductance
+  (Wiedemann–Franz). A measured electrical contact resistance is then a
+  cheap in-situ estimate of the thermal one.
+  - The analogy fails when oxide or tarnish films cover the spots. A film
+    blocks electrons (tunnelling) far more than it blocks phonons, so the
+    electrical method over-predicts the thermal resistance.
+  - (Textbook contact physics, Holm, *Electric Contacts*; not re-read for
+    this survey.)
+
+### Actions
+
+- **Done (code):**
+  - the slope flag cites its verified source, gives the alternative
+    correlation and the resulting uncertainty, and tells the user to use a
+    stylus profilometer, not AFM or optics;
+  - the agent's slope question says the same.
+- **Tracker:**
+  - new **P0-12**: slope instrument and a PSD-based (Persson-type)
+    alternative for polished surfaces;
+  - new **P0-13**: doping-dependent k for Si;
+  - P1-14 notes the e-ph penalty spread (−4 to −23 %; our series band is the
+    pessimistic end).
+- **Validation candidate:** Singhal et al. 2005 (metal joints in air). Ask
+  for the tables.

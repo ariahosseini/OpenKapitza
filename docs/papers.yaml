@@ -636,3 +636,96 @@
   findings: About half of Si's conductivity from MFP > 1 um (277 K); MFPs extend beyond 10 um; k 166 vs 174 W/mK measured.
   kb: ["23"]
 
+
+# ---- 31 Oct 2026, fourth round: macro scale and electrons (KB 24) ----
+
+- key: persson2010heat
+  cite: 'B. N. J. Persson, B. Lorenz & A. I. Volokitin, "Heat transfer between elastic solids with randomly rough surfaces", Eur. Phys. J. E 31, 3 (2010); arXiv:0908.3941'
+  status: full
+  topics: [contact conductance, Persson theory, roughness power spectrum, slope, pressure scaling, near-field radiation]
+  findings: >
+    Contact conductance is set by long-wavelength roughness (rms height, E*),
+    linear in nominal pressure at low load (alpha ~ p0 kappa / (E* u0)); rms
+    slope is dominated by the shortest wavelengths, so slope-based (CMY-type)
+    theories are ill-defined without a fixed measurement bandwidth (slope ~1
+    gives ~100x too large). GW-type models inaccurate (no elastic coupling).
+    Plasticity/adhesion act at short scales. Near-field radiation ~2 MW/m2K
+    at 1 nm (SiO2). Basis of tracker P0-12.
+  kb: ["24"]
+
+- key: bahrami2004scale
+  cite: 'M. Bahrami, J. R. Culham & M. M. Yovanovich, "Modeling thermal contact resistance: a scale analysis approach", J. Heat Transfer 126, 896 (2004)'
+  status: full
+  topics: [contact conductance, scale analysis, macro and micro resistance, slope correlation]
+  findings: >
+    R_j = R_L + R_s with R_s = 0.565 H* (sigma/m)/(k_s F) (c = 0.36); >880
+    points at 13.8 % RMS; agrees with CMY for 1e-4 <= P/H <= 2e-2, over-predicts
+    resistance at light load (truncation). Slope from eight 1 cm traces (~6 %
+    scatter); where slope was missing used m ~ 0.076 sigma^0.52 (sigma in um),
+    1.6-1.8x below Antonetti's correlation.
+  kb: ["24"]
+
+- key: yovanovich1997calc
+  cite: 'M. M. Yovanovich, J. R. Culham & P. Teertstra, "Calculating interface resistance", Electronics Cooling (May 1997)'
+  status: full
+  topics: [electronics cooling, contact resistance, slope correlation, TIM]
+  findings: >
+    Source for Antonetti et al.'s m = 0.125 sigma^0.402 (sigma in um), fitted
+    0.216-9.6 um, now cited in schema/inputs.py; models validated ~0.035-0.35
+    MPa; microelectronics range 0.07-0.17 MPa; radiation negligible; grease ~10x
+    below a bare joint.
+  kb: ["8.1", "24"]
+
+- key: jackson2008multiscale
+  cite: 'R. L. Jackson, S. H. Bhavnani & T. P. Ferguson, "A Multiscale Model of Thermal Contact Resistance Between Rough Surfaces", J. Heat Transfer 130, 081301 (2008)'
+  status: full
+  topics: [multiscale contact, Fourier levels, elastoplastic asperities, scale-dependent yield]
+  findings: >
+    TCR significantly affected by which frequency levels are included; two TCR
+    definitions differ greatly; with alleviation factors lands near the
+    Yovanovich microhardness correlation. Scale-dependent yield matters more
+    than scale-dependent spreading. Nickel only, no direct TCR validation.
+  kb: ["24"]
+
+- key: singhal2005tcc
+  cite: 'V. Singhal, P. J. Litke, A. F. Black & S. V. Garimella, "An experimentally validated thermo-mechanical model for the prediction of thermal contact conductance", Int. J. Heat Mass Transfer 48, 5446-5459 (2005)'
+  status: partial
+  topics: [contact conductance, metals in air, Al 6061, Cu, brass, SS 304, validation data]
+  findings: >
+    Bare metal contacts in air, Ra 1-15 um, up to ~6 MPa; their model 2 % (Al,
+    1 um) to 26 % (Al, 15 um); measurement uncertainty 3-70 % (mean 15 %).
+    Candidate benchmark for metal joints in air; data in figures only.
+  kb: ["24"]
+
+- key: sadasivam2015
+  cite: 'S. Sadasivam, U. V. Waghmare & T. S. Fisher, "Electron-phonon coupling and thermal conductance at a metal-semiconductor interface: first-principles analysis", J. Appl. Phys. 117, 134502 (2015)'
+  status: full
+  topics: [electron-phonon, interfacial coupling, TiSi2/Si, first principles, parallel channel]
+  findings: >
+    Electron coupling to interfacial modes is of the same order as to bulk
+    metal phonons; interfacial e-ph conductance comparable to the harmonic
+    phonon-phonon one, so the series picture may fail and the channel acts in
+    parallel. Depends on assumed length scales and a 7 % strained cell.
+  kb: ["7", "24"]
+
+- key: giri2023review
+  cite: 'A. Giri, S. G. Walton, J. Tomko et al., "Ultrafast and Nanoscale Energy Transduction Mechanisms and Coupled Thermal Transport across Interfaces", ACS Nano 17, 14253-14282 (2023)'
+  status: partial
+  topics: [review, electron-phonon, interfaces, hot electrons, doped semiconductors]
+  findings: >
+    Metal e-ph coupling acts in series with phonon TBC; direct metal-electron
+    to non-metal-phonon coupling is predicted comparable but ruled out by
+    several near-equilibrium experiments and not yet directly observed;
+    electron-electron transfer needs ~1e19-1e20 cm-3 carriers in a
+    high-mobility semiconductor.
+  kb: ["24"]
+
+- key: liao2015dopedsi
+  cite: 'B. Liao, B. Qiu, J. Zhou, S. Huberman, K. Esfarjani & G. Chen, "Significant reduction of lattice thermal conductivity by the electron-phonon interaction in silicon with high carrier concentrations", Phys. Rev. Lett. 114, 115901 (2015)'
+  status: partial
+  topics: [doped silicon, electron-phonon, lattice thermal conductivity]
+  findings: >
+    Negligible below ~1e18 cm-3, significant above 1e19, up to -42 % (p-type,
+    ~1e21); electronic conductivity < 1 W/mK above 1e20 (Wiedemann-Franz).
+    Basis of tracker P0-13.
+  kb: ["24"]

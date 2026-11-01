@@ -62,19 +62,28 @@ class SurfaceSpec:
             return self.m
         sigma_um = self.sigma.si * 1e6
         m_est = 0.125 * (sigma_um ** 0.402)
+        m_alt = 0.076 * (sigma_um ** 0.52)
         flags.add(
             Code.CMY_SLOPE_ESTIMATED,
             Severity.WARNING,
             f"Asperity slope not supplied; estimated m = {m_est:.4f} from "
-            f"Antonetti's roughness correlation at sigma = {sigma_um:.3f} um.",
+            f"Antonetti's roughness correlation at sigma = {sigma_um:.3f} um "
+            f"(fitted for 0.216-9.6 um). A second published correlation "
+            f"(Bahrami et al. 2004, m ~ 0.076 sigma^0.52) gives {m_alt:.4f}: "
+            f"h_c is uncertain by that ratio ({m_est / m_alt:.2f}x).",
             remedy=(
-                "Measure the mean absolute profile slope by profilometry. "
-                "h_c is directly proportional to m, so an error here passes "
-                "straight into the answer. The correlation was fitted to "
-                "machined metals and should not be trusted for polished "
-                "semiconductors, ceramics or lapped surfaces."
+                "Measure the mean absolute profile slope by STYLUS profilometry "
+                "on traces of ~1 cm, the practice behind the CMY calibration "
+                "data. Do not take m from AFM or high-resolution optical "
+                "profiles: slope is dominated by the shortest wavelengths "
+                "resolved (Persson et al. 2010), so a finer instrument reports "
+                "a larger m and over-predicts h_c in proportion (KB 24). The "
+                "correlation was fitted to machined metals and should not be "
+                "trusted for polished semiconductors, ceramics or lapped "
+                "surfaces."
             ),
             m_estimated=m_est,
+            m_alternative=m_alt,
             sigma_um=sigma_um,
         )
         return Quantity(
@@ -82,7 +91,7 @@ class SurfaceSpec:
             unit="-",
             provenance=Provenance.CORRELATION_DEFAULT,
             confidence=Confidence.LOW,
-            citation="Antonetti roughness-slope correlation (NEEDS VERIFICATION)",
+            citation="Antonetti et al. roughness-slope correlation, as given in Yovanovich, Culham & Teertstra, Electronics Cooling (1997); range 0.216-9.6 um",
             name="asperity_slope",
         )
 
