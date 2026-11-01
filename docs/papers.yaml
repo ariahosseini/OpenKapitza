@@ -342,3 +342,212 @@
   topics: [universal potential, foundation model, softening, fine-tuning, phonons]
   findings: Universal MLIPs systematically under-predict energy-surface curvature (soft phonons); fine-tuning on a little target data corrects it. A foundation model needs fine-tuning before it is a Tier-2 route.
   kb: ["15"]
+
+# ---- 31 Oct 2026: potential limits, accuracy and methodology (KB 22) ----
+
+- key: feng2023review
+  cite: T. Feng, H. Zhou, Z. Cheng, L. S. Larkin & M. R. Neupane, "A Critical Review of Thermal Boundary Conductance across Wide and Ultrawide Bandgap Semiconductor Interfaces", ACS Appl. Mater. Interfaces 15, 29655-29673 (2023)
+  status: full
+  topics: [review, MD accuracy, potentials, GaN, SiC, AlN, diamond, Ga2O3, DMM, AGF, MLMD]
+  findings: >
+    MD of ideal interfaces runs consistently above experiment: GaN/SiC ~520 vs
+    ~230 measured, GaN/AlN 1150-1300 vs ~620, Si/diamond ~380 vs ~64 (flat).
+    Potential choice alone spread GaN/AlN over 496-2440. DMM/AMM are elastic
+    limits, not upper bounds. Causes: mixing-rule potentials, perfect
+    interfaces, small domains, missing inelastic and e-ph channels.
+    Recommends DFT/experiment-calibrated potentials (MLMD), TEM-validated
+    structures, spectral analysis, same-sample comparisons.
+  kb: ["22"]
+
+- key: feng2019
+  cite: T. Feng, Y. Zhong, J. Shi & X. Ruan, "Unexpected high inelastic phonon transport across solid-solid interface", Phys. Rev. B 99, 045301 (2019)
+  status: full
+  topics: [Si/Ge, Tersoff, NEMD, length convergence, inelastic, modal temperature, thermostat damping]
+  findings: >
+    Si/Ge Tersoff NEMD nearly converged at 152 nm: ~4.5e8 W/m2K (28Si/73Ge,
+    300 K). Ge potential rescaled to the Si lattice (no strain) because
+    averaged lattice constants caused large interface vibrations. Langevin
+    +-30 K, damping 0.5 ps (<0.01 ps unstable, >10 ps no gradient). Phonons
+    above the Ge cutoff carry ~45 % (abstract: >50 %); optical >= 35 %.
+    Modal temperatures spread widely near the interface. Fully classical.
+  kb: ["8.3", "17", "22"]
+
+- key: hahn2015aemd
+  cite: K. R. Hahn, M. Puligheddu & L. Colombo, "Thermal boundary resistance at Si/Ge interfaces determined by approach-to-equilibrium molecular dynamics simulations", arXiv:1504.03613 (Phys. Rev. B 91, 195313, 2015)
+  status: full
+  topics: [Si/Ge, Tersoff, AEMD, size dependence, intermixing, rectification]
+  findings: >
+    AEMD (periodic, two interfaces) with Tersoff: R_I = R_inf (1 + lambda/L),
+    R_inf = 3.76e-9 m2K/W (h ~266 MW/m2K), lambda = 167 nm. Intermixed layer
+    0.5/1/2 nm: 3.66/4.38/7.18e-9. Cites SW NEMD 3.1e-9 (Landry & McGaughey)
+    and a 20 nm NEMD 1.26e-9 as a finite-size outlier.
+  kb: ["22"]
+
+- key: zhan2015sige
+  cite: T. Zhan, S. Minamoto, Y. Xu, Y. Tanaka & Y. Kagawa, "Thermal boundary resistance at Si/Ge interfaces by molecular dynamics simulation", AIP Advances 5, 047102 (2015)
+  status: partial
+  topics: [Si/Ge, SW, NEMD, size effect, temperature dependence]
+  findings: >
+    SW NEMD 50-700 K: TBR ~T^-0.59 (large cell) / T^-0.69 (small); TBR lower in
+    the 221 nm cell than the 110 nm one at every T; cross-section did not
+    matter (data not shown); below DMM except one point. Values only in a
+    figure.
+  kb: ["22"]
+
+- key: lu2019mtm
+  cite: 'Z. Lu, J. Shi & X. Ruan, "Role of phonon coupling and non-equilibrium near the interface to interfacial thermal resistance: the multi-temperature model and thermal circuit", J. Appl. Phys. 125, 085107 (2019)'
+  status: full
+  topics: [Si/Ge, phonon non-equilibrium, multi-temperature model, extraction]
+  findings: >
+    Branch-resolved diffusion model (not MD): Si/Ge h = 375.1 vs 396.6 MW/m2K
+    conventional; non-equilibrium lowers h by 5.4 % with partly cancelling
+    LA/TA errors. Extract the jump from the linear bulk sections, not the
+    lattice temperature at the plane.
+  kb: ["22"]
+
+- key: gordiz2016
+  cite: 'K. Gordiz & A. Henry, "Phonon Transport at Crystalline Si/Ge Interfaces: The Role of Interfacial Modes of Vibration", Sci. Rep. 6, 23139 (2016)'
+  status: full
+  topics: [Si/Ge, Tersoff, ICMA, interfacial modes, anharmonicity, quantum correction]
+  findings: >
+    Six localised interface modes at 12-13 THz (above Ge's ~10 THz cutoff,
+    <0.1 % of modes) carry ~15 % of the conductance (~12 % at 300 K after
+    quantum correction); interface ~23 % anharmonic vs <7 % in the bulk. Their
+    contribution is inelastic, so harmonic DMM/AGF cannot see it.
+  kb: ["22"]
+
+- key: hu2022thermostat
+  cite: S. Hu, C. Y. Zhao & X. Gu, "Impact of thermostat on interfacial thermal conductance prediction from non-equilibrium molecular dynamics simulations", Chin. Phys. B 31, 056301 (2022)
+  status: partial
+  topics: [thermostat, Langevin, Nose-Hoover, reservoir non-equilibrium, NEMD]
+  findings: >
+    Langevin gives larger ITC than Nose-Hoover; under Nose-Hoover reservoir
+    acoustic phonons lag optical ones, suppressing low-to-mid-frequency flux,
+    with a strong reservoir-size effect; larger reservoirs or rough walls help
+    but do not fully fix it. The literature mechanism behind our HEX-vs-Langevin
+    finding on the bonded Si/Ge cell (KB 19).
+  kb: ["19", "22"]
+
+- key: li2019thermostat
+  cite: Z. Li, S. Xiong, C. Sievers, Y. Hu, Z. Fan, N. Wei, H. Bao, S. Chen, D. Donadio & T. Ala-Nissila, "Influence of thermostatting on nonequilibrium molecular dynamics simulations of heat conduction in solids", J. Chem. Phys. 151, 234105 (2019); arXiv:1905.11024
+  status: full
+  topics: [thermostat, Langevin, Nose-Hoover chain, damping, boundaries, graphene]
+  findings: >
+    Langevin controls bath temperature far better than a Nose-Hoover chain,
+    which over/undershoots near fixed boundaries and is non-ergodic with few
+    DOF; recommended Langevin damping 0.1-1 ps for conductivity. Jumps at the
+    bath edges are physical (phonon non-equilibrium); for ballistic
+    conductance use the source-sink difference.
+  kb: ["22"]
+
+- key: olarteplata2022
+  cite: J. D. Olarte-Plata & F. Bresme, "The impact of the thermostats on the non-equilibrium computer simulations of the interfacial thermal conductance", Mol. Simul. 48, 87-98 (2022)
+  status: partial
+  topics: [thermostat, Langevin damping, gold-water, polarisable model]
+  findings: >
+    Short local-Langevin damping alters the solid's vibrational DOS and raises
+    the ITC by up to 40 %; ITC converges once damping exceeds the solid's
+    heat-flux relaxation time. Global velocity rescaling is damping-independent
+    but breaks equipartition for Drude particles. Our 0.1 ps is at the short
+    edge (tracker P1-17).
+  kb: ["22"]
+
+- key: poulos2025heatflux
+  cite: M. Poulos, D. Surblys & K. Termentzidis, "Exact heat flux formula and its spectral decomposition in molecular dynamics for arbitrary many-body potentials", arXiv:2509.26044 (2025)
+  status: full
+  topics: [heat flux, many-body, Tersoff, SW, centroid stress, LAMMPS, Green-Kubo]
+  findings: >
+    LAMMPS's group (equal-share) stress heat flux is exact only for pair
+    potentials; for Tersoff/SW it under-estimates GK kappa (graphene ~1100 vs
+    ~2713 W/mK, hBN ~45 % low, SW TMDs ~20 %; c-Si about right). NEMD from
+    thermostat energy exchange is the exact reference. Their centroid form is
+    implemented for Tersoff and SW only.
+  kb: ["20", "22"]
+
+- key: fan2015heatcurrent
+  cite: Z. Fan, L. F. C. Pereira, H.-Q. Wang, J.-C. Zheng, D. Donadio & A. Harju, "Force and heat current formulas for many-body potentials in molecular dynamics simulation with applications to thermal conductivity calculations", Phys. Rev. B 92, 094301 (2015); arXiv:1503.06565
+  status: partial
+  topics: [heat current, many-body, Tersoff, GPUMD]
+  findings: >
+    Pairwise force decomposition for many-body potentials and the heat current
+    that follows; deviates from the two-body stress-based form; validated on
+    Tersoff Si, diamond, graphene, nanotubes. Basis of GPUMD's heat current.
+  kb: ["20", "22"]
+
+- key: turney2009quantum
+  cite: J. E. Turney, A. J. H. McGaughey & C. H. Amon, "Assessing the applicability of quantum corrections to classical thermal conductivity predictions", Phys. Rev. B 79, 224305 (2009)
+  status: partial
+  topics: [quantum correction, silicon, thermal conductivity]
+  findings: >
+    For crystalline Si, applying quantum corrections to classical kappa (with
+    or without zero-point energy) does not bring it closer to quantum
+    predictions; uncorrected classical values fit better above ~200 K;
+    conductivity cannot be quantum-corrected at the system level.
+  kb: ["3", "22"]
+
+- key: xu2025roughsial
+  cite: (Xu & Guo, Harbin Inst. Technol.), "Uncovering the roughness effect on inelastic phonon scattering and thermal conductance at interface via spectral energy exchange", arXiv:2504.04696 (2025)
+  status: partial
+  topics: [Si/Al, ADP potential, roughness, inelastic, spectral, quantum correction]
+  findings: >
+    ADP chosen over MEAM for better Si and Al dispersion. A 1.4 nm amorphous
+    SixAl1-x layer enhances <3.5 THz transport and inelastic scattering below
+    ~3 THz; rough-interface ITC saturates 300-450 K. Uncorrected MD
+    over-estimates below ~200 K; spectrally corrected ITC matches experiment.
+  kb: ["22"]
+
+- key: hua2017transmission
+  cite: C. Hua, X. Chen, N. K. Ravichandran & A. J. Minnich, "Experimental metrology to obtain thermal phonon transmission coefficients at solid interfaces", arXiv:1612.08401 (Phys. Rev. B 95, 205423, 2017)
+  status: full
+  topics: [Al/Si, spectral transmission, TDTR, native oxide, validation target]
+  findings: >
+    Clean Al/Si 280 +- 10 MW/m2K; longitudinal transmission near the detailed-
+    balance maximum below ~4-6 THz, falling to ~0 near 10 THz; native and
+    thermal oxide lower it. A spectral target for MD, not just a total.
+  kb: ["22"]
+
+- key: singh2025siti
+  cite: M. Singh, L. Patra, C. Zhang, G. MacDougall, S. Datta, D. Cahill & S. Kumar, "Revealing phonon bridge effect for amorphous vs crystalline metal-silicide layers at Si/Ti interfaces by a machine learning potential", arXiv:2511.16646 (2025)
+  status: partial
+  topics: [Si/Ti, silicide, NEP4, GPUMD, TDTR, MLIP validation]
+  findings: >
+    NEP4 trained incl. 1500 K AIMD for disorder: a-TiSix interlayer 4.26 +- 0.1
+    vs TDTR 4.1 +- 0.4 m2K/GW; C54 1.93 vs 2.2-2.3 measured on non-ideal
+    interfaces; size converged beyond 20 nm; e-ph estimated <10 %.
+  kb: ["22"]
+
+- key: shen2011bonding
+  cite: M. Shen, W. J. Evans, D. Cahill & P. Keblinski, "Bonding and pressure-tunable interfacial thermal conductance", Phys. Rev. B 84, 195432 (2011)
+  status: partial
+  topics: [weak interface, bonding strength, pressure, stiffness, AMM]
+  findings: >
+    Phonon transmission of the heat-carrying phonons rises strongly with
+    interfacial stiffness and saturates at the acoustic-mismatch value for
+    strong bonding (via a 2013 MURI report summary; paper not read).
+  kb: ["22"]
+
+- key: hsieh2011pressure
+  cite: W.-P. Hsieh, A. S. Lyons, E. Pop, P. Keblinski & D. G. Cahill, "Pressure tuning of the thermal conductance of weak interfaces", Phys. Rev. B 84, 184107 (2011)
+  status: partial
+  topics: [weak interface, pressure, graphene, Al/SiC, anvil cell, validation target]
+  findings: >
+    Al/graphene/SiC: G ~30 -> ~200 MW/m2K from ambient to 10 GPa, roughly linear
+    at first (consistent with MD), approaching the clean strongly bonded Al/SiC
+    above ~8 GPa; stiffness controls weak interfaces, matters little for strong.
+  kb: ["22"]
+
+- key: losego2012bonding
+  cite: M. D. Losego, M. E. Grady, N. R. Sottos, D. G. Cahill & P. V. Braun, "Effects of chemical bonding on heat transport across interfaces", Nat. Mater. 11, 502-506 (2012)
+  status: partial
+  topics: [bonding strength, SAM, gold, quartz, experiment]
+  findings: >
+    Au transfer-printed on SAMs: thiol (covalent-like) 68 vs methyl (van der
+    Waals) 36 MW/m2K, ~2x from bonding alone (via the MURI report summary).
+  kb: ["22"]
+
+- key: mu2019
+  cite: F. Mu et al., GaN-SiC bonded interfaces, TDTR, arXiv:1905.04171 (2019)
+  status: partial
+  topics: [GaN/SiC, TDTR, interface structure, MD over-prediction]
+  findings: 'As-bonded 169 MW/m2K (3 nm amorphous layer), 229 after anneal, against cited MD ~500: interface structure, not only the potential, opens the gap.'
+  kb: ["8.4", "22"]

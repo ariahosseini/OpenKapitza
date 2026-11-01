@@ -2820,3 +2820,200 @@ Source: the tutorials page, https://www.lammps.org/documentation/tutorials/.
 additions are three calibrations: method-to-method agreement of about
 ±5 % for NEMD on a clean system, the factor-2 rule for periodic cells, and
 the electrons and gradient caveats. The manual (§20) remains the reference.
+
+## 22. Literature review: potential limits, accuracy and methodology (31 Oct 2026)
+
+A second pass at the MD literature (the first is §8.3–8.4), aimed at three
+questions. How far are MD interface conductances from experiment, and why?
+What do the methods themselves get wrong? What does that mean for our
+numbers? Paper notes are in `docs/papers.yaml` (keys in brackets). Most
+sources were read as abstracts or open text (`status: partial`), and
+numbers are as those sources state them.
+
+### How far MD sits from experiment, and why
+
+- **Overall: MD of ideal interfaces runs high.** A 2023 critical review of
+  wide-bandgap interfaces [feng2023review] puts it plainly: MD results are
+  "consistently higher than the available experimental data".
+  - GaN/SiC: ~520 by NEMD against a measured record of ~230 MW/m²K.
+  - GaN/AlN: 1150–1300 against ~620.
+  - Si/diamond: ~380 against ~64 measured for a flat interface.
+  - Causes it names:
+    - mixing-rule potentials, not validated against DFT;
+    - perfect interfaces without voids, defects or disorder;
+    - small domains;
+    - missing inelastic and electron–phonon channels.
+- **The potential alone can move h_K several-fold.** GaN/AlN with three
+  potentials gave 496, 2,440 and 1,933 MW/m²K [feng2023review]. Tersoff
+  over-estimates Si/diamond about 3× against an interface-trained MTP
+  [rajabpour2024]. Fan, Surblys and others show the heat-current definition
+  itself differs for many-body potentials (below).
+- **Al/Si, our MEAM pair:**
+  - 2NN-MEAM NEMD gives 470 phonon-only and ~370 with electron–phonon
+    coupling [yang2014alsi].
+  - A DeePMD potential trained on AIMD of bulk Al, bulk Si and the interface
+    gives 420 ± 39 phonon-only. With electron–phonon coupling (−9.5 %) it
+    gives 380 ± 33, against an experimental consensus near 350 (379 for an
+    atomically sharp interface) [khot2025].
+  - The same paper states 2NN-MEAM "overestimate[s] the ITC by 20%–30%".
+  - Spectrally resolved TDTR measures 280 ± 10 on clean Al/Si, with
+    transmission near the maximum allowed below ~4–6 THz and near zero above
+    ~10 THz [hua2017transmission].
+  - *For us:* expect `sial_pp` (Jelinek MEAM, not 2NN-MEAM) to sit 20–30 %
+    or more above experiment. Phase 4's DeePMD recipe is now concrete
+    (DeePot-SE, 6 Å cutoff, AIMD of both bulks plus the interface).
+- **What an MLIP buys when it is trained on the interface.** A NEP4
+  potential for Si/Ti silicides gives 4.26 ± 0.1 m²K/GW for an amorphous
+  TiSiₓ interlayer, against 4.1 ± 0.4 by TDTR on the same structure
+  [singh2025siti]. That is a near-match, but the TDTR fit has its own
+  layer-model assumptions. Training included 1500 K AIMD, to sample disorder.
+
+**What this means for our numbers.** An empirical-potential h_K for an
+*ideal* interface is an upper estimate for a real contact spot, where
+roughness, oxide and intermixing lower it:
+- a 2 nm intermixed layer doubles the Si/Ge resistance by AEMD
+  [hahn2015aemd];
+- a native oxide lowers Al/Si [hua2017transmission];
+- as-bonded GaN/SiC runs well below MD [mu2019; feng2023review].
+
+Our reports should say this explicitly whenever an MD h_K enters a joint.
+
+### Si/Ge: what the literature gives, and why ours is higher
+
+| source | potential, method | h (MW/m²K), 300 K | note |
+|---|---|---|---|
+| Landry & McGaughey 2009 (via [hahn2015aemd]) | SW, NEMD | ≈320 (R = 3.1×10⁻⁹) | finite cells |
+| Hahn, Puligheddu & Colombo 2015 [hahn2015aemd] | Tersoff, AEMD | ≈266 (R∞ = 3.76×10⁻⁹) | R = R∞(1 + λ/L), λ = 167 nm |
+| Zhan et al. 2015 [zhan2015sige] | SW, NEMD | (figure only) | TBR lower in the longer cell; length, not cross-section, matters |
+| Feng, Zhong, Shi & Ruan 2019 [feng2019] | Tersoff, NEMD | ≈450 at 152 nm | **Ge potential rescaled to the Si lattice: no strain** |
+| Lu, Shi & Ruan 2019 [lu2019mtm] | multi-temperature model | 375 vs 397 conventional | branch non-equilibrium lowers h by 5.4 % |
+| **ours (KB 17)** | Tersoff, NEMD | 483 ± 20 at 16 nm per side; ≈600–640 at 64 nm | **Ge strained −4 % onto Si** |
+
+- **The direction of our length trend is right.** Resistance falls with
+  length (AEMD's λ > 0, Zhan's larger cell), so h rises toward a converged
+  value from below.
+- **Our level is high.** Converged literature values span ≈266–450, and ours
+  exceed that range at every length. The leading suspect is the −4 % strain
+  our single-lattice build puts on Ge. Compressed Ge stiffens and its
+  spectrum moves up toward Si's, which is exactly the overlap that raises h.
+  Feng avoided this by rescaling the Ge potential's length scale; AEMD used a
+  different construction again.
+- *Action:* add a strain-free Si/Ge cell (Ge potential rescaled to a_Si, as
+  Feng did, or a commensurate supercell from `structure/crystalline.py`)
+  and quantify the strain effect before quoting any Si/Ge number against
+  the literature (tracker P1-16).
+- **Interfacial modes and inelastic transport carry a large share.**
+  - Six localised interface modes at 12–13 THz, above Ge's ~10 THz cutoff,
+    carry ~15 % of the conductance, and the interface is ~23 % anharmonic
+    against <7 % in the bulk [gordiz2016].
+  - Phonons above the Ge cutoff carry ~45 % [feng2019].
+  - Harmonic models (DMM, AGF) miss these channels by construction. That is
+    one more reason the DMM placeholder is not even a bound: the 2023 review
+    calls DMM/AMM "elastic limits", not upper limits.
+
+### Methodology: what the methods themselves get wrong
+
+**Thermostats decide part of the answer.**
+- *Langevin vs global thermostats.* Langevin gives a **larger** ITC than
+  Nosé-Hoover [hu2022thermostat]. Under Nosé-Hoover, reservoir phonons are
+  not thermalised: acoustic modes lag optical ones, the low-to-mid-frequency
+  flux is suppressed, and ITC shows a strong reservoir-size effect. Bigger
+  reservoirs and rough walls help but do not fully fix it. In graphene,
+  Langevin also controls temperature better, and a global Nosé-Hoover chain
+  over- and undershoots near fixed boundaries [li2019thermostat].
+  - *This is our KB 19 result.* HEX rescales velocities deterministically,
+    like a global thermostat, and gave 152 against Langevin's 429 on the
+    bonded cell. The literature mechanism is the one we inferred. The rule
+    (Langevin for bonded interfaces; imposed flux only where the interface
+    is the bottleneck) stands, now with references.
+- *Langevin damping.* Too short a damping time inflates ITC: by up to 40 %
+  for a polarisable gold–water interface, converging once the damping
+  exceeds the solid's heat-flux relaxation time [olarteplata2022]. The
+  recommended windows:
+  - 0.1–1 ps [li2019thermostat];
+  - Feng used 0.5 ps, with <0.01 ps unstable and >10 ps failing to set up a
+    gradient [feng2019].
+  - **Ours is 0.1 ps, the short edge.** *Action:* add a damping axis
+    (0.1 / 0.5 / 1 ps) to the Si/Ge campaign (tracker P1-17).
+
+**Heat flux for many-body potentials.**
+- LAMMPS's stress-based heat flux (equal-share virial) under-estimates
+  Green–Kubo κ systematically for Tersoff and SW:
+  - ~60 % low for graphene;
+  - ~45 % for hBN;
+  - ~20 % for SW TMDs;
+  - about right for c-Si [poulos2025heatflux; fan2015heatcurrent].
+- The thermostat energy-exchange rate is the exact reference, which is what
+  our NEMD reads. *Confirms §20:* no Green–Kubo `compute heat/flux` for
+  Tersoff or MEAM interfaces. Our tally-flux NEMD and slab-energy EMD avoid
+  the problem.
+
+**Finite size.**
+- Length scales to convergence:
+  - Si/Ge λ ≈ 167 nm (AEMD);
+  - ~150 nm (Feng);
+  - Al/Si extrapolated as 1/G(L) = 1/G∞ + C/L [yang2014alsi];
+  - NEP Si/Ti converged beyond 20 nm [singh2025siti], so softer and
+    disordered interfaces converge sooner.
+- *Action:* once the 64 nm run is steady, fit 1/h against 1/L on 8–64 nm
+  and extrapolate, rather than waiting for a plateau. The GPU makes 100+ nm
+  feasible.
+
+**Phonon non-equilibrium at the interface.**
+- For Si/Ge it is modest: about −5 %, partly cancelling between LA and TA
+  [lu2019mtm]. Extract the jump from the linear bulk sections, not from a
+  lattice temperature at the plane (what our extractor does).
+- At Al/Si, modal temperatures show the LA modes of the two sides
+  equalising near the interface, the channel that carries heat
+  [khot2025].
+- Spectral temperatures are the diagnostic to add if a number looks
+  anomalous.
+
+**Quantum corrections.**
+- A whole-system correction does not improve classical κ for c-Si; above
+  ~200 K the uncorrected value is closer [turney2009quantum].
+- For interfaces, the 12–13 THz modes keep ~12 % of Si/Ge h after
+  correction [gordiz2016].
+- With a spectral correction, classical Si/Al ITC matches experiment down to
+  low T, and uncorrected MD over-estimates below ~200 K [xu2025roughsial].
+- *Policy unchanged (§3):* classical value primary at 300 K. A spectral
+  (frequency-resolved) correction is the defensible form below ~200 K.
+
+### Weak interfaces and pressure: validation targets for the S-5 sweep
+
+- **Stiffness controls weak interfaces.** Phonon transmission rises with
+  interfacial stiffness and saturates at the acoustic-mismatch limit once
+  bonding is strong [shen2011bonding].
+- **Pressure.** An Al/graphene/SiC interface goes from ≈30 to ≈200 MW/m²K
+  between ambient and 10 GPa. The rise is roughly linear in pressure at
+  first, consistent with MD, and above ~8 GPa it approaches the clean,
+  strongly bonded interface. Pressure matters little for strong interfaces
+  [hsieh2011pressure; hohensee2015 in §8.3].
+- **Chemistry.** Au on a thiol-terminated monolayer (covalent) gives 68
+  MW/m²K; a methyl-terminated one (van der Waals only) gives 36
+  [losego2012bonding]. That is about 2× from bonding alone.
+- **Our first look (KB 19):** van der Waals Si/Ge 16 at 0 GPa and 71–87 at
+  1 GPa, against 429 bonded.
+  - The direction and the order of the pressure effect match.
+  - The 27× zero-load gap is larger than the experiments' 2× (but those
+    compare bonded to van der Waals through a molecular layer, not two bare
+    crystals).
+  - *The sweep should show:* h rising about linearly with load at first;
+    saturation toward the bonded value at high load (2 GPa is the top of
+    the sweep, below the 8 GPa saturation seen experimentally); and a
+    bonding-strength (LJ ×¼ / ×1 / ×4) response that flattens at the strong
+    end.
+
+### Actions taken into the tracker
+
+1. **P1-16:** a strain-free Si/Ge cell, to quantify the −4 % Ge strain
+   effect, the likely reason we sit above the literature.
+2. **P1-17:** a Langevin damping axis (0.1 / 0.5 / 1 ps); ours is at the
+   short edge.
+3. **Length:** extrapolate 1/h against 1/L once the 64 nm run is steady.
+4. **Reporting:** an MD h_K for an ideal interface is an upper estimate for a
+   real contact; say so in the joint answer.
+5. **Phase 4 Si/Al:** DeePMD with the Khot et al. recipe. Treat Jelinek-MEAM
+   `sial_pp` as likely 20–30 % or more high.
+6. **S-5 sweep:** check against the pressure-linearity and bonding-saturation
+   trends above.
