@@ -2563,3 +2563,188 @@ The sweep watches it.
 (S-5 to S-8), Langevin for bonded ones. The sweep carries a Langevin
 van der Waals case with 2 ns of production at the full cell size, to check
 the agreement there.
+
+## 20. LAMMPS thermal-transport reference (manual of 30 Sep 2026 = our build)
+
+Read from the manual sources of the release we build (`doc/src` at the
+stable_30Sep2026 tag; the online manual reports the same version) and, where
+the manual is silent, from `src/`. Covers every command that drives, measures
+or analyses heat flow, with what it means for this project. Earlier notes
+stay where they are: thermostat idiom and `ave/chunk units box` (§3, "Two
+differences from the official LAMMPS thermal scripts"); `fix ttm` family (§7).
+
+### The five ways LAMMPS drives or measures a heat flow
+
+`Howto_kappa.rst` names four methods; `examples/KAPPA` ships five scripts (an
+LJ fluid, κ = 3.29 / 3.55 / 3.45 / 3.41 / 3.88 by the five, against Evans'
+≈3.4). For an interface the same machinery gives h_K = q/ΔT_K instead of
+κ = q/(dT/dz).
+
+| method | command | imposed / measured | output | package | in our build | our use |
+|---|---|---|---|---|---|---|
+| thermostatted reservoirs | `fix langevin ... tally yes` (or nvt, temp/rescale) | ΔT imposed, q measured from the tally | cumulative energy, `f_ID` | core | yes | default NEMD drive |
+| HEX | `fix heat N eflux` | q imposed, ΔT measured | scalar = velocity scale factor only | core | yes | `flux_mode="heat"` (KB 19) |
+| eHEX | `fix ehex N F` | q imposed, ΔT measured | — | **RIGID** | **no** | the drift-free replacement for HEX |
+| reverse NEMD (Müller-Plathe) | `fix thermal/conductivity N edim Nbin` | q imposed by velocity swaps | cumulative swapped KE | core | yes | not usable in a walled cell (below) |
+| Green–Kubo | `compute heat/flux` + `fix ave/correlate` | equilibrium J(t) autocorrelation | J vector (6) | core | yes | not used: many-body flux caveat (below) |
+
+### Imposed flux: `fix heat` (HEX) and `fix ehex` (eHEX)
+
+- `eflux` / `F` is energy per time **for the whole group** (metal: eV/ps),
+  not per atom. It may be an equal-style variable (time-dependent), or for
+  `fix heat` an atom-style variable (per-atom, intensive). With N > 1, each
+  call adds N·dt·eflux; the resulting profile is the same.
+- It adds non-translational KE only, so it conserves the group's momentum.
+  It does not integrate: `fix nve` must also act on those atoms. It must not
+  act on atoms another thermostat controls. `region` restricts it to atoms
+  that are also inside a region, like `temp/region` for thermostats.
+- If heat is removed so fast that the group's KE would go to zero, LAMMPS
+  halts. A cold reservoir of a few hundred atoms at a large flux is the risk.
+- Nothing is written to restart files. The energy added is not tallied
+  either: `fix heat`'s scalar is the scale factor. Our heat-mode deck writes
+  the cumulative energy as eflux·step·dt, which is exact by construction.
+- **Energy drift, measured in the shipped data** (`examples/HEAT`, LJ, 2,000
+  atoms, 700,000 steps; Wirnsberger et al. JCP 143, 124104, 2015): total
+  energy −8215.46 → −8252.20 with HEX against −8215.16 → −8215.17 with eHEX.
+  The manual says HEX's drift limits runs "to a few nanoseconds" and eHEX
+  cuts it by ≥100×. Our M3 Pro sweep uses HEX for 1.4 ns per case (ehex is
+  not built), so it watches the mean temperature. The van der Waals check
+  moved +3.5 K in 150 ps, which is not yet separated from settling.
+- `fix ehex ... hex` reproduces HEX inside the same fix, so a build with
+  RIGID can run both from one deck for a direct comparison.
+
+### Reverse NEMD (`fix thermal/conductivity`)
+
+Swaps the hottest atom of layer 1 with the coldest of layer Nbin/2+1 every
+N steps (Nbin even). Its geometry is the periodic sandwich, with heat
+flowing both ways, so the flux is halved ("LAMMPS is simply tallying kinetic
+energy", the manual notes; KAPPA divides by 2). Our cells are `p p f` between
+frozen walls, so this fix does not fit them without a mirrored, periodic cell
+with two interfaces. The manual's linear-response check applies to every
+imposed-flux method: "if the temperature gradient you observe is not linear,
+then you are likely swapping energy too frequently". For an interface the
+analogue is the jump growing with the flux (`NEMD_FLUX_NONLINEAR`).
+
+### Langevin reservoirs (`fix langevin`)
+
+- `tally yes` gives the cumulative energy exchanged with the reservoir, the
+  flux source of every Langevin run here. The random force acts on every
+  thermostatted atom, so the tally's noise does not shrink with the flux.
+  That is the low-h limit found in KB 19.
+- `zero yes` removes the net random force, so a system with zero initial
+  momentum does not random-walk. Worth adding to our reservoirs; the frozen
+  walls already pin the column, so the effect is small.
+- The RNG state is not in restart files, so a restart is statistically, not
+  exactly, equivalent (our resume deck re-seeds deliberately).
+- The *gjf* keyword was removed (22 Jul 2025) and is now `fix gjf`.
+- The manual's KAPPA idiom applies the thermostat to `all` plus
+  `fix_modify ... temp` with a `compute temp/region`. For a crystal our
+  static-group form is equivalent and keeps a fixed DOF count (§3).
+
+### Heat-flux computes
+
+**`compute heat/flux ke-ID pe-ID stress-ID`**: J = Σ e_i v_i − Σ S_i v_i.
+- The result is **extensive** (energy·velocity). Divide by the volume of the
+  atoms included. Use `stress/atom NULL virial`, so the kinetic term is not
+  counted twice.
+- Green–Kubo: κ = V/(k_B T²) ∫⟨J_x(0) J_x(t)⟩dt, computed with
+  `fix ave/correlate` and `variable ... trap()`. The page's solid-Ar example
+  gives ≈0.29 W/m·K.
+- **The many-body caveat decides our method.**
+  - `compute stress/atom` assigns a three-body (Tersoff) virial in equal
+    thirds to the three atoms.
+  - `compute centroid/stress/atom` is the form the manual recommends for
+    correct heat flux, but it "does not support pair styles with many-body
+    interactions (EAM is an exception)".
+  - So for Tersoff and MEAM, the only heat flux LAMMPS offers rests on the
+    equal-share virial. The literature documents that this misrepresents the
+    heat current of many-body potentials (Fan et al., PRB 92, 094301, 2015;
+    not in the manual).
+  - Hence our equilibrium cross-check uses slab-energy fluctuations (§3, KB
+    17), not a Green–Kubo heat flux. Do not switch to `compute heat/flux` for
+    Tersoff or MEAM interfaces without that literature correction.
+
+**`compute heat/flux/virial/tally group2`** (TALLY package): the heat flow
+*into group 1 from group 2*,
+Q = ½ Σ_{i∈1} Σ_{j∈2} F_ij·(v_i + v_j). In the manual's words, it is "the
+total heat flux over control surfaces, when there are no particles crossing
+over, such as is often in solid–solid and solid–liquid interfaces ...
+identical to the method of planes". It is limited to pairwise interactions
+(a warning, not an error, with a many-body style). For our **non-bonded
+cells** (`structure/nonbonded.py`), every force across the interface is
+Lennard-Jones, and the Tersoff instances never pair across it. So the
+interfacial heat flow can be measured **directly at the interface**, with no
+reservoir tally and no imposed-flux assumption:
+
+```lammps
+pair_modify     pair tersoff 1 compute/tally no      # the manual's own example form
+pair_modify     pair tersoff 2 compute/tally no
+compute         qAB gside_b heat/flux/virial/tally gside_a
+variable        qint equal c_qAB/(lx*ly)             # eV/ps/A^2; x 1.602e13 for W/m^2
+```
+
+The result is a third, independent flux for S-5 and S-6, which checks both
+the HEX and Langevin numbers of KB 19. It needs TALLY in the build. For gas
+layers, the gas atoms do cross the planes, so the tally must be taken solid
+to gas on one side (`gside_a` to the gas group). It does not apply to bonded
+Tersoff or MEAM interfaces.
+
+### Measuring temperature
+
+- `fix ave/chunk ... temp`: KE = (DOF/2) k_B T with DOF = N·adof + cdof,
+  default adof = 3 and cdof = 0. No DOF are removed for constraints or bias.
+  With `norm all` (default), KE and DOF are summed separately over the whole
+  Nfreq window before dividing. That is what our profile frames are.
+- Frozen-wall atoms have zero velocity. A bin holding them reads low, which
+  is why the extractor fits only the unthermostatted bulk ranges.
+- The default `thermo` temperature is over all atoms, including frozen
+  walls. Our decks redefine it with `thermo_modify temp tmobile` (§4, "Mean
+  temperature well below the setpoint"). `compute_modify extra/dof`
+  (default 3) applies to global temperature computes, not to `ave/chunk`.
+- The number of chunks must stay fixed within an averaging window. With
+  `units box` bins, a box that changes size changes which atoms are dropped
+  (§3).
+
+### Correlation and spectral tools
+
+- `fix ave/correlate` (core) and `fix ave/correlate/long` (EXTRA-FIX, in our
+  build). The long form uses a multiple-τ correlator: windows of
+  (nlen−1)·ncount^(ncorr−1) steps, so 15·2¹⁹ ≈ 7.9 M steps with defaults,
+  at little cost. It could compute the EMD ΔT autocorrelation on the fly
+  over the full run, instead of post-processing a 0.8 M-row file.
+- `fix phonon` (PHONON + a KSPACE FFT) builds the dynamical matrix from
+  displacement fluctuations at temperature. `dynamical_matrix` (PHONON)
+  does it by finite differences. Either gives the real dispersion of a
+  potential, the input a non-Debye DMM or an AGF calculation needs.
+  Neither package is in our build.
+
+### Quantum corrections (S-11)
+
+- `fix qtb` (QTB package): a quantum thermal bath. Coloured noise gives each
+  mode the quantum oscillator energy ħω/2 + ħω/(e^{ħω/kT}−1). Use it with
+  `fix nve` or `fix nph`.
+- `fix gle` with `noneq` (EXTRA-FIX, in our build): a generalised Langevin
+  thermostat. Its non-equilibrium covariance can mimic zero-point energy
+  (Ceriotti). Matrices come from GLE4MD. It integrates the equations itself,
+  so it must not be combined with `fix nve` on the same atoms.
+- Neither has been validated for NEMD interface conductance, and their use
+  there is debated. The policy stands: report the classical value as primary
+  and any correction as a separate, labelled number (§3).
+
+### What this changes
+
+1. **Build:** add `PKG_RIGID=yes` (for `fix ehex`) and `PKG_TALLY=yes` (for
+   `compute heat/flux/virial/tally`). Both are small and pure C++.
+   `scripts/mac_setup_lammps.sh` and the cluster runbook now list them.
+   PHONON and QTB are optional, for when a real-dispersion DMM or a quantum
+   bath is wanted.
+2. **Resistive interfaces:** once RIGID is built, switch `flux_mode="heat"`
+   from `fix heat` to `fix ehex` (same arguments). Run one case both ways
+   (`ehex ... hex`) to measure the HEX drift that the current sweep can only
+   watch.
+3. **Non-bonded cells:** log the direct interfacial heat flow from
+   `heat/flux/virial/tally` in every run, as an independent flux.
+4. **Do not use** `compute heat/flux` Green–Kubo for Tersoff or MEAM
+   interfaces. Keep the slab-energy EMD.
+5. **Optional:** `zero yes` on the Langevin reservoirs, and
+   `fix ave/correlate/long` for the EMD autocorrelation.

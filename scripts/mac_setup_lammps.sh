@@ -14,7 +14,8 @@
 # Both need the Xcode command-line tools (Apple's compiler). Clones LAMMPS at the release tag, checks the
 # commit is the one OpenKapitza was validated against, and builds with the
 # packages the decks use: MANYBODY (Tersoff, SW), MEAM, EXTRA-FIX (ttm/thermal),
-# EXTRA-COMPUTE, plus OPENMP when Apple's compiler accepts Homebrew's libomp
+# EXTRA-COMPUTE, RIGID (fix ehex) and TALLY (compute heat/flux/virial/tally; KB 20),
+# plus OPENMP when Apple's compiler accepts Homebrew's libomp
 # (MPI runs do not need it; the build continues without it if that step fails).
 #
 # Prints, at the end, the two paths the benchmark and the agent need:
@@ -79,6 +80,7 @@ common=(
   -D CMAKE_BUILD_TYPE=Release
   -D BUILD_MPI=yes
   -D PKG_MANYBODY=yes -D PKG_MEAM=yes -D PKG_EXTRA-FIX=yes -D PKG_EXTRA-COMPUTE=yes
+  -D PKG_RIGID=yes -D PKG_TALLY=yes
   -D CMAKE_PREFIX_PATH="$MPI_PREFIX"
   -D CMAKE_C_COMPILER=clang -D CMAKE_CXX_COMPILER=clang++
 )
@@ -108,7 +110,7 @@ cmake --build "$DEST/build" -j "$JOBS" > "$DEST/build.log" 2>&1 \
 LMP="$DEST/build/lmp"
 say "Checking the build"
 "$LMP" -h | grep -A6 "Installed packages" || true
-for pkg in MANYBODY MEAM EXTRA-FIX EXTRA-COMPUTE; do
+for pkg in MANYBODY MEAM EXTRA-FIX EXTRA-COMPUTE RIGID TALLY; do
   "$LMP" -h | grep -q "$pkg" || die "package $pkg missing from the build"
 done
 mpirun --version | head -1

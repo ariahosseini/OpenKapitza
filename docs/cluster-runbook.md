@@ -15,7 +15,8 @@ Packages: `MANYBODY` (Tersoff, SW, EAM), `EXTRA-FIX` (`fix wall/reflect/stochast
 
 ```bash
 cmake ../cmake -D BUILD_MPI=yes -D PKG_MANYBODY=yes -D PKG_EXTRA-FIX=yes \
-      -D PKG_EXTRA-COMPUTE=yes -D PKG_MEAM=yes -D CMAKE_BUILD_TYPE=Release
+      -D PKG_EXTRA-COMPUTE=yes -D PKG_MEAM=yes -D PKG_RIGID=yes -D PKG_TALLY=yes \
+      -D CMAKE_BUILD_TYPE=Release      # RIGID: fix ehex; TALLY: interface heat flow (KB 20)
 make -j 16
 ```
 
