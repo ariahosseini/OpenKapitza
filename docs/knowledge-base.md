@@ -3330,3 +3330,35 @@ code; the KB now states the spread.
     pessimistic end).
 - **Validation candidate:** Singhal et al. 2005 (metal joints in air). Ask
   for the tables.
+
+## 25. A sleeping Mac runs no MD (2 Nov 2026)
+
+**Symptom.** The non-bonded sweep on the M3 Pro took 19–28 h per job that
+the benchmark sized at 1.6–3 h. LAMMPS's own "% CPU use" line, CPU time over
+wall time per rank, read 47.9 % (bonded_ref), 13.6 % (lj1_p1_langevin),
+5.7 % (lj0.25_p0) and 4.0 % (lj0.25_p0.5). Production rates were 0.19–0.63
+M atom-steps/s against the benchmark's 5.2 M.
+
+**Cause.** macOS idle-sleeps when the display is off, and the job runner did
+nothing to prevent it. Wall time kept running through the sleeps, CPU time
+did not. The runs are not wrong, only slow: sleep pauses the integration,
+and the results (KB 19 and the sweep) are unaffected.
+
+**Fix.** `LocalRunner`'s wrapper now starts `caffeinate -ims -w $$` on macOS.
+It holds idle and disk sleep off, and system sleep on mains power, for
+exactly as long as the job lives. The display may still sleep, which costs
+nothing. Where `caffeinate` does not exist the line does nothing (test:
+`tests/test_jobs.py::TestKeepAwake`).
+
+**Limits.**
+- Closing the lid on battery still sleeps the Mac; `caffeinate` cannot stop
+  that.
+- For long campaigns: mains power, lid open (or clamshell with an external
+  display), and System Settings → Battery → Options → "Prevent automatic
+  sleeping on power adapter when the display is off".
+- Jobs already running were launched by the old wrapper. Cover them with
+  `caffeinate -ims` in a separate terminal until they finish.
+
+**Check.** The "% CPU use" line in every LAMMPS log is the quickest test.
+Near 100 % with np = 5 on 5 P-cores is healthy; well below means sleep or
+contention.

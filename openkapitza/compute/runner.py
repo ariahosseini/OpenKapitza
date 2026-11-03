@@ -139,6 +139,16 @@ class JobRunner(Protocol):
 # Local
 # ---------------------------------------------------------------------------
 
+# macOS idle-sleeps a laptop whose screen is off, and a sleeping Mac runs no
+# MD: on the M3 Pro the first non-bonded sweep ran at 4-14 % CPU use (LAMMPS's
+# own "% CPU use" line) and took 19-28 h per 1.6-3 h job. `caffeinate -ims -w
+# PID` holds idle, disk and (on mains power) system sleep off for as long as
+# the wrapper lives; the display may still sleep, which costs nothing. It does
+# not survive closing the lid on battery. Elsewhere the line is a no-op.
+KEEP_AWAKE = ("if command -v caffeinate >/dev/null 2>&1; then "
+              "caffeinate -ims -w $$ & fi")
+
+
 class LocalRunner:
     """Runs on this machine, detached, so submit() still returns immediately.
 
@@ -185,6 +195,7 @@ class LocalRunner:
             f"__rc=1\n"
             f"trap 'echo $__rc > {done_q}' EXIT\n"
             f"{env_lines}\n"
+            f"{KEEP_AWAKE}\n"
             f"cd {shlex.quote(str(spec.workdir))}\n"
             f"(\n{spec.command}\n)\n"
             f"__rc=$?\n"

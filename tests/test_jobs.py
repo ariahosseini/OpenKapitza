@@ -359,3 +359,27 @@ class TestDiagnose(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestKeepAwake(unittest.TestCase):
+    """A local job holds macOS sleep off while it runs (caffeinate), and the
+    line is harmless where caffeinate does not exist."""
+
+    def test_wrapper_keeps_the_mac_awake_and_still_reports(self):
+        from openkapitza.compute.runner import KEEP_AWAKE, JobSpec, LocalRunner
+        with tempfile.TemporaryDirectory() as d:
+            wd = Path(d)
+            bindir = wd / "bin"
+            bindir.mkdir()
+            # a stand-in caffeinate that records how it was called
+            _exe(bindir / "caffeinate", f"#!/bin/bash\necho \"$@\" > {wd}/caff.txt\n")
+            env = {"PATH": f"{bindir}:{os.environ['PATH']}"}
+            LocalRunner().submit(JobSpec(name="t", command="echo hi; exit 3", workdir=wd,
+                                         env=env))
+            for _ in range(100):
+                if (wd / "job.done").exists() and (wd / "caff.txt").exists():
+                    break
+                time.sleep(0.05)
+            self.assertIn(KEEP_AWAKE, (wd / "job_wrapper.sh").read_text())
+            self.assertEqual((wd / "job.done").read_text().strip(), "3")
+            self.assertTrue((wd / "caff.txt").read_text().startswith("-ims -w "))
