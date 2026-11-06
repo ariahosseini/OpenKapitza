@@ -26,6 +26,7 @@
 
 Si:
   name: Silicon (single crystal)
+  ballistic: {carrier: phonon, mfp_long_fraction: 0.40, mfp_long_nm: 1000, source: 'gray path from k, Debye C, mean sound speed; long-path share: Regner et al., Nat. Commun. 4, 1640 (2013), 40 +- 5 % of k from MFP > 1 um at 311 K'}  # P0-11, KB 23
   phase: crystalline
   verified: false
   k: 149.0  # W/(m*K) at ~300 K
@@ -59,6 +60,7 @@ Si:
 
 Ge:
   name: Germanium (single crystal)
+  ballistic: {carrier: phonon, source: 'gray path from k, Debye C, mean sound speed; long-path share unknown here'}  # P0-11
   phase: crystalline
   verified: false
   k: 60.2
@@ -81,6 +83,7 @@ Ge:
 
 Al:
   name: Aluminium (pure, annealed)
+  ballistic: {carrier: electron, mfp_nm: 18.9, source: 'D. Gall, J. Appl. Phys. 119, 085101 (2016), room-temperature electron mean free path (VERIFY)'}  # P0-11
   phase: crystalline
   verified: false
   k: 237.0
@@ -115,6 +118,7 @@ Al:
 
 Al6061:
   name: Aluminium alloy 6061-T6
+  ballistic: {carrier: electron, mfp_nm: 13.3, source: 'ESTIMATE: pure-Al 18.9 nm (Gall 2016) scaled by k 167/237 for alloy scattering'}  # P0-11
   phase: crystalline
   verified: false
   # Heat sinks, cold plates and enclosures. k, rho, E, nu are typical handbook
@@ -146,6 +150,7 @@ Al6061:
 
 Cu:
   name: Copper (pure, annealed)
+  ballistic: {carrier: electron, mfp_nm: 39.9, source: 'D. Gall, J. Appl. Phys. 119, 085101 (2016), room-temperature electron mean free path (VERIFY)'}  # P0-11
   phase: crystalline
   verified: false
   k: 401.0
@@ -178,6 +183,7 @@ Cu:
 
 SiO2:
   name: Silica (fused / amorphous)
+  ballistic: {carrier: phonon, source: 'gray path from k, Debye C, mean sound speed (amorphous: ~nm)'}  # P0-11
   phase: amorphous
   verified: false
   k: 1.30
@@ -214,6 +220,7 @@ SiO2:
 
 SS304:
   name: Stainless steel 304
+  ballistic: {carrier: electron, mfp_nm: 1.0, source: 'ORDER-OF-MAGNITUDE ESTIMATE for a disordered alloy (k 16 W/mK); negligible at any engineering spot size'}  # P0-11
   phase: crystalline
   verified: false
   k: 16.2
@@ -256,6 +263,7 @@ SS304:
 
 Ni200:
   name: Nickel 200
+  ballistic: {carrier: electron, mfp_nm: 5.87, source: 'D. Gall, J. Appl. Phys. 119, 085101 (2016), room-temperature electron mean free path (VERIFY)'}  # P0-11
   phase: crystalline
   verified: false
   k: 70.3

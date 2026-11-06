@@ -155,6 +155,7 @@ Every field, with its unit (other units are accepted and converted: `0.0008 mm`,
 | `pressure_MPa` | MPa | always (required for bare) | 0.2 for fills (unused by the stack) |
 | `sigma_a_um`, `sigma_b_um` | µm, RMS (Rq ≈ 1.25 Ra) | bare | — |
 | `slope_a`, `slope_b` | – (profilometer Δa) | bare, optional | estimated from roughness (flagged) |
+| `slope_instrument` | stylus / optical / afm / unknown | when a slope is given | unknown (no flag); optical or AFM is flagged as likely over-predicting h_c (KB 24) |
 | `medium` | vacuum / air / N2 / He / Ar / H2 | bare | air |
 | `gas_pressure_kPa` | kPa | bare, in gas | 101.325 |
 | `clamping` | uniform / bolted / unknown | bare | unknown |
@@ -167,6 +168,7 @@ Every field, with its unit (other units are accepted and converted: `0.0008 mm`,
 | `layers` | `name thickness_um k [voids] [material]; ...` | bond | — |
 | `z_trunc` | number of σ, or `reference` | advanced | fully Gaussian |
 | `max_pressure_MPa` | MPa | advanced | first loading |
+| `doping_a_cm3`, `doping_b_cm3` | cm⁻³, doped silicon | advanced | undoped; ≥ 1e19 is flagged (k over-stated) |
 | `Hv_a_GPa`, `Hv_b_GPa` | GPa | advanced | database |
 | `c1_a_GPa` + `c2_a`, `c1_b_GPa` + `c2_b` | GPa, – | advanced | database (none for Cu, Al) |
 | `h_K_MW` | MW/m²K, per real contact area | advanced | DMM placeholder |
@@ -224,6 +226,7 @@ sigma_a_um: 0.8
 sigma_b_um: 0.4
 slope_a: 0.08
 slope_b: 0.06
+slope_instrument: stylus
 medium: air
 clamping: bolted
 flatness_um: 25

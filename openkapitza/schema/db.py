@@ -116,6 +116,7 @@ def load_material(key: str, flags: FlagSet | None = None) -> MaterialSpec:
               verified=bool(e.get("hardness_coefficients_source")),
               citation=e.get("hardness_coefficients_source") or entry),
         c1_temperature=e.get("c1_temperature"),
+        ballistic=e.get("ballistic"),
         notes=e.get("notes"),
         verified=verified,
     )

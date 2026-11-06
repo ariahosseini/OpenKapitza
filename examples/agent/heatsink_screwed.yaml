@@ -8,6 +8,7 @@ sigma_a_um: 0.8
 sigma_b_um: 0.4
 slope_a: 0.08
 slope_b: 0.06
+slope_instrument: stylus
 medium: air
 clamping: bolted
 flatness_um: 25

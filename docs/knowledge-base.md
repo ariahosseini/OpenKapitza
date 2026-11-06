@@ -3418,3 +3418,48 @@ here, so the effect on h is small, but eHEX (RIGID) should replace HEX.
 
 **Compute note.** These runs were launched before the keep-awake fix (§25).
 CPU use was 4–14 % in the final stage of most overnight runs.
+
+## 27. Three contact-model checks built (6 Nov 2026)
+
+From the review rounds of §23 and §24, now in the code. All three only
+**flag**; none changes the primary answer.
+
+**Ballistic contact spots** (`contact/ballistic.py`, `CONTACT_BALLISTIC`,
+P0-11).
+- *Spot size:* the mean spot radius comes from the CMY/Yovanovich model at
+  the run's own P/H_c.
+- *Carrier paths, per side:*
+  - non-metals: the gray kinetic phonon path, λ = 3k/(Cv), from the Debye
+    heat capacity at T and the mean sound speed (Si ≈ 40 nm at 300 K);
+  - metals: a tabulated electron path (Gall 2016: Cu 39.9, Al 18.9,
+    Ni 5.87 nm; marked VERIFY in `materials.yaml`; Al6061 and SS304 are
+    labelled estimates).
+- *Bounds:*
+  - low: everything at the gray path;
+  - high: the material's long-path share. For Si that is 40 % of k at 1 µm
+    (Regner 2013), treated as parallel groups,
+    F = 1/Σ fᵢ/(1 + (8/3π)λᵢ/a).
+- *Weighting:* the two sides weight by 1/k, their share of the diffusive
+  1/(2k_s a).
+- *Reporting:* CAUTION above +10 % (with the corrected h_c band), INFO from
+  +2 %.
+- *Examples at 1 MPa:*
+  - polished Si/Si (σ = 20 nm, m = 0.02): a = 320 nm, spot resistance
+    +11–53 %;
+  - Si/Al, σ = 0.1/0.5 µm: a ≈ 1.9 µm, +1–10 % (INFO);
+  - lapped Cu/Cu and SS304: nothing.
+
+**Slope instrument** (`SurfaceSpec.slope_instrument`, `SLOPE_INSTRUMENT`,
+P0-12). The values are stylus / optical / afm / unknown. The agent asks
+whenever a slope is given (default "unknown", no flag). Optical or AFM gives
+a WARNING that h_c is likely over-predicted, possibly several-fold.
+`build_joint(slope_instrument=...)` applies it to both faces.
+
+**Doped silicon** (`doping_a_cm3` / `doping_b_cm3`,
+`DOPED_SI_CONDUCTIVITY`, P0-13). At ≥ 10¹⁹ cm⁻³ on a Si side the check
+issues a CAUTION that the undoped k over-states the constriction
+conductance (up to −42 %, p-type near 10²¹; Liao 2015). There is no
+correction, because no sourced k(n, type) table is here.
+
+Tests: `tests/test_contact_checks.py`. The agent guide lists the new fields,
+and the scripted heat-sink example answers the new question.

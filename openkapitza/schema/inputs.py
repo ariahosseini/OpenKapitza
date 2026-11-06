@@ -29,6 +29,9 @@ class MaterialSpec:
     # Hot-hardness fit {C_T [1/K], T_ref [K], T_max [K]}; informational (see
     # contact.hardness.hot_hardness_factor), never applied by default.
     c1_temperature: dict | None = None
+    # Heat-carrier mean free path data for the ballistic-spot check
+    # (contact.ballistic, P0-11): {carrier, mfp_nm | mfp_long_fraction, ...}.
+    ballistic: dict | None = None
     notes: str | None = None
     verified: bool = False
 
@@ -49,6 +52,35 @@ class SurfaceSpec:
 
     sigma: Quantity                 # RMS roughness, m
     m: Quantity | None = None       # mean absolute asperity slope, -
+    # How the slope was measured: "stylus" (the CMY calibration practice),
+    # "optical", "afm", or None (not stated). See check_slope_instrument.
+    slope_instrument: str | None = None
+
+    def check_slope_instrument(self, flags: FlagSet, side: str = "") -> None:
+        """Flag a measured slope from an instrument finer than CMY's calibration.
+
+        CMY's constants were fitted to stylus-profilometer slopes (~1 cm
+        traces). RMS slope is set by the shortest wavelengths an instrument
+        resolves (Persson et al. 2010), so AFM or high-resolution optical
+        profiles report a larger m and over-predict h_c in proportion
+        (P0-12, KB 24).
+        """
+        inst = (self.slope_instrument or "").lower()
+        if self.m is None or not inst or inst.startswith("stylus") or inst == "unknown":
+            return
+        fine = any(t in inst for t in ("afm", "optical", "interfer", "confocal", "white"))
+        flags.add(
+            Code.SLOPE_INSTRUMENT,
+            Severity.WARNING if fine else Severity.CAUTION,
+            f"Surface {side} slope m = {self.m.si:.4g} was measured by "
+            f"'{self.slope_instrument}'"
+            + (", which resolves finer roughness than the stylus profilometry CMY "
+               "was calibrated with: expect m, and so h_c, to be over-predicted, "
+               "possibly several-fold." if fine else
+               ", not a stylus profilometer; CMY was calibrated on stylus slopes."),
+            remedy="Re-measure the slope with a stylus profilometer on ~1 cm traces, or "
+                   "filter the profile to a stylus-like bandwidth before taking m.",
+            instrument=self.slope_instrument)
 
     def slope_or_estimate(self, flags: FlagSet) -> Quantity:
         """Return the measured slope, or Antonetti's correlation if absent.
@@ -147,6 +179,10 @@ class JointInputs:
     joint_radius: Quantity | None = None
     clamping: str | None = None
     label: str = ""
+    # Dopant concentration (cm^-3) of a silicon side, for the doped-Si check
+    # (P0-13). None = undoped or not stated.
+    doping_a_cm3: float | None = None
+    doping_b_cm3: float | None = None
     extra: dict = field(default_factory=dict)
 
     @property
@@ -176,3 +212,32 @@ class JointInputs:
         if self.z_trunc is not None:
             lines.append(f"  z_trunc      = {self.z_trunc.si:g} sigma (truncated Gaussian)")
         return "\n".join(lines)
+
+
+DOPED_SI_ONSET_CM3 = 1e19
+
+
+def check_doped_si(inputs: "JointInputs", flags: FlagSet) -> None:
+    """Flag a degenerately doped silicon side (P0-13, KB 24).
+
+    Electron-phonon scattering lowers silicon's lattice conductivity above
+    ~1e19 cm^-3, by up to ~42 % for p-type near 1e21 (Liao et al., PRL 114,
+    115901, 2015), while the electronic part stays below ~1 W/mK. The handbook
+    k then over-states the constriction conductance. No correction is applied:
+    the reduction depends on dopant type and concentration, which the sourced
+    data here do not tabulate.
+    """
+    for side, mat, n in (("A", inputs.material_a, inputs.doping_a_cm3),
+                         ("B", inputs.material_b, inputs.doping_b_cm3)):
+        if n is None or n < DOPED_SI_ONSET_CM3 or not mat.key.lower().startswith("si") \
+                or mat.key in ("SiO2",):
+            continue
+        flags.add(
+            Code.DOPED_SI_CONDUCTIVITY, Severity.CAUTION,
+            f"Side {side} ({mat.key}) is doped at {n:.1e} cm^-3: silicon's lattice "
+            f"conductivity falls above ~1e19 cm^-3 (up to ~42 % for p-type near 1e21; "
+            f"Liao et al. 2015), but k = {mat.k.si:.0f} W/mK is the undoped value.",
+            remedy="Supply a measured conductivity for this wafer, or treat h_c as an "
+                   "upper estimate.",
+            doping_cm3=n)
+

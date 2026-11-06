@@ -58,6 +58,9 @@ def build_joint(
     c2_a: float | None = None,
     c1_b_GPa: float | None = None,
     c2_b: float | None = None,
+    slope_instrument: str | None = None,
+    doping_a_cm3: float | None = None,
+    doping_b_cm3: float | None = None,
 ) -> JointInputs:
     """Assemble a JointInputs from values in laboratory units.
 
@@ -126,7 +129,7 @@ def build_joint(
                 slope, "-", rel_uncertainty=slope_rel_unc,
                 provenance=Provenance.USER_MEASURED, name="m",
             )
-        return SurfaceSpec(sigma=s, m=m)
+        return SurfaceSpec(sigma=s, m=m, slope_instrument=slope_instrument)
 
     gas_spec = None
     if gas is not None:
@@ -205,6 +208,8 @@ def build_joint(
         joint_radius=radius_q,
         clamping=clamping,
         label=label or f"{material_a}/{material_b}",
+        doping_a_cm3=doping_a_cm3,
+        doping_b_cm3=doping_b_cm3,
     )
 
 

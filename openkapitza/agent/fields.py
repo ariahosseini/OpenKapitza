@@ -199,6 +199,14 @@ FIELDS: list[Field] = [
           "measured.", "As for surface A.",
           unit=None, lo=0.0, hi=2.0, applies=bare, required=no,
           default_reason="estimated from roughness and flagged"),
+    Field("slope_instrument", "How were the slopes measured: stylus profilometer, "
+          "optical profiler, or AFM?",
+          "CMY was calibrated on stylus slopes. Finer instruments report larger slopes "
+          "and the answer is flagged as likely too high.",
+          kind="choice", choices=("stylus", "optical", "afm", "unknown"),
+          applies=lambda a: bare(a) and (a.get("slope_a") is not None
+                                         or a.get("slope_b") is not None),
+          required=no, default="unknown", default_reason="not stated"),
     Field("medium", "What fills the gaps: vacuum, or a gas?",
           "In gas, heat also crosses the gaps between the spots; at 1 atm air that path "
           "often carries a large share of the total.",
@@ -261,6 +269,12 @@ FIELDS: list[Field] = [
           "Plastically flattened asperities keep more contact on unloading: conductance "
           "stays above the first-loading value (Mikic hysteresis).",
           unit="MPa", units=_PRESS, lo=0.0, hi=1000.0, applies=bare, required=no,
+          advanced=True),
+    Field("doping_a_cm3", "Dopant concentration of side A, if it is doped silicon "
+          "(cm^-3)?", "Above ~1e19 cm^-3 silicon conducts less than its handbook value; "
+          "the answer is flagged.", unit=None, lo=0.0, hi=1e23, required=no, advanced=True),
+    Field("doping_b_cm3", "Dopant concentration of side B, if it is doped silicon "
+          "(cm^-3)?", "As for side A.", unit=None, lo=0.0, hi=1e23, required=no,
           advanced=True),
     Field("Hv_a_GPa", "Bulk Vickers hardness of side A (your measurement)?",
           "Replaces the database value, its least reliable field.",

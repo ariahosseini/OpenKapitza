@@ -11,6 +11,9 @@ returned. Nothing here silently picks one.
 
 from __future__ import annotations
 
+from .contact.ballistic import ballistic_check
+from .schema.inputs import check_doped_si
+
 import random
 from dataclasses import dataclass, field
 
@@ -168,6 +171,15 @@ def run_continuum(
         contacts["elastic"] = contact_conductance_elastic(
             k_s, sigma_eff, m_eff, inputs.pressure, E_eff, flags
         )
+
+    # -- input provenance (P0-12, P0-13) and ballistic spots (P0-11) --------
+    inputs.surface_a.check_slope_instrument(flags, "A")
+    inputs.surface_b.check_slope_instrument(flags, "B")
+    check_doped_si(inputs, flags)
+    _main = contacts.get("plastic") or contacts.get("elastic")
+    if _main is not None:
+        ballistic_check(a, b, sigma_eff.si, m_eff.si, hardness.P_over_Hc.si,
+                        inputs.temperature.si, _main.h_c.si, flags)
 
     # -- gap ----------------------------------------------------------------
     if unload is not None:
