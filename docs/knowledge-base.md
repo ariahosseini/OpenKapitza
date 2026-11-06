@@ -3362,3 +3362,59 @@ nothing. Where `caffeinate` does not exist the line does nothing (test:
 **Check.** The "% CPU use" line in every LAMMPS log is the quickest test.
 Near 100 % with np = 5 on 5 P-cores is healthy; well below means sleep or
 contention.
+
+## 26. Non-bonded sweep: first 16 of 20 cases (6 Nov 2026)
+
+Cells: Si/Ge, 4.3 nm cross-section, 8 nm per side (20,864 atoms), 300 ps
+steady, 1 ns production. Imposed flux (HEX) unless marked. h in MW/m²K;
+errors are the frame-to-frame standard error. Data:
+`docs/figures/data/nonbonded_sweep_partial.json`.
+
+| cross-interface LJ | 0 GPa | 0.5 GPa | 1 GPa | 2 GPa |
+|---|---|---|---|---|
+| ×¼ | 5.0 ± 0.2 | 16.7 ± 0.8 | 21.3 ± 0.7 | 36.3 ± 1.2 |
+| ×1 | 18.1 ± 1.0 | 37.0 ± 1.6 | 41.1 ± 0.8 | 51.9 ± 1.0 |
+| ×4 | 93 ± 15 | 134 ± 3 | 141 ± 4 | 139 ± 3 |
+
+Other cases:
+- bonded (Langevin): **493 ± 18**;
+- Ar monolayer at 1 GPa: 31.6 ± 1.2 (full), 44.2 ± 1.5 (half);
+- LJ ×1 at 1 GPa with Langevin reservoirs: **65.9 ± 3.4** (flux mismatch
+  9.6 %).
+
+**The trends are physical and match §22's targets.**
+- At zero load, h rises steeply with bond strength: ×16 in ε gives ×19 in h.
+- Load raises weak interfaces strongly: ×7 for LJ ×¼ between 0 and 2 GPa,
+  ×3 for ×1. The strongest one saturates by 0.5 GPa: ×4 holds 134–141 from
+  0.5 to 2 GPa. This is the "stiffness controls weak interfaces, saturating
+  toward the strongly bonded limit" picture of Shen et al. and Hsieh et al.
+- A full Ar monolayer at 1 GPa costs 23 % against the bare van der Waals
+  contact (41.1). Half coverage does not reduce it (44.2, within ~2σ of
+  41.1), so a sparse adsorbate does not insulate.
+- The strongest van der Waals contact still conducts 3.5× less than the
+  bonded interface.
+
+**But the two drives disagree on the absolute level.** At LJ ×1 and 1 GPa,
+Langevin gives 65.9 ± 3.4 and HEX 41.1 ± 0.8: 1.6× apart, well beyond
+error. In the small cell of §19 they had appeared to agree (87 ± 68 vs
+71 ± 7), but that "agreement" was inside the Langevin noise. The literature
+direction (§22) is that global or deterministic drives (Nosé-Hoover; HEX is
+of that kind) under-thermalise reservoir phonons and read *low*, while short
+Langevin damping (ours is 0.1 ps) can read *high*. So the HEX sweep's
+*relative* trends are internally consistent, but its absolute values may be
+low by up to ~1.6×.
+- *Revised rule (§19):* HEX is not a validated drive for absolute h, even
+  for resistive interfaces at this cell size.
+- *Arbitration, after the RIGID + TALLY rebuild (H-4):* run LJ ×1 at 1 GPa
+  with the direct interfacial heat flow (`heat/flux/virial/tally`, exact
+  for an LJ-only interface) under both drives, plus Langevin damping 0.5 ps
+  (P1-17).
+
+**HEX drift is visible.** The mean temperature rose during production in
+every HEX case: by 2–6 K typically, 12 K for LJ ×4 at 0 GPa. It started
+2–18 K above 300 K after the steady stage. The manual's warning (§20)
+applies: runs of ~1.4 ns are at its limit. h is only weakly T-dependent
+here, so the effect on h is small, but eHEX (RIGID) should replace HEX.
+
+**Compute note.** These runs were launched before the keep-awake fix (§25).
+CPU use was 4–14 % in the final stage of most overnight runs.
