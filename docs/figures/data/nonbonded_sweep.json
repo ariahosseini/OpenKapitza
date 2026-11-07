@@ -112,5 +112,35 @@
   "warn": [],
   "mode": "heat",
   "guess": null
+ },
+ "N2_c1_p1": {
+  "h": 36.30455510498006,
+  "err": 1.5048788817779544,
+  "warn": [
+   "NEMD_UNEQUILIBRATED"
+  ],
+  "mode": "heat",
+  "guess": null
+ },
+ "N2_c0.5_p1": {
+  "h": 43.008431284717005,
+  "err": 1.75221882953989,
+  "warn": [],
+  "mode": "heat",
+  "guess": null
+ },
+ "He_c1_p1": {
+  "h": 68.09289397153721,
+  "err": 10.215287245987524,
+  "warn": [],
+  "mode": "heat",
+  "guess": null
+ },
+ "He_c0.5_p1": {
+  "h": 67.41950390356443,
+  "err": 5.754320502387185,
+  "warn": [],
+  "mode": "heat",
+  "guess": null
  }
 }

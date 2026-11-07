@@ -3363,12 +3363,13 @@ nothing. Where `caffeinate` does not exist the line does nothing (test:
 Near 100 % with np = 5 on 5 P-cores is healthy; well below means sleep or
 contention.
 
-## 26. Non-bonded sweep: first 16 of 20 cases (6 Nov 2026)
+## 26. Non-bonded sweep: all 20 cases (6 Nov 2026)
 
 Cells: Si/Ge, 4.3 nm cross-section, 8 nm per side (20,864 atoms), 300 ps
 steady, 1 ns production. Imposed flux (HEX) unless marked. h in MW/m²K;
 errors are the frame-to-frame standard error. Data:
-`docs/figures/data/nonbonded_sweep_partial.json`.
+`docs/figures/data/nonbonded_sweep.json`; figure: README, "What the interface
+is made of".
 
 | cross-interface LJ | 0 GPa | 0.5 GPa | 1 GPa | 2 GPa |
 |---|---|---|---|---|
@@ -3378,7 +3379,16 @@ errors are the frame-to-frame standard error. Data:
 
 Other cases:
 - bonded (Langevin): **493 ± 18**;
-- Ar monolayer at 1 GPa: 31.6 ± 1.2 (full), 44.2 ± 1.5 (half);
+- gas layer at 1 GPa (bare contact at the same LJ ×1, 1 GPa: 41.1 ± 0.8):
+
+  | gas | full monolayer | half coverage |
+  |---|---|---|
+  | Ar | 31.6 ± 1.2 | 44.2 ± 1.5 |
+  | N₂ (sphere) | 36.3 ± 1.5 ¹ | 43.0 ± 1.8 |
+  | He | 68.1 ± 10.2 | 67.4 ± 5.8 |
+
+  ¹ NEMD_UNEQUILIBRATED: the mean T drifted 310 → 317 K in production.
+
 - LJ ×1 at 1 GPa with Langevin reservoirs: **65.9 ± 3.4** (flux mismatch
   9.6 %).
 
@@ -3389,10 +3399,38 @@ Other cases:
   0.5 to 2 GPa. This is the "stiffness controls weak interfaces, saturating
   toward the strongly bonded limit" picture of Shen et al. and Hsieh et al.
 - A full Ar monolayer at 1 GPa costs 23 % against the bare van der Waals
-  contact (41.1). Half coverage does not reduce it (44.2, within ~2σ of
-  41.1), so a sparse adsorbate does not insulate.
+  contact (41.1), a full N₂ layer 12 %. Half coverage costs nothing
+  measurable for either (44.2, 43.0; within ~2σ of 41.1), so a sparse
+  adsorbate does not insulate. The N₂ ordering follows its weaker well
+  (95 K vs 120 K); as a sphere it has no rotational channel.
 - The strongest van der Waals contact still conducts 3.5× less than the
   bonded interface.
+
+**The He anomaly.** Both He layers read ~1.65× the bare contact, against the
+expectation (weakest gas–solid well: He–Si ε ≈ 4 meV vs Ar–Si 13 meV) that
+they would read lowest. Not explained yet. What we know:
+- *Not quantum breakdown.* At 300 K the thermal de Broglie wavelength of He
+  is 0.50 Å, 0.2σ; classical He is a fair first approximation here (unlike
+  at cryogenic T).
+- *Not the flux guess.* The He h guess was 30, so q = 6×10⁸ W/m² and the
+  jump is ~9 K. That is half the target jump, so HEX noise weighs more
+  (errors 9–15 %, against 2–4 % elsewhere), but it does not bias h upward
+  by 65 %.
+- *Coverage does not matter* (68.1 vs 67.4), unlike Ar and N₂. A layer whose
+  conductance is independent of how many atoms it has is not conducting
+  through a sparse bridge.
+- *Candidate 1, a mobile layer:* He's well (≈ 10 K) is far below 300 K, so
+  the layer is a dense 2-D fluid, not an adsorbed solid. Heat can then also
+  ride on atoms moving between the faces (a gas-kinetic, convective channel,
+  ∝ mean speed; He is 3.2× faster than Ar). A pairwise force tally misses
+  that channel, and HEX counts it. If this is it, h_He should fall when the
+  He atoms are tethered, and the arbitration tally (H-4) should read low
+  against HEX for He but not for Ar.
+- *Candidate 2, geometry:* the built gap is 6.4 Å for He vs 7.3 Å for Ar, so
+  more of the direct Si–Ge LJ tail survives across the He layer. A
+  He-free cell at the same gap would measure it.
+Until one of these is settled, **do not use the He result**. It is the case
+the H-4 tally comparison is most likely to resolve.
 
 **But the two drives disagree on the absolute level.** At LJ ×1 and 1 GPa,
 Langevin gives 65.9 ± 3.4 and HEX 41.1 ± 0.8: 1.6× apart, well beyond
@@ -3417,7 +3455,8 @@ applies: runs of ~1.4 ns are at its limit. h is only weakly T-dependent
 here, so the effect on h is small, but eHEX (RIGID) should replace HEX.
 
 **Compute note.** These runs were launched before the keep-awake fix (§25).
-CPU use was 4–14 % in the final stage of most overnight runs.
+CPU use was 4–14 % in the final stage of most overnight runs. The last
+four (N₂, He) ran after it, at 99.9 % CPU throughout.
 
 ## 27. Three contact-model checks built (6 Nov 2026)
 

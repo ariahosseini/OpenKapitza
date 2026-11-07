@@ -3,8 +3,8 @@
     python3 scripts/make_readme_figures.py
 
 The continuum figure is computed live with the package. The MD figures read
-docs/figures/data/md_results.json, a small summary of runs on the author's
-M3 Pro (KB 17-19); the run folders themselves are not in the repository.
+docs/figures/data/md_results.json and nonbonded_sweep.json, small summaries of
+runs on the author's M3 Pro (KB 17-19, 26); the run folders themselves are not in the repository.
 """
 
 from __future__ import annotations
@@ -161,35 +161,68 @@ def fig_profile(t, mode):
     save(f, "nemd_profile", mode)
 
 
-# ---- 4. MD: interface types (preliminary) ----------------------------------------
+# ---- 4. MD: interface types (the non-bonded sweep, KB 26) -------------------------
+SWEEP = json.loads((OUT / "data" / "nonbonded_sweep.json").read_text())
+LOADS = (0, 0.5, 1, 2)
+
+
 def fig_interfaces(t, mode):
-    rows = DATA["interfaces"]["rows"]
-    labels = ["Bonded\n0 GPa", "van der Waals\n0 GPa", "van der Waals\n1 GPa", "Ar layer\n1 GPa"]
-    key = [("Bonded", 0), ("van der Waals", 0), ("van der Waals", 1), ("Ar monolayer", 1)]
-    f = fig_new(t, 6.4, 3.4)
-    ax = f.add_subplot(111)
-    style(ax, t)
-    for meth, c, mk, dx, name in (("langevin", t["series"][0], "o", -0.08, "Langevin reservoirs"),
-                                  ("imposed", t["series"][1], "D", 0.08, "imposed flux")):
-        xs, ys, lo, hi = [], [], [], []
-        for i, (cell, load) in enumerate(key):
-            r = next((r for r in rows if r["cell"] == cell and r["load_GPa"] == load
-                      and r["method"] == meth), None)
-            if r is None:
-                continue
-            xs.append(i + dx); ys.append(r["h"])
-            lo.append(min(r["err"], r["h"] * 0.9)); hi.append(r["err"])
-        ax.errorbar(xs, ys, yerr=[lo, hi], fmt=mk, ms=7, color=c, lw=1.5, capsize=0, label=name)
-    ax.set_yscale("log")
-    ax.set_ylim(1.5, 1000)
-    plain_log(ax)
-    ax.set_xticks(range(len(labels)), labels, fontsize=9)
-    ax.set_ylabel("h_K (MW/m²K)")
-    ax.set_title("Si/Ge contact: what the interface is made of (small cells, preliminary)",
+    f = fig_new(t, 10.0, 3.6)
+    a1, a2 = f.subplots(1, 2, sharey=True, gridspec_kw={"width_ratios": [1.15, 1]})
+    for ax in (a1, a2):
+        style(ax, t)
+        b = SWEEP["bonded_ref"]
+        ax.axhspan(b["h"] - b["err"], b["h"] + b["err"], color=t["band"], alpha=0.6, lw=0)
+    for ax, x in ((a1, 0.02), (a2, -0.4)):
+        ax.text(x, SWEEP["bonded_ref"]["h"] * 1.12, "bonded interface, 493 (Langevin)",
+                fontsize=8, color=t["ink2"])
+    # left: van der Waals strength x load
+    for (scale, name), c, mk in zip(((0.25, "LJ ×¼"), (1, "LJ ×1"), (4, "LJ ×4")),
+                                    t["series"], ("o", "s", "D")):
+        r = [SWEEP[f"lj{scale:g}_p{p:g}"] for p in LOADS]
+        ax = a1
+        ax.errorbar(LOADS, [x["h"] for x in r], yerr=[x["err"] for x in r], color=c, marker=mk,
+                    ms=6, lw=2, capsize=0)
+        ax.annotate(name, (LOADS[-1], r[-1]["h"]), xytext=(7, 0), textcoords="offset points",
+                    va="center", fontsize=9, color=t["ink"])
+    lv = SWEEP["lj1_p1_langevin"]
+    a1.errorbar([1.06], [lv["h"]], yerr=[lv["err"]], fmt="s", ms=6, mfc=t["surface"],
+                color=t["series"][1], mew=1.5, capsize=0)
+    a1.annotate("LJ ×1, Langevin", (1.06, lv["h"]), xytext=(7, 4), textcoords="offset points",
+                fontsize=8, color=t["ink2"])
+    a1.set_xticks(LOADS, [f"{p:g}" for p in LOADS])
+    a1.set_xlim(-0.15, 2.45)
+    a1.set_xlabel("contact pressure (GPa)")
+    a1.set_ylabel("h_K (MW/m²K)")
+    a1.set_title("Pressed, not bonded: cross-interface LJ strength × load",
                  fontsize=10, loc="left", color=t["ink"])
-    leg = ax.legend(frameon=False, fontsize=8, loc="upper right")
+    # right: a gas layer in the contact at 1 GPa
+    cats = [("bare", "lj1_p1", None), ("Ar", "Ar_c1_p1", "Ar_c0.5_p1"),
+            ("N₂", "N2_c1_p1", "N2_c0.5_p1"), ("He", "He_c1_p1", "He_c0.5_p1")]
+    for dx, idx, mk, name, filled in ((-0.1, 1, "o", "full monolayer", True),
+                                     (0.1, 2, "o", "half coverage", False)):
+        xs, ys, es = [], [], []
+        for i, (_, full, half) in enumerate(cats):
+            k = full if filled else half
+            if k is None:
+                continue
+            xs.append(i + (dx if half else 0)); ys.append(SWEEP[k]["h"]); es.append(SWEEP[k]["err"])
+        a2.errorbar(xs, ys, yerr=es, fmt=mk, ms=7, color=t["series"][0], mew=1.5, capsize=0,
+                    mfc=t["series"][0] if filled else t["surface"], label=name)
+    a2.set_xticks(range(len(cats)), [c[0] for c in cats])
+    a2.set_xlim(-0.5, len(cats) - 0.5)
+    a2.set_xlabel("what fills the contact (LJ ×1, 1 GPa)")
+    a2.set_title("A physisorbed gas layer", fontsize=10, loc="left", color=t["ink"])
+    leg = a2.legend(frameon=False, fontsize=8, loc="lower right")
     for txt in leg.get_texts():
         txt.set_color(t["ink2"])
+    a1.set_yscale("log")
+    a1.set_ylim(3, 800)
+    plain_log(a1)
+    f.text(0.01, -0.04, "Si/Ge, 4.3 nm cross-section, 8 nm per side, 300 K; imposed flux (HEX) "
+           "unless marked. Relative trends hold; absolute HEX values may read low (KB 26).",
+           fontsize=8, color=t["ink2"])
+    f.tight_layout()
     save(f, "interface_types", mode)
 
 

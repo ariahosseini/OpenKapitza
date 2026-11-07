@@ -86,16 +86,24 @@ convergence verdict per axis, not a single run ([KB §17](docs/knowledge-base.md
 
 ### What the interface is made of matters more than anything else
 
-Real contact spots are rarely clean, bonded crystal. The same contact with
-the bond removed (van der Waals only), under load, and with adsorbed argon:
+Real contact spots are rarely clean, bonded crystal. The same Si/Ge contact
+with the bond removed (van der Waals only), at three bond strengths and four
+loads, and with a physisorbed gas layer in the contact (20 NEMD runs):
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/interface_types-dark.png"><img alt="Interface conductance for bonded, van der Waals and argon-layer Si/Ge contacts" src="docs/figures/interface_types-light.png"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/interface_types-dark.png"><img alt="Interface conductance of a van der Waals Si/Ge contact against load for three bond strengths, and with Ar, N2 and He layers, compared with the bonded interface" src="docs/figures/interface_types-light.png"></picture>
 
-Losing the bond costs ~25×; 1 GPa, the stress inside a real asperity contact,
-recovers ~5×; an adsorbed gas layer halves it again. Small cells, so the
-values are preliminary; imposing the flux (orange) cuts the error 10×, and a
-20-case sweep is running ([KB §19](docs/knowledge-base.md)). Figures:
-`python3 scripts/make_readme_figures.py`.
+- Losing the bond costs 3.5–100×, depending on how strong the van der Waals
+  attraction is and how hard the contact is pressed.
+- Load matters most for weak contacts (×7 from 0 to 2 GPa at LJ ×¼); strong
+  ones saturate by 0.5 GPa.
+- A full Ar or N₂ monolayer costs 10–25 %; half a layer costs nothing
+  measurable. He reads *higher* than the bare contact, which is not yet
+  explained.
+- The absolute level is not settled: at LJ ×1, 1 GPa the Langevin drive
+  reads 1.6× the imposed flux (hollow square). An arbitration with the
+  direct interfacial heat-flow tally is next ([KB §26](docs/knowledge-base.md)).
+
+Figures: `python3 scripts/make_readme_figures.py`.
 
 ## What the models cover
 
