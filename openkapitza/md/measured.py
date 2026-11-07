@@ -260,8 +260,16 @@ def check_kapitza(a_key: str, b_key: str, T: float, h_K_W: float, source: str,
                   remedy="Check the potential and the run (convergence, temperature); " + use,
                   measured_lo=ref.lo, measured_hi=ref.hi, value=v)
     else:
+        if ref.lo <= v <= ref.hi:
+            where = "lies within the measured range"
+        elif v > ref.hi:
+            where = (f"is {v / ref.hi:.2f}x the highest measured value, inside the "
+                     f"{OUTSIDE:g}x tolerance before it is flagged")
+        else:
+            where = (f"is {ref.lo / v:.2f}x under the lowest measured value, inside the "
+                     f"{OUTSIDE:g}x tolerance before it is flagged")
         flags.add(Code.KAPITZA_REFERENCE, Severity.INFO,
-                  f"{what} ({v:.0f} MW/m²K) lies within the measured range. {ref.summary()}.{tail}",
+                  f"{what} ({v:.0f} MW/m²K) {where}. {ref.summary()}.{tail}",
                   measured_lo=ref.lo, measured_hi=ref.hi, value=v)
     return ref
 
