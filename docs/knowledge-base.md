@@ -3871,7 +3871,8 @@ neutron-derived DOS, within 10 %. About 15 s per crystal, serial.
   Si/Ge overlap, and hence h_K. It points the same way as the −4 % strain
   (§22) and the elastic-constant inversion (P1-5): three reasons the Tersoff
   Si/Ge value reads high.
-- The test spectra are noisy (one 10 ps run, 512 atoms); the peak positions
-  are reproducible to ~0.1 THz in reruns, but for a model gate use longer runs
-  or several seeds.
+- The spectra are noisy (one 10 ps run, 512 atoms), but two more seeds per
+  crystal moved the peaks by at most 0.3 THz (Ge optical 8.9–9.2, Si optical
+  15.3–15.4; TA unchanged), well inside the tolerances and far from the 33 %
+  Ge TA error. For a model gate, still use several seeds.
 
