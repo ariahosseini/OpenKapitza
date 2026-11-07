@@ -66,13 +66,27 @@ with load (CMY); in air the gas gap carries most of it at low load, and in
 helium (~6× air's conductivity) more. On 570 measured points the contact
 model lands within RMS 13–15 % (validation table below).
 
+### Two paths in parallel, and when the gas stops helping
+
+Split by path, the same joint in air: the contact spots grow with load as
+(P/H_c)^0.95, while the gas gap barely moves, so the gas dominates below
+~10 MPa. The gas path itself depends on gas pressure through rarefaction:
+below ~1 kPa the mean free path exceeds the gap and h_g falls in proportion
+to pressure; at 1 atm it has saturated. Helium wins through its
+conductivity, not its accommodation (which is poor).
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/continuum_paths-dark.png"><img alt="Contact-spot, gas-gap and joint conductance against pressure for SS304 in air, and gap conductance against gas pressure for He, air and Ar" src="docs/figures/continuum_paths-light.png"></picture>
+
 ### The atomic interface: an MD measurement
 
 At each contact spot the interface itself resists heat (Kapitza). OpenKapitza
-writes, runs and measures LAMMPS non-equilibrium MD for it: heat flows from a
-hot to a cold reservoir and the jump at the interface gives h_K = q / ΔT_K.
+builds the atomic cell, writes the LAMMPS input, runs it through the agent's
+job loop and measures it: heat flows from a hot to a cold reservoir, and the
+temperature step at the interface gives h_K = q / ΔT_K. Below, one cell
+drawn end to end, and the steady profiles of three cells divided by their
+own heat flux, so that each step *is* 1/h_K and each bulk slope is 1/k:
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/nemd_profile-dark.png"><img alt="Temperature profile through a Si/Ge NEMD cell with a jump at the interface" src="docs/figures/nemd_profile-light.png"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/nemd_cell-dark.png"><img alt="An NEMD cell of Si, an argon layer and Ge drawn atom by atom, above temperature profiles of bonded, van der Waals and argon-layer cells divided by heat flux" src="docs/figures/nemd_cell-light.png"></picture>
 
 Before a number is trusted the cell is varied one axis at a time (Si/Ge,
 Tersoff; 14 runs on an M3 Pro laptop through the agent's job loop):
@@ -86,7 +100,15 @@ convergence verdict per axis, not a single run ([KB §17](docs/knowledge-base.md
 
 ### What the interface is made of matters more than anything else
 
-Real contact spots are rarely clean, bonded crystal. The same Si/Ge contact
+Real contact spots are rarely clean, bonded crystal. The structure module
+builds crystalline, amorphous (melt-and-quench) and non-bonded interfaces,
+with or without a physisorbed gas layer. Five of them after relaxation,
+atom by atom (a 0.54 nm slab seen side-on; drawn by
+`scripts/make_readme_figures.py` from the relaxed LAMMPS data):
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/interface_atoms-dark.png"><img alt="Atom pictures of five interfaces: bonded Si/Ge, van der Waals Si/Ge at 1 GPa, an argon monolayer, half a nitrogen layer, and Si on amorphous SiO2" src="docs/figures/interface_atoms-light.png"></picture>
+
+How much that matters, measured: the same Si/Ge contact
 with the bond removed (van der Waals only), at three bond strengths and four
 loads, and with a physisorbed gas layer in the contact (20 NEMD runs):
 
@@ -100,8 +122,9 @@ loads, and with a physisorbed gas layer in the contact (20 NEMD runs):
   measurable. He reads *higher* than the bare contact, which is not yet
   explained.
 - The absolute level is not settled: at LJ ×1, 1 GPa the Langevin drive
-  reads 1.6× the imposed flux (hollow square). An arbitration with the
-  direct interfacial heat-flow tally is next ([KB §26](docs/knowledge-base.md)).
+  reads 1.6× the imposed flux (hollow square). A drive comparison (Langevin
+  damping 0.1 vs 0.5 ps, eHEX vs HEX) is running
+  ([KB §26, §28](docs/knowledge-base.md)).
 
 Figures: `python3 scripts/make_readme_figures.py`.
 
@@ -214,6 +237,47 @@ two-temperature MD:
 
 The MD is run at the stress inside a contact spot, $\approx H_c$ (GPa), not
 at the apparent pressure $P$ (MPa).
+
+**Driving the gradient.** With Langevin reservoirs $q$ comes from their
+energy tallies, as above. For resistive interfaces the flux is imposed
+instead: each step the hot reservoir gains and the cold one loses the same
+power $F = qA$ (`fix heat`, HEX), so $q$ carries no thermostat noise. eHEX
+(`fix ehex`; Wirnsberger et al. 2015) adds a coordinate correction that
+removes HEX's slow energy drift. Across an interface coupled only by pair
+forces, the heat flow can also be read directly (`compute
+heat/flux/virial/tally`):
+
+```math
+Q_{A\to B} = \frac{1}{2}\sum_{i\in B}\sum_{j\in A}\mathbf F_{ij}\cdot\left(\mathbf v_i+\mathbf v_j\right)
+```
+
+an independent flux, but a noisy one: about ±50 % over 1 ns in these cells.
+
+**Strain-free cells.** Scaling one element's Tersoff lengths by $s$ (cut-offs
+$R, S \to sR, sS$; $\lambda_{1,2,3} \to \lambda/s$; energies unchanged)
+moves its lattice constant to $s\,a$ exactly and raises its frequencies by
+$1/s$. The cross terms are re-mixed with Tersoff's rules,
+$\lambda_{ij} = (\lambda_i+\lambda_j)/2$, $R_{ij} = \sqrt{R_iR_j}$,
+$S_{ij} = \sqrt{S_iS_j}$. With $s = a_\text{Si}/a_\text{Ge}$ this removes the
+4 % misfit strain of a coherent Si/Ge cell.
+
+**Checks that flag but do not change the answer.** A contact spot of mean
+radius $a$ comparable to the carriers' mean free path $\Lambda$ (phonons, or
+electrons in a metal) is partly ballistic, and its resistance is higher than
+CMY's diffusive value by
+
+```math
+F = \left[\sum_i \frac{f_i}{1+\frac{8}{3\pi}\,\Lambda_i/a}\right]^{-1},\qquad
+\Lambda = \frac{3k}{C\,\bar v},\qquad
+a = \frac{\sigma}{m}\sqrt{\frac{8}{\pi}}\;e^{x^2/2}\,\operatorname{erfc}\!\left(\frac{x}{\sqrt2}\right),\quad
+x = \sqrt2\,\operatorname{erfc}^{-1}\!\left(\frac{2P}{H_c}\right)
+```
+
+with $f_i$ the share of $k$ carried at path $\Lambda_i$ (a gray path gives the
+low bound; a measured long-path share, e.g. 40 % of Si's $k$ above 1 µm, the
+high one). Also flagged: slopes from optical or AFM profiles (which read
+steeper than the stylus data CMY was fitted to) and silicon doped above
+$10^{19}\ \text{cm}^{-3}$ (lower $k$).
 
 **Combining the paths**, all per apparent area. $h_K$ is per real area, so
 it enters scaled by $\xi$; omitting that factor understates the Kapitza term
