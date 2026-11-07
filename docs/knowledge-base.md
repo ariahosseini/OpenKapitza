@@ -3789,3 +3789,43 @@ The 1 ns runs will tell.
 lines were added to their `nemd.in` on the Mac (originals kept as
 `nemd.in.before-gasmsd`); nothing else in those decks changed.
 
+## 36. Tier-2 MLIP plumbing (P4-1, 7 Nov 2026)
+
+**Scope, honestly.** Phase 4 needs a machine-learned potential trained on
+the interface. None ships with LAMMPS for any pair we study: the Si and Ge
+SNAPs of Zuo et al. (2020) are single-element fits, and a Si/Ge model built
+here without reference data would be exactly the "fabricated potential"
+that `nemd.py` forbids. What is built is everything around the model, so a
+trained model drops in.
+
+**`md/mlip.py`.**
+- `MLIPModel` (or a YAML file, `examples/mlip/`): kind (snap, pace, mace,
+  deepmd, nequip, allegro), model files, elements in type order, what it
+  was trained on, foundation or not, citation, and its gate results.
+- `pair_block(model)`: the LAMMPS pair section. It goes into
+  `NEMDSpec.pair_block` unchanged, so the deck, validation, checkpoints,
+  measurement and agent loop are the same as for Tier 1.
+- `check_model(model, el_a, el_b, flags)`: the agent instruction's §4 rules
+  as flags.
+  - `MLIP_TRAINING_COVERAGE` (WARNING): no configurations of this interface
+    in the training set, so the model is extrapolating where h_K is decided.
+    CRITICAL if an element is missing.
+  - `MLIP_FOUNDATION` (CAUTION): a universal model; screening only, softens
+    at high temperature (melt-quench check).
+  - `MLIP_UNGATED` (WARNING): phonon DOS, elastic constants and bulk k not
+    all passed; production is not to be quoted.
+  - `MLIP_NEEDS_GPU` (WARNING): MACE, DeePMD and NequIP/Allegro run inside
+    LAMMPS on CUDA GPUs in practice; an Apple GPU cannot. SNAP and ACE run
+    on CPUs (the Mac build has ML-SNAP, ML-IAP, ML-PACE).
+
+**`scripts/prepare_mlip.py`** writes the campaign's base Si/Ge cell (r00)
+with a given model, so a Tier-2 h_K is directly comparable with the Tersoff
+483 ± 20; it prints every flag first and stops on a CRITICAL one (e.g. the
+Ge SNAP offered for Si/Ge). `examples/mlip/sige_model_template.yaml` lists
+what a real model's description must say.
+
+**Next, when a model exists:** run the gate against references (the elastic
+part exists as `scripts/measure_potential_elastic.py`; phonon DOS and bulk
+k scripts are still to write), record it in the model file, then the
+r00-comparable run and the length axis on a GPU.
+

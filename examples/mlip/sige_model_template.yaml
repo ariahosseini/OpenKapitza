@@ -1,0 +1,16 @@
+# Template for the Si/Ge Tier-2 model the project still needs (P4-1).
+# Fill in once a model exists; every field is checked before a run
+# (openkapitza/md/mlip.py: check_model).
+kind: mace                       # snap | pace | mace | deepmd | nequip | allegro
+files: [sige-mliap_lammps.pt]    # mace: the ML-IAP export (mace_create_lammps_model --format=mliap)
+elements: [Si, Ge]               # one per atom type, in type order (Si = 1, Ge = 2)
+trained_on:                      # be specific: the interface entry is what matters
+  - bulk Si
+  - bulk Ge
+  - Si/Ge interface, (100), coherent and 25:24 incoherent, 300-1200 K
+foundation: false                # true for a universal model used as shipped
+source: ""                       # citation or URL
+gate:                            # fill after running the gate: pass | fail
+  phonon_dos: ""
+  elastic: ""
+  bulk_k: ""

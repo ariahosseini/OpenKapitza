@@ -1,0 +1,9 @@
+# A real, shipped MLIP: the Ge SNAP of Zuo et al. 2020 (files in LAMMPS's
+# potentials/ folder). Single-element, so it cannot model a Si/Ge interface;
+# it is here to exercise the Tier-2 plumbing end to end (KB 36), e.g. on a
+# mass-mismatch Ge/"light Ge" cell.
+kind: snap
+files: [Ge_Zuo_JPCA2020.snapcoeff, Ge_Zuo_JPCA2020.snapparam]
+elements: [Ge, Ge]
+trained_on: [bulk Ge (DFT, Materials Virtual Lab data set)]
+source: "Y. Zuo et al., J. Phys. Chem. A 124, 731 (2020)"
