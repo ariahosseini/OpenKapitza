@@ -3844,3 +3844,34 @@ part exists as `scripts/measure_potential_elastic.py`; phonon DOS and bulk
 k scripts are still to write), record it in the model file, then the
 r00-comparable run and the length axis on a GPU.
 
+## 37. Phonon part of the potential gate (7 Nov 2026)
+
+**What.** `md/phonon_dos.py` and `scripts/measure_potential_phonons.py`:
+the third leg of the instruction's gate (§4: phonon DOS, elastic constants,
+bulk k), for any potential, classical or machine-learned. A 512-atom
+crystal is relaxed to the potential's own lattice constant, equilibrated at
+300 K and run NVE for 10 ps with velocities dumped every 4 fs. The DOS is
+their power spectrum (Hann window, summed over atoms and directions). The
+gate compares two features with measurements: the optical peak (highest
+strong maximum) with the zone-centre Raman frequency, within 5 %, and the
+TA peak (strongest maximum below a third of the band top) with the
+neutron-derived DOS, within 10 %. About 15 s per crystal, serial.
+
+**First results** (300 K):
+
+| potential | optical (THz) | vs ref | TA (THz) | vs ref | gate |
+|---|---|---|---|---|---|
+| SiCGe.tersoff, Si(D) | 15.4 | −1.3 % (15.6) | 4.6 | +2 % (4.5) | pass |
+| SiCGe.tersoff, Ge | 9.2 | +2.2 % (9.0) | 3.2 | **+33 %** (2.4) | **fail** |
+| Si.sw (Stillinger–Weber) | 16.8 | **+7.7 %** | 4.6 | +2 % | **fail** |
+
+- The SW optical band sits too high, the familiar SW defect.
+- Tersoff Ge places its TA peak a third too high, so Ge's acoustic band is
+  stiffer than real Ge. That shifts it toward Si's and should **raise** the
+  Si/Ge overlap, and hence h_K. It points the same way as the −4 % strain
+  (§22) and the elastic-constant inversion (P1-5): three reasons the Tersoff
+  Si/Ge value reads high.
+- The test spectra are noisy (one 10 ps run, 512 atoms); the peak positions
+  are reproducible to ~0.1 THz in reruns, but for a model gate use longer runs
+  or several seeds.
+
