@@ -380,3 +380,13 @@ sweeps, cited lookup, the MD job loop (submit, poll, diagnose, retry, ingest),
 and an MCP server; MD runs on a laptop (queued, checkpointed). Under way: the
 interface-type sweep, the Si/Ge length axis and the scenario list in
 [`docs/open-issues.md`](docs/open-issues.md); then Phase 4 ML potentials.
+
+## License and citation
+
+MIT ([`LICENSE`](LICENSE)). The licence covers this code and its own text.
+Benchmark data digitised from publications, and published potential
+parameters, remain their authors' work and are credited in
+[`tests/benchmarks/SOURCES.md`](tests/benchmarks/SOURCES.md) and the
+knowledge base. LAMMPS (GPL) is run as a separate program and is not
+distributed here. To cite OpenKapitza, use GitHub's "Cite this repository"
+button, which reads [`CITATION.cff`](CITATION.cff).

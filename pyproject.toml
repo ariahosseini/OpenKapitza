@@ -11,7 +11,7 @@ readme = "README.md"
 # (macOS/arm64). Every module uses `from __future__ import annotations`, so
 # PEP 604 unions in annotations are strings and never evaluated.
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = { text = "MIT" }   # full text: LICENSE
 authors = [{ name = "Aria Hosseini" }]
 keywords = [
     "thermal-contact-conductance",

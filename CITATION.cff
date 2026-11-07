@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use OpenKapitza in your work, please cite it as below."
+title: "OpenKapitza: multiscale thermal contact resistance"
+abstract: >-
+  Contact mechanics, gas-gap conductance and interfacial (Kapitza)
+  resistance from molecular dynamics, combined on a consistent area basis.
+type: software
+authors:
+  - family-names: Hosseini
+    given-names: Aria
+version: 0.2.0
+date-released: 2026-11-07
+license: MIT
+repository-code: "https://github.com/ariahosseini/OpenKapitza"
+keywords:
+  - thermal contact resistance
+  - Kapitza resistance
+  - molecular dynamics
+  - LAMMPS
+  - contact mechanics
+  - gap conductance
