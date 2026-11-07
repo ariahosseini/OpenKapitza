@@ -20,8 +20,14 @@ usable checkpoint into `resume.in`:
 4. The log is appended to log.lammps (`log ... append`; run LAMMPS with
    `-log none` so the launcher does not truncate it first).
 
-Only the production stage is checkpointed: a run killed before production
-starts over, which is cheap by comparison. TTM decks are not checkpointed
+Before production, the deck also writes `stage.equilibrated.bin` after
+equilibration and `stage.steady.bin` after the steady stage. A run killed
+before its first production checkpoint resumes from the later of the two
+(`build_stage_resume_deck`): the state is replayed as above, then the rest of
+the deck runs verbatim from that point (production starts afresh, so its
+outputs are overwritten, not appended). Relaxation itself is not
+checkpointed: the wall correction that follows it needs the relax run's
+running averages, which a restart file does not keep. TTM decks are not checkpointed
 (fix ttm/thermal keeps electron state the restart file does not hold).
 Checked end to end with LAMMPS on a Si/Ge cell (tests/test_checkpoint.py).
 """
@@ -278,6 +284,82 @@ def build_resume_deck(deck: str, step: int, production_steps: int, dt_ps: float,
     return "\n".join(out) + "\n"
 
 
+STAGE_FILES = (("stage.steady.bin", "the end of the steady stage"),
+               ("stage.equilibrated.bin", "the end of equilibration"))
+
+
+def build_stage_resume_deck(deck: str, stage_file: str) -> str:
+    """`resume.in` that restarts from a pre-production stage file: the state at
+    its `write_restart` replayed on top of `read_restart`, then the remainder of
+    the deck verbatim."""
+    lines = deck.splitlines()
+    idx = next((i for i, ln in enumerate(lines)
+                if ln.split()[:2] == ["write_restart", stage_file]), None)
+    if idx is None:
+        raise ResumeError(f"no 'write_restart {stage_file}' in the deck")
+    before = _commands("\n".join(lines[:idx]))
+    rest = "\n".join(lines[idx + 1:])
+    regions, computes, fixes, variables, settings, pair = {}, {}, {}, {}, {}, []
+    for c in before:
+        w = c.split()
+        k = w[0]
+        if k == "region":
+            regions[w[1]] = c
+        elif k == "compute":
+            computes[w[1]] = c
+        elif k == "uncompute":
+            computes.pop(w[1], None)
+        elif k == "fix":
+            fixes.pop(w[1], None)
+            fixes[w[1]] = c
+        elif k == "unfix":
+            fixes.pop(w[1], None)
+        elif k == "variable":
+            if len(w) > 2 and w[2] == "delete":
+                variables.pop(w[1], None)
+            else:
+                variables[w[1]] = c
+        elif k == "pair_style":
+            pair = [c]
+        elif k in ("pair_coeff", "pair_modify"):
+            pair.append(c)
+        elif k in ("neighbor", "neigh_modify", "thermo", "thermo_style", "thermo_modify",
+                   "timestep"):
+            settings[k] = c
+    pending = set().union(*(_refs(x) for x in (*fixes.values(), *computes.values(),
+                                                *settings.values(), rest)))
+    used = set()
+    while pending:
+        v = pending.pop()
+        if v in used or v not in variables:
+            continue
+        used.add(v)
+        pending |= _refs(variables[v].split(None, 3)[-1])
+
+    def fix_line(c: str) -> str:
+        w = c.split()
+        if len(w) > 7 and w[3] == "langevin":
+            w[7] = str((int(w[7]) + 7919) % 900_000_000 + 1)      # a fresh random stream
+            return " ".join(w)
+        return c
+
+    out = ["# OpenKapitza NEMD -- RESUMED from a stage checkpoint (md/checkpoint.py).",
+           f"# Continues from {stage_file}; production runs afresh.",
+           "# Run with -log none: this appends to log.lammps itself.",
+           "log             log.lammps append",
+           f"read_restart    {stage_file}",
+           f'print           "OPENKAPITZA_RESUMED stage {stage_file}"',
+           *regions.values(), *pair,
+           *(settings[k] for k in ("neighbor", "neigh_modify", "timestep") if k in settings),
+           *computes.values(),
+           *(variables[v] for v in variables if v in used),
+           *(fix_line(c) for c in fixes.values()),
+           *(settings[k] for k in ("thermo", "thermo_style", "thermo_modify") if k in settings),
+           "# ---- the rest of the original deck, verbatim ----",
+           rest]
+    return "\n".join(out) + "\n"
+
+
 def c_int(cmd: str) -> int | None:
     w = cmd.split()
     try:
@@ -286,13 +368,14 @@ def c_int(cmd: str) -> int | None:
         return None
 
 
-def prepare_resume(wd: Path | str, spec, deck_name: str = "nemd.in") -> int | None:
-    """Cut the outputs back and write resume.in; returns the step resumed from,
-    or None when there is no usable checkpoint (the run must start over)."""
+def prepare_resume(wd: Path | str, spec, deck_name: str = "nemd.in") -> int | str | None:
+    """Cut the outputs back and write resume.in. Returns the production step
+    resumed from, a description of the stage resumed from (str), or None when
+    there is no usable checkpoint (the run must start over)."""
     wd = Path(wd)
     hit = usable_checkpoint(wd, spec)
     if hit is None:
-        return None
+        return prepare_stage_resume(wd, spec, deck_name)
     step, path, row = hit
     dt = spec.timestep_fs * 1e-3
     deck = build_resume_deck((wd / deck_name).read_text(), step, spec.production_steps, dt,
@@ -311,3 +394,18 @@ def prepare_resume(wd: Path | str, spec, deck_name: str = "nemd.in") -> int | No
         if p != path and _ > step:
             p.unlink()                   # later, unusable files would confuse the next resume
     return step
+
+
+def prepare_stage_resume(wd: Path, spec, deck_name: str = "nemd.in") -> str | None:
+    """resume.in from the latest pre-production stage file, or None."""
+    if getattr(spec, "ttm", None) is not None:
+        return None
+    deck_text = (wd / deck_name).read_text()
+    for name, label in STAGE_FILES:
+        f = wd / name
+        if f.is_file() and f.stat().st_size > 0 and f"write_restart   {name}" in deck_text:
+            (wd / RESUME_DECK).write_text(build_stage_resume_deck(deck_text, name))
+            (wd / "job.done").unlink(missing_ok=True)
+            return label
+    return None
+

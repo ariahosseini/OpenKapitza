@@ -246,3 +246,46 @@ class EndToEnd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StageResume(unittest.TestCase):
+    """Pre-production stage checkpoints (H-3): resume after equilibration or
+    after the steady stage instead of starting over."""
+
+    def test_deck_writes_both_stage_files_before_production(self):
+        d = build_input_deck(small_spec())
+        e = d.index("write_restart   stage.equilibrated.bin")
+        s = d.index("write_restart   stage.steady.bin")
+        self.assertLess(e, s)
+        self.assertLess(s, d.rindex("reset_timestep  0"))
+
+    def test_stage_deck_replays_state_and_runs_the_rest(self):
+        from openkapitza.md.checkpoint import build_stage_resume_deck
+        deck = build_input_deck(small_spec())
+        r = build_stage_resume_deck(deck, "stage.steady.bin")
+        self.assertIn("read_restart    stage.steady.bin", r)
+        self.assertIn("log             log.lammps append", r)
+        head, rest = r.split("# ---- the rest of the original deck, verbatim ----")
+        self.assertIn("fix             nve gmobile nve", head)
+        self.assertIn("langevin", head)                      # hot/cold exist to be unfixed
+        self.assertNotIn("velocity", head)
+        self.assertNotIn("minimize", head)
+        self.assertIn("reset_timestep  0", rest)
+        self.assertIn("OPENKAPITZA_DONE", rest)
+        r2 = build_stage_resume_deck(deck, "stage.equilibrated.bin")
+        self.assertIn("write_restart   stage.steady.bin", r2)
+
+    def test_prepare_prefers_production_then_latest_stage(self):
+        from openkapitza.md.checkpoint import prepare_resume
+        with tempfile.TemporaryDirectory() as d:
+            wd = Path(d)
+            s = small_spec()
+            (wd / "nemd.in").write_text(build_input_deck(s))
+            self.assertIsNone(prepare_resume(wd, s))
+            (wd / "stage.equilibrated.bin").write_bytes(b"x")
+            self.assertEqual(prepare_resume(wd, s), "the end of equilibration")
+            (wd / "stage.steady.bin").write_bytes(b"x")
+            (wd / "job.done").write_text("1")
+            self.assertEqual(prepare_resume(wd, s), "the end of the steady stage")
+            self.assertIn("stage.steady.bin", (wd / "resume.in").read_text())
+            self.assertFalse((wd / "job.done").exists())

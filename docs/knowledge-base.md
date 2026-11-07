@@ -3679,3 +3679,32 @@ MW/m²K. At 100 K: ×0.23–0.54. Note that the published MD values we compare
 against (266–450) are classical too: compare classical with classical, and
 quote the band only against experiment.
 
+## 32. Stage checkpoints before production (H-3, 7 Nov 2026)
+
+**Why.** Production restart files (§18) protect only production; on sial_pp
+41 % of the run comes before it, and a laptop that sleeps or reboots then
+loses hours.
+
+**What.** The deck writes `stage.equilibrated.bin` after equilibration and
+`stage.steady.bin` after the steady stage. `prepare_resume` uses a usable
+production checkpoint first; failing that, the later stage file
+(`build_stage_resume_deck`): `read_restart`, the state at that point
+replayed (regions, pair section, computes, live fixes with fresh Langevin
+seeds, the variables anything still uses, thermo settings), then the rest
+of the original deck **verbatim**. Production therefore starts afresh and
+overwrites its outputs. The job loop reports "resumed from the end of the
+steady stage".
+
+**Not covered, on purpose.** Relaxation: right after it the deck reads the
+relax run's running averages (`f_zav`, `f_pzzav`) to correct the wall
+position, and a restart file does not keep a fix's accumulated average, so
+a resume there would place the wall wrongly. TTM decks: electron state is
+not in the restart file.
+
+**Checked.** Small Si/Ge cell in LAMMPS (serial build here): full run, then
+production outputs and checkpoints deleted and `job.done` removed to fake a
+kill; resumed from `stage.steady.bin` and, separately, from
+`stage.equilibrated.bin`; both finished with `OPENKAPITZA_DONE`, wrote all
+profile frames, and the log still parses (relaxed positions and box from
+the first run, production from the resume). Cost: two restart files per job.
+

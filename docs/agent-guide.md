@@ -205,7 +205,7 @@ from the code.
 | `submit JOBS [local\|slurm] [lmp=PATH] [np=N]` | submit prepared jobs: names, `plan` or `all` ([below](#running-the-jobs)) |
 | `jobs [DIR]` | poll once: status, diagnoses, finished jobs ingested; `DIR` attaches a folder |
 | `watch [SECONDS]` | poll until nothing is running |
-| `resubmit JOB`, `cancel JOB` | after fixing what a diagnosis named; stop a job |
+| `resubmit JOB [fresh]`, `cancel JOB` | after fixing what a diagnosis named (resumes from a checkpoint unless `fresh`); stop a job |
 | `save FILE`, `load FILE` | the session: inputs, which were defaults, ingested MD |
 | `export FILE.json` | the last result as JSON |
 | `lookup QUESTION` | search our docs, paper notes and the LAMMPS manual; cited passages ([below](#looking-things-up)) |
@@ -327,7 +327,7 @@ the cluster broke, never what the input or the physics broke.**
 | outcome | what happens |
 |---|---|
 | finished, output present | measured and used at once (as `ingest DIR`); the answer is re-run |
-| timeout, node failure, preemption, out of memory, killed | **resubmitted automatically**, up to 3 attempts; a timeout gets 1.5× the walltime (max 72 h). The decks write no restart files, so a retry starts over |
+| timeout, node failure, preemption, out of memory, killed | **resubmitted automatically**, up to 3 attempts; a timeout gets 1.5× the walltime (max 72 h). A retry resumes from the newest checkpoint: a restart file at every production frame, or, if production had not checkpointed yet, the end of the steady stage or of equilibration (`resubmit JOB fresh` starts over) |
 | a LAMMPS `ERROR:` line | shown with the best knowledge-base or manual passage; not retried (the same input fails the same way) |
 | lost atoms, NaN | proposed fixes (check the relaxed structure, halve the timestep, lower the flux); **not applied**: they change what is measured |
 | exit 0 but no `OPENKAPITZA_DONE`, or an empty profile | reported as an output failure (a known silent failure) |

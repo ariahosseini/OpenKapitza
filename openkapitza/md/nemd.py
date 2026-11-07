@@ -556,6 +556,9 @@ thermo_modify   temp tmobile
 thermo          10000
 thermo_style    custom step temp pe etotal press
 run             {equilibrate_steps}
+# Stage checkpoint (md/checkpoint.py): a run killed before production resumes
+# from here instead of repeating relaxation and equilibration.
+write_restart   stage.equilibrated.bin
 {equil_unfix}
 {ttm_block}
 # ---- impose the gradient --------------------------------------------------
@@ -566,6 +569,7 @@ fix             nve gmobile nve
 
 # Reach steady state before any averaging starts.
 run             {steady_steps}
+write_restart   stage.steady.bin
 
 # ---- production -----------------------------------------------------------
 # Restart the clock. fix ave/chunk writes on multiples of Nfreq and averages

@@ -253,7 +253,7 @@ class JobBook:
         e.handle = json.loads(handle.to_json())
         e.backend, e.status, e.diagnosis = backend, "submitted", None
         e.attempts += 1
-        how = f", resumed from production step {resume_step:,}" if resume_step else ""
+        how = f", resumed from {_where(resume_step)}" if resume_step else ""
         e.log(f"submitted ({backend}, attempt {e.attempts}, id {handle.native_id}{how})")
         msg = f"submitted on {backend} (id {handle.native_id}){how}"
         if backend == "local":
@@ -313,7 +313,7 @@ class JobBook:
                 step = _try_resume(e)
                 self._launch(e, e.backend, walltime_hours=wall, resume_step=step)
                 extra = f" with walltime {wall:.1f} h" if wall else ""
-                how = (f"it resumes from its checkpoint at production step {step:,}" if step
+                how = (f"it resumes from its checkpoint at {_where(step)}" if step
                        else "no usable checkpoint, so it starts over")
                 events.append(Event(e.name, "resubmitted",
                                     f"{d.summary}. Resubmitted{extra} (attempt {e.attempts} of "
@@ -438,7 +438,12 @@ def diagnose(wd: Path, state: JobState, handle: JobHandle | None = None) -> Diag
                      fixes=["Read stderr.log and the end of log.lammps."])
 
 
-def _try_resume(e: JobEntry) -> int | None:
+def _where(step) -> str:
+    """'production step 12,000' or a stage description."""
+    return f"production step {step:,}" if isinstance(step, int) else str(step)
+
+
+def _try_resume(e: JobEntry) -> int | str | None:
     """Cut a dead NEMD job's outputs back to its newest checkpoint and write
     resume.in; the production step, or None (start over)."""
     wd = Path(e.workdir)
