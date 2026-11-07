@@ -108,3 +108,13 @@ class Examples(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Cost(unittest.TestCase):
+    def test_mlip_styles_are_costed_as_mlip(self):
+        from openkapitza.compute.resources import estimate_cost
+        t = estimate_cost(35000, 750000, "tersoff", cores=5)
+        for style in ("snap", "pace", "mliap", "deepmd", "nequip", "allegro"):
+            e = estimate_cost(35000, 750000, style, cores=5)
+            self.assertEqual(e.potential, "mlip")
+            self.assertGreater(e.wall_hours, 50 * t.wall_hours)

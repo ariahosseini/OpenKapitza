@@ -45,7 +45,12 @@ THROUGHPUT = {
     "eam": 5.0e6,         # EAM, pair-ish
     "lj": 2.0e7,          # Lennard-Jones
     "mlip": 2.0e3,        # machine-learned: ~3 orders slower, often GPU-bound
+    "snap": 4.5e3,        # SNAP, twojmax 8 (Zuo Ge), serial x86, measured 7 Nov (KB 36)
 }
+
+# LAMMPS pair styles of Tier-2 potentials (md/mlip.py): all costed as "mlip"
+# unless measured above, and all subject to the local-run warning.
+MLIP_STYLES = {"snap", "pace", "mliap", "deepmd", "nequip", "allegro"}
 
 # Beyond this, warn before anyone submits.
 HIGH_COST_NODE_HOURS = 500.0
@@ -84,6 +89,9 @@ def estimate_cost(
     """Estimate node-hours for one NEMD run."""
     key = potential.lower()
     rate = THROUGHPUT.get(key)
+    if key in MLIP_STYLES:
+        rate = rate or THROUGHPUT["mlip"]
+        key = "mlip"
     if rate is None:
         rate = THROUGHPUT["sw"]
         if flags is not None:

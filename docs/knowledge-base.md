@@ -3824,6 +3824,21 @@ with a given model, so a Tier-2 h_K is directly comparable with the Tersoff
 Ge SNAP offered for Si/Ge). `examples/mlip/sige_model_template.yaml` lists
 what a real model's description must say.
 
+**End-to-end check with a real MLIP** (the shipped Ge SNAP on a
+mass-mismatch "light Ge"/Ge cell, 2,048 atoms, serial): relax, piston,
+equilibration, eHEX-free Langevin production all ran to `OPENKAPITZA_DONE`;
+the measurement then refused the cell as too short to fit (5 bins a side),
+as it should. Cost: 4.5×10³ atom-steps per core-second, about 100× Tersoff.
+
+**A costing bug this exposed.** `estimate_cost` keyed on the pair style and
+fell back to the Stillinger–Weber rate for any style it did not know, so an
+MLIP deck (`snap`, `pace`, `mliap`, ...) was costed 100–200× too cheap and
+escaped the "not a laptop job" warning. Fixed: MLIP styles cost as `mlip`
+(SNAP at its measured rate) and are subject to the local-run warning. The
+base Si/Ge cell (35k atoms, 0.75 Mstep) on 5 cores: 4.6 h with Tersoff,
+~460 h with SNAP, ~1,000 h at the generic MLIP rate on CPU, which is why
+the GPU route is the real one.
+
 **Next, when a model exists:** run the gate against references (the elastic
 part exists as `scripts/measure_potential_elastic.py`; phonon DOS and bulk
 k scripts are still to write), record it in the model file, then the
