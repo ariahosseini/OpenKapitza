@@ -129,7 +129,7 @@ heterostructures (fcc on diamond) live in `md/nemd.py`. Script:
 
 ## Cluster run list
 
-**All jobs below are written, validated and costed by `scripts/prepare_cluster.py` (dry run: 22 jobs, ~69 node-hours).**
+**All jobs below are written, validated and costed by `scripts/prepare_cluster.py` (dry run 7 Nov: 23 jobs, ~76 node-hours).**
 
 Collected here so the cluster session starts from one list. Step-by-step
 commands: [`cluster-runbook.md`](cluster-runbook.md).

@@ -155,7 +155,8 @@ def main(argv=None) -> int:
                                                                 "issue": "P1-3"})
 
     issues = {"sige_spot_stress": "P1-9/P1-10", "sige_spot_strain": "P1-9/P1-10",
-              "sige_emd": "P1-8", "sial_pp": "P1-6/P1-14", "sial_ttm": "P1-14", "sicu_pp": "P1-6"}
+              "sige_emd": "P1-8", "sial_pp": "P1-6/P1-14", "sial_ttm": "P1-14", "sicu_pp": "P1-6",
+              "sige_incoherent": "P1-16"}
     for name, spec, kind in jobs():
         files = [(pot / spec.pair_file, spec.pair_file)] + [(pot / f, f) for f in spec.extra_files]
         extra = {}
