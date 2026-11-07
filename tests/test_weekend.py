@@ -157,3 +157,40 @@ class WeekendScript(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Analysis(unittest.TestCase):
+    def load(self):
+        p = REPO / "scripts" / "analyze_weekend.py"
+        sp = importlib.util.spec_from_file_location("analyze_weekend", p)
+        m = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(m)
+        return m
+
+    def test_ratio_and_verdict(self):
+        m = self.load()
+        r, e = m.ratio({"h": 66.0, "err": 3.3}, {"h": 41.1, "err": 0.8})
+        self.assertAlmostEqual(r, 66.0 / 41.1)
+        self.assertIn("higher", m.verdict(r, e))
+        self.assertIn("same", m.verdict(1.02, 0.03))
+
+    def test_collect_groups_finished_failed_and_waiting(self):
+        m = self.load()
+        with tempfile.TemporaryDirectory() as d:
+            w = Path(d) / "weekend"
+            for name, rc in (("arb_ehex", "0"), ("arb_hex", "0"), ("he_ehex", "1"),
+                             ("ar_ehex", None)):
+                (w / name).mkdir(parents=True)
+                if rc is not None:
+                    (w / name / "job.done").write_text(rc)
+            fake = {"arb_ehex": 40.0, "arb_hex": 44.0}
+            m.measure = lambda wd: {"h": fake[wd.name], "err": 1.0, "flux_mode": "ehex",
+                                    "damping_ps": 0.1, "warn": []}
+            out = m.collect(Path(d))
+        self.assertEqual(set(out["results"]), {"r00", "arb_ehex", "arb_hex"})
+        self.assertIn("failed", out["missing"]["he_ehex"])
+        self.assertIn("running", out["missing"]["ar_ehex"])
+        hex_row = next(c for c in out["comparisons"]["A. drives (LJ x1, 1 GPa)"]
+                       if c["a"] == "arb_hex")
+        self.assertAlmostEqual(hex_row["ratio"], 1.1)
+        self.assertIn("higher", hex_row["verdict"])
