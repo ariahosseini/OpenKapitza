@@ -8,6 +8,12 @@ import unittest
 from pathlib import Path
 
 from openkapitza.md import measured as M
+
+try:
+    import openpyxl  # noqa: F401  (only the xlsx importer needs it)
+    HAVE_OPENPYXL = True
+except ImportError:
+    HAVE_OPENPYXL = False
 from openkapitza.schema import FlagSet
 from openkapitza.schema.flags import Code, Severity
 
@@ -160,6 +166,7 @@ class TestCheck(unittest.TestCase):
         self.assertEqual(len(g), 0)
 
 
+@unittest.skipUnless(HAVE_OPENPYXL, "openpyxl not installed (only the xlsx importer needs it)")
 class TestImport(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
