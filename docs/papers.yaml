@@ -775,7 +775,7 @@
     stated. Not usable for P0-2 as it stands.
 
 - key: fuller2001
-  cite: J. J. Fuller & E. E. Marotta, "Thermal Contact Conductance of Metal/Polymer Joints: An Analytical and Experimental Investigation", J. Thermophys. Heat Transfer 15(2), 2001
+  cite: 'J. J. Fuller & E. E. Marotta, "Thermal Contact Conductance of Metal/Polymer Joints: An Analytical and Experimental Investigation", J. Thermophys. Heat Transfer 15(2), 2001'
   status: needed
   topics: [polymer, elastic contact, Mikic elastic model, validation data]
   needed_for: P0-4 (a measured check of the elastic branch)
