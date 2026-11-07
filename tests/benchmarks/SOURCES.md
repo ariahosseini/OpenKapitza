@@ -223,33 +223,44 @@ Geometric mean of model/measured, over 113 points:
 
 99 % of points fall within 2× either way.
 
-### The finding
+### The finding (revised 7 Nov 2026, KB 29)
 
-The agreement is not uniform. It is good in the rarefied limit and degrades
-monotonically toward the continuum limit, reaching a ~32 % shortfall at
-`M/Y < 0.1`. That direction is diagnostic: as `M → 0` the rarefaction term
-drops out and `h_g → k_g/Y`, so a continuum-limit shortfall **cannot** be
-blamed on `M` or on the accommodation coefficients. It points instead at the
-uniform-gap assumption built into the lumped form.
+*First reading (Oct 2026):* the agreement degrades monotonically toward the
+continuum limit, reaching ~32 % low at `M/Y < 0.1`, which was attributed to
+the uniform-gap assumption (Jensen's inequality on `1/(t+M)`), and the
+Gaussian gap integral was built to close it.
 
-Local gap thickness is not uniform — it is Gaussian about `Y` with spread
-`σ` — and local conductance goes as `1/(t+M)`, which is convex. Averaging
-over the distribution therefore exceeds the value at the mean thickness, and
-the gain is largest when `M` is small and the convexity is not softened by
-the `M` offset. `gap_conductance_integral` implements that average and closes
-about a third of the continuum gap while halving the pressure trend.
+*Revised reading:* the band trend is mostly a **specimen confound**. `M/Y`
+is smallest where `Y` is largest, i.e. on the roughest specimen, so the
+"continuum" band is populated mostly by experiment 4 (Ni 200, σ = 11.8 µm),
+which reads low at every gas pressure. Per specimen
+(`python3 scripts/compare_gap_digitised.py`):
 
-**It is not the default, and should not become the default on this evidence.**
-The project specifies `h_g = k_g/(Y + M)`; the correction is motivated by
-digitised data with a documented bias at one end. `tests/test_gap_integral.py`
-pins the integral's invariants and includes a guard against quietly swapping
-the default. Settling this needs exact tabulated `h_j(P_g)` values.
+| exp | material | σ (µm) | h_g model/measured | slope vs P_g within the specimen | vacuum h_c measured/model |
+|---|---|---|---|---|---|
+| 1 | SS 304 | 1.53 | 1.21 | +0.048 | 1.29 |
+| 2 | SS 304 | 4.83 | 0.91 | −0.061 | 1.58 |
+| 3 | Ni 200 | 2.32 | 0.95 | +0.021 | 0.91 |
+| 4 | Ni 200 | 11.8 | 0.63 | −0.108 | 1.84 |
 
-The residual ~25 % at `M/Y < 0.1` is unexplained. Candidates, untested: the
-effective gap thickness differing from `Y` as computed here (our `Y` = 5.41 µm
-against their effective gap `R_p` = 5.55 µm, 2.5 % apart, so probably not
-this); gas conductivity at the test temperature; or extraction error in `h_j`
-at the high-pressure end.
+- Specimen offsets (0.6–1.2) dominate; within-specimen pressure slopes are
+  small (|slope| ≤ 0.11) and of both signs. Experiments 1–3 are within ±25 % at all
+  pressures.
+- Experiment 4 is anomalous on **both** paths: the gap reads 0.63 and the
+  published vacuum conductance is 1.84× our contact model. Its stated
+  roughness probably overstates the effective gap (waviness or a
+  non-Gaussian blasted surface); the gap model form is not the obvious
+  suspect.
+- Independent evidence: Bahrami, Yovanovich & Culham (JTHT 18(3), 2004)
+  compare the same lumped form with ~350 of Song's points (exact data, not
+  digitised) and report 8.1 % RMS over the whole pressure range.
+
+**Consequence.** The lumped `k_g/(Y + M)` stays the default and is no longer
+described as biased low near the continuum limit. The Gaussian integral
+stays opt-in, as a bracket deep in the continuum (`M/Y ≲ 0.01`), where it and
+the lumped form genuinely differ by 10–25 %. Expect about ±25 % from
+specimen to specimen on the gap path. Exact tabulated `h_j(P_g)` values would
+still settle the rest.
 
 ## Available but not yet entered
 

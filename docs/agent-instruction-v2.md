@@ -319,35 +319,29 @@ idealised wall rather than a real atomistic surface; measuring α means firing
 gas atoms at a real slab and comparing incident with reflected energy against
 the wall temperature. Say which of the two you are doing.
 
-### [NEW] Known limitation: the lumped form underpredicts toward continuum
+### [REVISED 7 Nov 2026] Gap-model accuracy: specimen-to-specimen, not a continuum bias
 
 `h_g = k_g/(Y + M)` replaces the distribution of local gap thicknesses with a
-single mean separation. Against 113 points digitised from Song & Yovanovich's
-figures, model/measured falls **monotonically** from 1.05 in the rarefied
-limit to 0.68 in the continuum limit — a ~32 % shortfall at M/Y < 0.1, with a
-log–log slope of −0.05 against gas pressure.
+single mean separation. An October comparison with 113 points digitised from
+Song & Yovanovich's figures appeared to show the model falling from 1.05 in
+the rarefied limit to 0.68 in the continuum limit. **Re-analysed per
+specimen (KB 29), that trend is a confound:** the roughest specimen
+(σ = 11.8 µm) has the largest Y and so fills the small-M/Y band, and it reads
+low at every gas pressure, while also reading 1.8× high on its vacuum contact
+path. The other three specimens agree within ±25 % at all gas pressures, with
+no consistent pressure trend. Bahrami, Yovanovich & Culham (2004) report the
+same lumped form within 8.1 % RMS of ~350 of Song's exact points.
 
-**That direction is diagnostic, and the agent should reason from it.** As
-M → 0 the rarefaction term drops out and h_g → k_g/Y, so a continuum-limit
-shortfall **cannot** be caused by M or by the accommodation coefficients.
-Do not "fix" it by raising a₁/a₂ — that makes the rarefied end worse. It
-implicates the uniform-gap assumption: local gap thickness is Gaussian about
-Y with spread σ, local conductance goes as 1/(t+M), and 1/x is convex, so the
-true area average exceeds the value at the mean thickness. The gain is largest
-when M is small and nothing softens the convexity, which is exactly the
-observed trend.
+**What to tell the user.** Treat h_g as good to roughly ±25 % for a
+characterised surface, without a known sign. Do **not** say it is biased low
+near 1 atm. For very rough or blasted surfaces (σ ≳ 10 µm), say the
+stated σ may overstate the effective gap and that measuring the joint once
+would settle it. Do not raise a₁/a₂ to fit data: as M → 0 the accommodation
+coefficients drop out, so they cannot fix a continuum-limit discrepancy.
 
-`gap_conductance_integral` evaluates that average directly, integrating only
-over t > 0 and **not** renormalising — the t ≤ 0 region is contact area already
-carried by h_c, so excluding it is what correctly weights h_g by the gap's
-share of the apparent area. It closes about a third of the continuum gap and
-halves the pressure trend.
-
-**It is opt-in. The lumped form remains the default.** The evidence is
-digitised (hard rule 6), biased at the low-pressure end, and ~25 % of the
-discrepancy is unexplained. When reporting h_g near the continuum limit, say
-it is likely a modest underestimate and offer the integral as a bracket.
-Settling the default requires exact tabulated h_j(P_gas) data.
+`gap_conductance_integral` (the Gaussian average of `1/(t + M)`) stays
+**opt-in**. It differs from the lumped form by 10–25 % only deep in the
+continuum (M/Y ≲ 0.01); offer it there as a bracket, not as a correction.
 
 ---
 
@@ -681,7 +675,7 @@ uses are:
 | 4 | "warn if training data lacked the interface" | too vague to act on | explicit gate: phonon DOS, elastic constants, bulk κ |
 | 3 | "report cooling rate" | states it without saying why it matters | state the 10¹¹–10¹³ vs 1 K/s gap and its structural consequence |
 | 10 | Si/Ge, Si/Al, Si/SiO₂ as one set | can't validate the continuum core; hides the Si/Al electron–phonon gap | phase-matched targets |
-| 7 | lumped gap form, unqualified | underpredicts ~32 % toward the continuum limit; invites a wrong "fix" via accommodation coefficients | state the trend and its cause; offer the Gaussian gap integral as a bracket |
+| 7 | lumped gap form, unqualified | first read as ~32 % low toward the continuum limit; re-analysed (KB 29) as specimen-to-specimen scatter of about ±25 %; either reading invites a wrong "fix" via accommodation coefficients | state ±25 % without a sign; offer the Gaussian gap integral as a bracket only for M/Y ≲ 0.01 |
 | 0 | — | nothing stopped digitised figure data being quoted as measurement | hard rule 6 |
 | — | no ordering | starts expensive MD before knowing if it matters | continuum first, sensitivity gate |
 | 4 | Tier 1 classical potentials ungated | `SiCGe.tersoff` matches a0 to 0.02 % but inverts the Si/Ge stiffness ordering | Tier-1 gate: measure a0 **and** C_ij |

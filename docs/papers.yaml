@@ -729,3 +729,24 @@
     ~1e21); electronic conductivity < 1 W/mK above 1e20 (Wiedemann-Franz).
     Basis of tracker P0-13.
   kb: ["24"]
+
+- key: bahrami2004gas
+  cite: M. Bahrami, M. M. Yovanovich & J. R. Culham, "Thermal Joint Resistances of Conforming Rough Surfaces with Gas-Filled Gaps", J. Thermophys. Heat Transfer 18(3), 2004
+  url: https://core.ac.uk/download/357569066.pdf
+  status: partial
+  topics: [gas gap, rarefaction, Song data, lumped gap model, continuum limit]
+  used_for: P0-3 re-diagnosis (KB 29); gas property and accommodation values cross-checked
+  findings: >
+    A lumped gap resistance (M + Y)/(k_g A) with Y = sqrt(2) sigma
+    erfc^-1(2P/H'), i.e. the same form as our default, agrees with about 350
+    of Song's points at 8.1 % RMS (7.3 % with Hegazy's), over the whole gas
+    pressure range. Against the Gaussian integral model it differs by 10-24 %
+    at M/Y = 0.001 (largest at small Y/sigma), so the integral and the lumped
+    form part ways only deep in the continuum. Song's test list (T1-T7) gives
+    the same sigma and m as our digitised CSV. Gas table: k_g(T) linear fits,
+    alpha He 0.55, N2 0.78, Ar 0.90, mean free paths at 288 K and 1 atm.
+    No measured values are tabulated (nondimensional plots only), so it does
+    not replace exact data. Pitfall: m = 0.904 for T6 in the table is
+    presumably a misprint.
+  kb: ["29"]
+

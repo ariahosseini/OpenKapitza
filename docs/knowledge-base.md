@@ -555,6 +555,10 @@ silicon's threshold.**
 
 ### The lumped gap form underpredicts, worst in the continuum limit
 
+> **Superseded 7 Nov 2026 by §29:** the trend below is a specimen
+> confound, not a continuum-limit bias. Kept as the record of the first
+> reading.
+
 **Symptom.** `h_g = k_g/(Y + M)` agrees with measurement in the rarefied
 regime but falls short as gas pressure rises, reaching ~32 % low at
 `M/Y < 0.1`. Raising the accommodation coefficients to compensate makes the
@@ -3571,3 +3575,50 @@ atoms):
 Total ≈ 28 h. Rescaling Ge raises its frequencies by 1/s ≈ 4 %, against
 roughly 12 % for 4 % compression, so `sige_ge_rescaled` vs r00 brackets the
 strain effect rather than removing every spectral shift.
+
+## 29. P0-3 re-diagnosed: the gap model's "continuum bias" was a specimen confound (7 Nov 2026)
+
+**Question.** Is `h_g = k_g/(Y + M)` ~32 % low near the continuum limit
+(1 atm), as the digitised Song & Yovanovich comparison suggested (§3)?
+
+**What changed the answer.** Splitting the 113 digitised points by specimen
+(`scripts/compare_gap_digitised.py`, now printed):
+
+| exp | material | σ (µm) | h_g model/measured | within-specimen slope vs P_g | vacuum h_c measured/model |
+|---|---|---|---|---|---|
+| 1 | SS 304 | 1.53 | 1.21 | +0.048 | 1.29 |
+| 2 | SS 304 | 4.83 | 0.91 | −0.061 | 1.58 |
+| 3 | Ni 200 | 2.32 | 0.95 | +0.021 | 0.91 |
+| 4 | Ni 200 | 11.8 | 0.63 | −0.108 | 1.84 |
+
+- M/Y is small where Y is large, i.e. on the roughest specimen. Experiment 4
+  supplies most of the `M/Y < 0.1` band and reads low at **every** gas
+  pressure (Ar 0.57 even at 23–68 torr). The band trend is Simpson's
+  paradox: specimen offsets, not a pressure dependence.
+- Within each specimen the pressure slope is small and changes sign. The
+  aggregate −0.05 is mostly between-specimen.
+- Experiment 4 is also 1.84× above our contact model in **vacuum**. Both
+  paths conduct more than its stated σ = 11.8 µm implies, so its effective
+  gap is probably smaller than 3.5σ (waviness inside the profilometer σ, or
+  a non-Gaussian blasted surface). A single σ error does not explain all four
+  specimens (experiments 1 and 2 would then over-correct), so it is not
+  "fixed" by rescaling.
+- Gas properties are not the cause: our k_g at 445 K is within 2–6 % of
+  Song's table, and mean free paths within ~10 % (§29 sources).
+- Independent check: Bahrami, Yovanovich & Culham (JTHT 2004) compare the
+  same lumped form with ~350 exact (not digitised) Song points: 8.1 % RMS
+  over the full pressure range. Against the Gaussian integral model it
+  differs by 10–24 % only at M/Y = 0.001.
+
+**Decision.** Lumped form stays the default. It is no longer described as
+biased low near 1 atm (agent instruction §7, SOURCES.md, the integral's
+docstring all updated). The Gaussian integral stays opt-in as a bracket for
+M/Y ≲ 0.01. Stated accuracy of the gas path: about ±25 % specimen to
+specimen, sign unknown. Very rough or blasted surfaces (σ ≳ 10 µm): the
+stated σ may overstate the gap; one measured joint settles it.
+
+**Lesson.** A trend across a derived variable (M/Y) that is itself set by a
+specimen property (Y ∝ σ) must be checked within specimens before it is
+read as physics. The Jensen argument was correct mathematics applied to an
+effect the data did not show.
+

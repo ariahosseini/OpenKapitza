@@ -102,6 +102,8 @@ def evaluate(row: dict[str, str]) -> dict[str, float] | None:
         return None                     # digitisation put h_j below the vacuum line
 
     return {
+        "experiment": row["experiment"],
+        "gas": row["gas"],
         "p_gas_torr": p_gas_torr,
         "lumped": lumped.h_g.si / measured,
         "integral": integral.h_g.si / measured,
@@ -109,6 +111,24 @@ def evaluate(row: dict[str, str]) -> dict[str, float] | None:
         "knudsen": state.mfp.si / Y.si,
         "Y_over_sigma": Y.si / sigma.si,
     }
+
+
+def vacuum_ratios(rows: list[dict[str, str]]) -> dict[str, float]:
+    """Published vacuum h_c over our contact model, per experiment."""
+    from openkapitza import build_joint, run_continuum
+    out = {}
+    for row in rows:
+        exp = row["experiment"]
+        if exp in out:
+            continue
+        s1 = float(row["sigma_eff_um"]) / math.sqrt(2.0)
+        m1 = float(row["slope_eff"]) / math.sqrt(2.0)
+        j = build_joint(row["material"], row["material"], sigma_a_um=s1, sigma_b_um=s1,
+                        slope_a=m1, slope_b=m1, pressure_MPa=float(row["pressure_MPa"]),
+                        temperature_K=float(row["temperature_K"]), c1_a_GPa=C1_GPA,
+                        c2_a=C2, c1_b_GPa=C1_GPA, c2_b=C2)
+        out[exp] = float(row["h_c_vacuum_W_m2K"]) / run_continuum(j).primary.h_joint.si
+    return out
 
 
 def main() -> int:
@@ -157,11 +177,29 @@ def main() -> int:
         print(f"  {name:<9} spread x{spread:.3f}  within 2x {within:5.1f} %"
               f"  log-log slope vs P_g {_log_log_slope(pressures, vals):+.4f}")
 
-    print("\nThe trend, not the aggregate, is the finding: agreement decays")
-    print("monotonically toward the continuum limit, where the rarefaction term")
-    print("vanishes and h_g -> k_g/Y. That implicates the uniform-gap assumption,")
-    print("not the accommodation coefficients. The lumped form remains the")
-    print("default; see tests/benchmarks/SOURCES.md.")
+    # Per specimen (KB 29): the band trend above is mostly a confound. M/Y
+    # is small where Y is large, i.e. on the roughest specimen, so the
+    # "continuum" band is populated by one specimen that reads low at every
+    # gas pressure. The vacuum (contact-path) ratio is printed alongside: a
+    # specimen whose stated roughness is off shows it on both paths.
+    print("\nper specimen (lumped)")
+    print(f"  {'exp':>3} {'material':8} {'sigma um':>8} {'n':>3} {'h_g model/meas':>15}"
+          f" {'slope vs P_g':>12} {'h_c vac meas/model':>19}")
+    vac = vacuum_ratios(rows)
+    for exp in sorted({r["experiment"] for r in recs}):
+        sel = [r for r in recs if r["experiment"] == exp]
+        row0 = next(row for row in rows if row["experiment"] == exp)
+        print(f"  {exp:>3} {row0['material']:8} {float(row0['sigma_eff_um']):8.2f} "
+              f"{len(sel):3d} {_geometric_mean([r['lumped'] for r in sel]):15.2f}"
+              f" {_log_log_slope([r['p_gas_torr'] for r in sel], [r['lumped'] for r in sel]):+12.3f}"
+              f" {vac[exp]:19.2f}")
+
+    print("\nThe M/Y-band trend is a specimen confound, not a pressure trend:")
+    print("specimen offsets (0.6-1.2) dominate, within-specimen slopes are")
+    print("small and of both signs, and the specimen that reads low on the gap")
+    print("path (exp 4, sigma 11.8 um) also reads 1.8x high on the vacuum")
+    print("contact path. The lumped form remains the default; see KB 29 and")
+    print("tests/benchmarks/SOURCES.md.")
     return 0
 
 

@@ -153,9 +153,11 @@ def gap_conductance_integral(
 
         E[1/(t+M)] > 1/(E[t]+M)                      (Jensen's inequality)
 
-    so the lumped form systematically UNDERpredicts, and the deficit is
-    largest where M is small compared with Y -- the continuum limit, where
-    the 1/t convexity is not softened by the M offset.
+    so the lumped form reads below this average, by most where M is small
+    compared with Y -- the continuum limit, where the 1/t convexity is not
+    softened by the M offset. (The digitised Song data once seemed to show
+    such a bias; re-analysed per specimen it did not, KB 29. Use this as a
+    bracket deep in the continuum, not as a correction.)
 
         h_g = k_g * integral_0^inf phi((t-Y)/sigma)/sigma * dt/(t + M)
 
