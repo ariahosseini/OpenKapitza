@@ -78,6 +78,9 @@ class JobLoopBase(unittest.TestCase):
         self.lmp = str(_exe(self.tmp / "fake_lmp", FAKE_LMP))
         self._env = dict(os.environ)
         os.environ["FIX"] = str(FIX)
+        # the self-advancing queue is tested on its own (TestSelfAdvancingQueue);
+        # elsewhere a background poll would race the temporary folder's cleanup
+        os.environ["OPENKAPITZA_NO_QUEUE_CHAIN"] = "1"
 
     def tearDown(self):
         from openkapitza.compute import runner
@@ -383,3 +386,55 @@ class TestKeepAwake(unittest.TestCase):
             self.assertIn(KEEP_AWAKE, (wd / "job_wrapper.sh").read_text())
             self.assertEqual((wd / "job.done").read_text().strip(), "3")
             self.assertTrue((wd / "caff.txt").read_text().startswith("-ims -w "))
+
+
+class TestSelfAdvancingQueue(JobLoopBase):
+    """KB 39: a finishing local job starts the next queued one itself."""
+
+    def setUp(self):
+        super().setUp()
+        os.environ.pop("OPENKAPITZA_NO_QUEUE_CHAIN", None)
+
+    def tearDown(self):
+        # let the jobs' own background polls finish before the folder goes
+        import fcntl
+        time.sleep(1.0)
+        lock = self.root / ".jobs.lock"
+        if lock.exists():
+            with open(lock) as fh:
+                fcntl.flock(fh, fcntl.LOCK_EX)
+                fcntl.flock(fh, fcntl.LOCK_UN)
+        time.sleep(0.5)
+        super().tearDown()
+
+    def test_queue_moves_without_polling_and_events_are_kept(self):
+        book = JobBook.open(self.root)
+        book.submit(["sial_pp", "bad_input"], backend="local", lmp=self.lmp)
+        self.assertEqual(book.entries["bad_input"].status, "queued")
+        # nobody polls: wait for the second job's own wrapper to finish
+        done = self.root / "bad_input" / "job.done"
+        t0 = time.time()
+        while not done.exists() and time.time() - t0 < 30:
+            time.sleep(0.2)
+        self.assertTrue(done.exists(), "the queued job was never started")
+        # the agent's next poll reports what happened while it was away
+        t0 = time.time()
+        events = []
+        while time.time() - t0 < 30:
+            events += JobBook.open(self.root).refresh()
+            if {"finished", "failed"} <= {ev.what for ev in events}:
+                break
+            time.sleep(0.2)
+        whats = {(ev.name, ev.what) for ev in events}
+        self.assertIn(("sial_pp", "finished"), whats)
+        self.assertIn(("bad_input", "failed"), whats)
+        # and only once
+        self.assertEqual(JobBook.open(self.root).refresh(), [])
+        self.assertTrue((self.root / "queue.log").is_file())
+
+    def test_wrapper_runs_the_refresh_after_writing_job_done(self):
+        book = JobBook.open(self.root)
+        book.submit(["sial_pp"], backend="local", lmp=self.lmp)
+        w = (self.root / "sial_pp" / "job_wrapper.sh").read_text()
+        trap = next(ln for ln in w.splitlines() if ln.startswith("trap "))
+        self.assertLess(trap.index("job.done"), trap.index("openkapitza.agent.jobs refresh"))

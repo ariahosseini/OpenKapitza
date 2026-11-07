@@ -72,6 +72,7 @@ class JobSpec:
     resources: Resources = field(default_factory=Resources)
     env: dict[str, str] = field(default_factory=dict)
     modules: list[str] = field(default_factory=list)   # `module load` lines
+    on_exit: str | None = None         # local only: a shell line run after job.done is written
 
     def __post_init__(self) -> None:
         self.workdir = Path(self.workdir)
@@ -193,7 +194,7 @@ class LocalRunner:
             f"#!{self.shell}\n"
             f"set -o pipefail\n"
             f"__rc=1\n"
-            f"trap 'echo $__rc > {done_q}' EXIT\n"
+            f"trap {shlex.quote(f'echo $__rc > {done_q}' + (f'; {spec.on_exit}' if spec.on_exit else ''))} EXIT\n"
             f"{env_lines}\n"
             f"{KEEP_AWAKE}\n"
             f"cd {shlex.quote(str(spec.workdir))}\n"

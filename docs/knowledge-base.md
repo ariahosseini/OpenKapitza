@@ -3901,3 +3901,32 @@ frames) on both faces, against the reservoirs' mean 2.40: agreement within
 (`jobs` or `watch`); after `submit` nothing was polling, and the Mac sat
 idle from 13:25. Run `watch` after a multi-job `submit`.
 
+## 39. The local queue moves by itself (7 Nov 2026)
+
+**Symptom.** The first weekend job finished at 13:25; the next did not
+start until 13:40, when `watch` was typed. The queue advanced only when
+something polled, and after `submit` nothing did.
+
+**Fix.**
+- A finishing local job's wrapper polls the folder itself: the EXIT trap
+  writes `job.done`, then runs `python -m openkapitza.agent.jobs refresh
+  DIR` in the background (same interpreter; output to `DIR/queue.log`). That
+  diagnoses the finished job, resubmits it if the machine killed it, and
+  starts the next queued one.
+- Two processes can now poll at once (that background refresh and an open
+  agent), so every book operation runs under a folder lock (`.jobs.lock`,
+  `fcntl`) and starts from the state on disk, not the copy in memory; two
+  polls can no longer both start the same queued job.
+- An unattended poll does not report: its events (finished, failed with the
+  diagnosis, resubmitted) are kept in `jobs.json` and returned first by the
+  next `jobs`/`watch`, which also measures finished runs then. Without this
+  the agent would never have seen a job that finished between its polls.
+
+**Verify** (`tests/test_jobs.py`, TestSelfAdvancingQueue): two jobs
+submitted with one slot, nobody polling; the second starts and ends on its
+own; the next poll reports both, once. `OPENKAPITZA_NO_QUEUE_CHAIN=1`
+switches the chaining off (used by the other job tests, where a background
+poll would race the temporary folder's cleanup). Jobs submitted before this
+change keep their old wrappers; the running weekend queue still needs
+`watch`.
+

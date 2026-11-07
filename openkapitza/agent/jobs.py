@@ -32,9 +32,13 @@ or the input broke.
 
 from __future__ import annotations
 
+import contextlib
+import functools
 import json
 import re
+import shlex
 import shutil
+import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -42,6 +46,56 @@ from pathlib import Path
 from ..compute.runner import JobHandle, JobSpec, JobState, LocalRunner, SlurmRunner
 
 BOOK_FILE = "jobs.json"
+LOCK_FILE = ".jobs.lock"
+QUEUE_LOG = "queue.log"
+
+
+@contextlib.contextmanager
+def _file_lock(root: Path):
+    """Exclusive lock on the job folder: the agent's poll and a finishing job's
+    own refresh (the self-advancing queue, KB 39) must not interleave."""
+    try:
+        import fcntl
+    except ImportError:                      # Windows: no local queue chaining anyway
+        yield
+        return
+    with open(Path(root) / LOCK_FILE, "a+") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def _locked(method):
+    """Run a JobBook method under the folder lock, on the state as it is on disk."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with _file_lock(self.root):
+            self._reload()
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
+def _event_to_dict(ev) -> dict:
+    return {"name": ev.name, "what": ev.what, "message": ev.message,
+            "diagnosis": asdict(ev.diagnosis) if ev.diagnosis is not None else None}
+
+
+def _event_from_dict(d: dict):
+    diag = d.get("diagnosis")
+    return Event(d["name"], d["what"], d["message"],
+                 Diagnosis(**diag) if diag is not None else None)
+
+
+def _refresh_command(root: Path) -> str:
+    """Shell line a finishing local job runs to start the next queued one."""
+    import openkapitza
+    pkg = Path(openkapitza.__file__).resolve().parent.parent
+    log = shlex.quote(str(Path(root) / QUEUE_LOG))
+    return (f"PYTHONPATH={shlex.quote(str(pkg))}${{PYTHONPATH:+:$PYTHONPATH}} nohup "
+            f"{shlex.quote(sys.executable)} -m openkapitza.agent.jobs refresh "
+            f"{shlex.quote(str(root))} >> {log} 2>&1 &")
 MAX_ATTEMPTS = 3
 LOCAL_SLOTS = 1           # local jobs at once: each already uses every fast core (np)
 WALLTIME_GROWTH = 1.5
@@ -94,6 +148,9 @@ class JobEntry:
     node_hours: float | None = None
     atoms: int | None = None
     steps: int | None = None
+    # events found by a poll nobody was reading (a finishing job's own refresh,
+    # KB 39), kept until a reporting poll hands them on
+    unreported: list[dict] = field(default_factory=list)
 
     def log(self, msg: str) -> None:
         self.history.append(f"{time.strftime('%Y-%m-%d %H:%M')} {msg}")
@@ -126,6 +183,16 @@ class JobBook:
             book = cls(root, {}, {})
         book._sync_manifest()
         return book
+
+    def _reload(self) -> None:
+        """Take the entries and config from disk (another process may have moved
+        the queue on since this book was opened)."""
+        path = self.root / BOOK_FILE
+        if path.is_file():
+            d = json.loads(path.read_text(encoding="utf-8"))
+            self.entries = {k: JobEntry(**v) for k, v in d["entries"].items()}
+            self.config = d.get("config", {})
+            self._sync_manifest()
 
     def save(self) -> Path:
         path = self.root / BOOK_FILE
@@ -164,6 +231,7 @@ class JobBook:
         return list({e.name: e for e in out}.values())
 
     # ---- submission ------------------------------------------------------------
+    @_locked
     def submit(self, names: list[str], backend: str | None = None, lmp: str | None = None,
                launcher: str = "", resubmit: bool = False, fresh: bool = False) -> list[Event]:
         """`resubmit` of a job that died of an infrastructure cause resumes from its
@@ -249,7 +317,13 @@ class JobBook:
                 raise JobError(f"LAMMPS executable {lmp!r} not found; give it with "
                                "'submit ... lmp=/path/to/lmp'")
             cmd = f"{self.config.get('launcher', '')} {lmp} -in {deck} -log {log}".strip()
-            handle = LocalRunner().submit(JobSpec(name=e.name, command=cmd, workdir=wd))
+            # on_exit: when this job ends, its wrapper polls the folder, which starts
+            # the next queued job, so the queue moves without a watching agent
+            import os
+            chain = None if os.environ.get("OPENKAPITZA_NO_QUEUE_CHAIN") else \
+                _refresh_command(self.root)
+            handle = LocalRunner().submit(JobSpec(name=e.name, command=cmd, workdir=wd,
+                                                  on_exit=chain))
         e.handle = json.loads(handle.to_json())
         e.backend, e.status, e.diagnosis = backend, "submitted", None
         e.attempts += 1
@@ -260,6 +334,7 @@ class JobBook:
             msg += _local_note(e, self.config.get("launcher", ""))
         return Event(e.name, "started", msg)
 
+    @_locked
     def cancel(self, names: list[str]) -> list[Event]:
         events = []
         for e in self.select(names):
@@ -279,8 +354,26 @@ class JobBook:
         return events
 
     # ---- polling -----------------------------------------------------------------
-    def refresh(self, auto_resubmit: bool = True) -> list[Event]:
-        """Poll every live job once; diagnose and act on what stopped."""
+    @_locked
+    def refresh(self, auto_resubmit: bool = True, report: bool = True) -> list[Event]:
+        """Poll every live job once; diagnose and act on what stopped.
+
+        report=False (a finishing job's own poll) keeps what it found in the
+        book; the next reporting poll returns those events first, so a job that
+        finished or failed between two agent polls is never missed."""
+        events = self._poll(auto_resubmit)
+        if not report:
+            for ev in events:
+                self.entries[ev.name].unreported.append(_event_to_dict(ev))
+            self.save()
+            return events
+        held = [_event_from_dict(d) for e in self.entries.values() for d in e.unreported]
+        for e in self.entries.values():
+            e.unreported = []
+        self.save()
+        return held + events
+
+    def _poll(self, auto_resubmit: bool) -> list[Event]:
         events = []
         for e in self.entries.values():
             if e.status not in ("submitted", "running") or not e.handle:
@@ -327,6 +420,7 @@ class JobBook:
         self.save()
         return events
 
+    @_locked
     def mark_ingested(self, name: str) -> None:
         e = self.entries[name]
         e.status = "ingested"
@@ -563,7 +657,8 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     book = JobBook.open(a.root)
     if a.cmd == "refresh":
-        for ev in book.refresh(auto_resubmit=not a.no_resubmit):
+        # not a reporting poll: the agent shows these events at its next 'jobs'
+        for ev in book.refresh(auto_resubmit=not a.no_resubmit, report=False):
             print(f"{ev.name}: {ev.what} — {ev.message}")
     print(book.table(only_active=True))
     return 0

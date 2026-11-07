@@ -313,7 +313,11 @@ job with its hours here and a verdict: here overnight (≤ 10 h), here but long
 efficiency cores are about half as fast, and every rank waits for the slowest.
 Local jobs run **one at a time**: each already uses the fast cores, so the
 rest wait in a queue (`queued` in `jobs`) and start, in order, as each one
-finishes. That needs polling: keep `watch` running, or poll from cron.
+finishes. **The queue moves by itself:** when a local job ends, its own
+wrapper polls the folder and starts the next one (log: `DIR/queue.log`), so
+no session needs to stay open. What happened meanwhile, finished runs and
+failures with their diagnosis, is kept and shown at your next `jobs` or
+`watch`, and finished runs are measured then.
 
 Nothing waits on a job: each poll checks once and returns, and the state is
 kept in `DIR/jobs.json`. A new session picks the jobs up with `jobs DIR`, and

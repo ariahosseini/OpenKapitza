@@ -449,8 +449,9 @@ class Session:
         head = f"Submitted {started} job(s)" + (f", ~{nh:.1f} node-hours" if nh else "") + \
             (f"; {queued} queued to run one after another on this machine" if queued else "") + ":"
         return "\n".join([head] + lines + [
-            "Nothing waits on them. 'jobs' polls once; 'watch' polls until they stop. "
-            "Finished jobs are measured and used automatically."])
+            "Queued local jobs start by themselves as each one finishes. 'jobs' reports "
+            "what happened and measures finished runs (used automatically); 'watch' "
+            "follows them until they stop."])
 
     def _jobs(self, arg: str) -> str:
         if arg:
