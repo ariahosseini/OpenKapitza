@@ -3419,18 +3419,20 @@ they would read lowest. Not explained yet. What we know:
 - *Coverage does not matter* (68.1 vs 67.4), unlike Ar and N₂. A layer whose
   conductance is independent of how many atoms it has is not conducting
   through a sparse bridge.
-- *Candidate 1, a mobile layer:* He's well (≈ 10 K) is far below 300 K, so
-  the layer is a dense 2-D fluid, not an adsorbed solid. Heat can then also
-  ride on atoms moving between the faces (a gas-kinetic, convective channel,
-  ∝ mean speed; He is 3.2× faster than Ar). A pairwise force tally misses
-  that channel, and HEX counts it. If this is it, h_He should fall when the
-  He atoms are tethered, and the arbitration tally (H-4) should read low
-  against HEX for He but not for Ar.
+- *Candidate 1, a light, mobile layer:* He's well (≈ 10 K) is far below
+  300 K, so the layer is a dense 2-D fluid, not an adsorbed solid, and its
+  atoms are 3.2× faster than Ar's. Energy picked up at one face is carried to
+  the other by the atom itself. *Test:* the same He layer with argon's mass
+  (`he_mass40`, KB 28). If h falls toward Ar's, mass/speed is the cause.
+  (Corrected 7 Nov: the direct interface tally does **not** separate this
+  channel. The gas never crosses into a solid, so every joule entering it
+  passes through gas–solid pair forces, and the tally sees it all.)
 - *Candidate 2, geometry:* the built gap is 6.4 Å for He vs 7.3 Å for Ar, so
-  more of the direct Si–Ge LJ tail survives across the He layer. A
-  He-free cell at the same gap would measure it.
+  more of the direct Si–Ge LJ tail survives across the He layer. *Test:* the
+  He and Ar layers with the Si–Ge LJ switched off (`he_nodirect`,
+  `ar_nodirect`, KB 28).
 Until one of these is settled, **do not use the He result**. It is the case
-the H-4 tally comparison is most likely to resolve.
+the KB 28 mass and no-direct runs are designed to resolve.
 
 **But the two drives disagree on the absolute level.** At LJ ×1 and 1 GPa,
 Langevin gives 65.9 ± 3.4 and HEX 41.1 ± 0.8: 1.6× apart, well beyond
@@ -3502,3 +3504,70 @@ correction, because no sourced k(n, type) table is here.
 
 Tests: `tests/test_contact_checks.py`. The agent guide lists the new fields,
 and the scripted heat-sink example answers the new question.
+
+## 28. After the rebuild: eHEX, the interface tally and the weekend set (7 Nov 2026)
+
+**Mac build.** `mac_setup_lammps.sh` on 7 Nov: stable_30Sep2026 with
+EXTRA-COMPUTE, EXTRA-FIX, MANYBODY, MEAM, ML-IAP, ML-PACE, ML-SNAP, OPENMP,
+RIGID and TALLY (Homebrew, OpenMP yes). Homebrew's `pkgconf` reinstall failed
+on outdated Command Line Tools; the build did not need it.
+
+**New in the code.**
+- `flux_mode="ehex"`: the imposed flux through `fix ehex` (RIGID), HEX plus
+  the coordinate correction that removes its drift (§20). Same energy
+  bookkeeping as "heat".
+- `interface_tally=True`: `compute heat/flux/virial/tally` across the
+  interface, written to `interface_flux.dat` (eV/ps, two columns: into
+  everything that is not side A, and into side B's solid; with no gas layer
+  they are equal). `measure_kapitza` reports the mean flux and the h_K each
+  gives with the same jump. It is refused for a Tersoff-bonded interface
+  (many-body forces are not tallied). On resume the file is truncated and
+  appended like the others.
+- `md/rescale_tersoff.py`: one element's Tersoff lengths × s, cross terms
+  re-mixed with Tersoff's 1989 rules (they reproduce SiCGe.tersoff to
+  1.5×10⁻⁴ with s = 1). LAMMPS check: Ge relaxes to 5.6567 Å with the
+  original file and 5.4298 Å rescaled by 5.431/5.658, as designed.
+- `validate_deck` now rejects a trailing backslash: LAMMPS continues lines
+  with `&`. (The template's own backslashes are Python line joins; one emitted
+  from an f-string reached LAMMPS as an argument and stopped the first smoke
+  test.)
+
+**What the tally can and cannot do.** Short smoke runs (4 ps production, LJ
+×1 and He at 1 GPa, imposed 1.0 and 1.4 GW/m²) gave a row-to-row spread of
+34–40 GW/m² on 0.1 ps averages, about 35× the signal, with lag-1
+autocorrelation 0.2–0.4. Projected standard error over 1 ns is ≈ 0.4–0.6
+GW/m², i.e. **±40–60 % of the flux**. So at this cell size the tally is a
+sign-and-magnitude check on the drives, not the 10 % arbiter H-4 hoped for.
+The arbitration rests instead on the drive comparison itself (Langevin 0.1
+vs 0.5 ps, eHEX vs HEX on the same cell); the tally rides along because it
+is nearly free. Two LAMMPS warnings come with it: "incompatible pair style"
+(the hybrid has Tersoff substyles; only the LJ cross terms are tallied,
+which is what is wanted) and "Stress was not tallied by pair style",
+issued every call because the hybrid's own flag is not set although its
+lj/cut substyle does tally (the two columns differ for a gas layer as they
+should). The second floods the log and LAMMPS mutes all warnings after 100.
+
+**Also corrected (§26):** the tally does not separate a convective gas
+channel. A confined layer's atoms never enter the solids, so every joule
+crosses a gas–solid pair force and the tally sees all of it. The He tests
+are now a mass swap and a no-direct-coupling cell.
+
+**The weekend set** (`scripts/prepare_weekend.py`, ROOT/weekend/, run in
+this order; awake-Mac estimates from the He runs, ≈ 1.6 h per Mstep at 21 k
+atoms):
+
+| case | cell | drive | question | est. |
+|---|---|---|---|---|
+| arb_langevin_d0.1 | LJ ×1, 1 GPa | Langevin 0.1 ps, 2 ns | repeat of 65.9, with tally | 3.9 h |
+| arb_langevin_d0.5 | same | Langevin 0.5 ps, 2 ns | does short damping inflate h? (P1-17) | 3.9 h |
+| arb_ehex | same | eHEX 1 GW/m² | drift-free imposed flux | 2.3 h |
+| arb_hex | same | HEX 1 GW/m² | the sweep's drive, same q | 2.3 h |
+| sige_ge_rescaled | bonded r00 | Langevin 0.1 ps | strain removed (P1-16) | 1.4 h |
+| sige_damp0.5 / 1.0 | bonded r00 | Langevin 0.5 / 1 ps | damping on the bonded value (P1-17) | 2.8 h |
+| ar_ehex, he_ehex | gas, 1 GPa | eHEX | the two gases under eHEX | 4.6 h |
+| he_mass40 | He LJ, Ar mass | eHEX | is it He's light, fast atoms? | 2.3 h |
+| he_nodirect, ar_nodirect | gas, no Si–Ge LJ | eHEX | is it the direct Si–Ge tail? | 4.6 h |
+
+Total ≈ 28 h. Rescaling Ge raises its frequencies by 1/s ≈ 4 %, against
+roughly 12 % for 4 % compression, so `sige_ge_rescaled` vs r00 brackets the
+strain effect rather than removing every spectral shift.

@@ -399,9 +399,17 @@ class NEMDSpec:
     # T +- delta/2, flux read from their energy tallies (noisy at low h).
     # "heat": `fix heat` adds imposed_flux (W/m^2) to the hot reservoir and
     # removes it from the cold one each step, so q is exact and only the jump
-    # is measured -- for resistive interfaces (KB 19).
+    # is measured -- for resistive interfaces (KB 19). "ehex": the same imposed
+    # flux through `fix ehex` (RIGID package), whose coordinate correction
+    # removes the slow energy drift of plain HEX (KB 20, 26).
     flux_mode: str = "langevin"
     imposed_flux: float | None = None
+    # Record the heat flow across the interface directly, from the pair forces
+    # between the two sides (`compute heat/flux/virial/tally`, TALLY package):
+    # an independent flux, exact for an interface coupled only by a pairwise
+    # style (structure/nonbonded.py). Meaningless across a many-body (Tersoff)
+    # bond, so it is refused for the bonded cell. Writes interface_flux.dat.
+    interface_tally: bool = False
     # Equilibrate side A at T + presplit/2 and side B at T - presplit/2 instead
     # of both at T. For a resistive interface nearly all of the drive drops at
     # the plane, so this starts the run close to its steady state and skips a
@@ -574,7 +582,7 @@ compute         layers gmobile chunk/atom bin/1d z lower {bin_width:.4f} units b
 fix             profile gmobile ave/chunk {profile_every} {n_profile_samples} \
 {profile_window} layers temp file temperature_profile.dat
 {ttm_production}
-{reservoir_vars}
+{tally_block}{reservoir_vars}
 variable        tnow  equal time
 fix             energy all print {profile_every} "${{tnow}} ${{ehot}} ${{ecold}}" \
 file reservoir_energy.dat screen no title "# time[ps] E_hot[eV] E_cold[eV]"
@@ -996,7 +1004,7 @@ EV_PER_PS_IN_W = 1.602176634e-7
 def heat_power_ev_ps(spec: NEMDSpec, area_m2: float) -> float:
     """fix heat power (eV/ps) for the imposed flux over this cross-section."""
     if not spec.imposed_flux or spec.imposed_flux <= 0:
-        raise ValueError("flux_mode 'heat' needs a positive imposed_flux (W/m^2)")
+        raise ValueError(f"flux_mode {spec.flux_mode!r} needs a positive imposed_flux (W/m^2)")
     return spec.imposed_flux * area_m2 / EV_PER_PS_IN_W
 
 
@@ -1009,15 +1017,20 @@ def _reservoir_blocks(spec: NEMDSpec, area_m2: float) -> tuple[str, str]:
                 f"fix             cold gcold langevin {spec.t_cold:.2f} {spec.t_cold:.2f} {d:.4f} "
                 f"{spec.seed + 2} tally yes",
                 "variable        ehot  equal f_hot\nvariable        ecold equal f_cold")
-    if spec.flux_mode == "heat":
+    if spec.flux_mode in ("heat", "ehex"):
         if spec.ttm is not None:
-            raise ValueError("flux_mode 'heat' is not combined with TTM")
+            raise ValueError(f"flux_mode {spec.flux_mode!r} is not combined with TTM")
         f = heat_power_ev_ps(spec, area_m2)
         dt = spec.timestep_fs * FS_TO_PS
+        style = spec.flux_mode
+        note = ("" if style == "heat" else
+                "# eHEX (Wirnsberger et al. 2015): HEX plus a coordinate correction\n"
+                "# that removes its slow energy drift.\n")
         return (f"# Imposed flux {spec.imposed_flux:.4g} W/m^2 = {f:.6g} eV/ps over the\n"
                 f"# cross-section: exact, so the flux carries no thermostat noise.\n"
-                f"fix             hot  ghot  heat 1 {f:.8g}\n"
-                f"fix             cold gcold heat 1 {-f:.8g}",
+                f"{note}"
+                f"fix             hot  ghot  {style} 1 {f:.8g}\n"
+                f"fix             cold gcold {style} 1 {-f:.8g}",
                 # cumulative energy in and out, from the production clock
                 f"variable        ehot  equal {f:.8g}*step*{dt!r}\n"
                 f"variable        ecold equal {-f:.8g}*step*{dt!r}")
@@ -1040,6 +1053,35 @@ def _equil_blocks(spec: NEMDSpec) -> tuple[str, str]:
             f"fix             equil   eq_a nvt temp {ta:.2f} {ta:.2f} {d:.4f}\n"
             f"fix             equil_b eq_b nvt temp {tb:.2f} {tb:.2f} {d:.4f}",
             "unfix           equil\nunfix           equil_b")
+
+
+TALLY_FILE = "interface_flux.dat"
+
+
+def _tally_block(spec: NEMDSpec) -> str:
+    """Production lines for the direct interfacial heat flow, or ''."""
+    if not spec.interface_tally:
+        return ""
+    if not spec.pair_block or "lj/" not in spec.pair_block:
+        raise ValueError("interface_tally needs a pairwise coupling across the interface "
+                         "(a non-bonded cell); a Tersoff bond is many-body and is not tallied")
+    ta = " ".join(str(t) for t in spec.types_a)
+    tb = " ".join(str(t) for t in spec.types_b)
+    n = max(1, spec.profile_every // 10)
+    return (
+        "# Direct interfacial heat flow (TALLY): Q into the first group from the\n"
+        "# second, through pair forces only (no convective term), in eV/ps.\n"
+        "#   q_into_b : into everything not on side A, from side A (the A face)\n"
+        "#   q_into_bs: into side B's solid, from everything else (the B face)\n"
+        "# With no gas layer the two are the same; with one, each face is seen.\n"
+        f"group           tal_a type {ta}\n"
+        "group           tal_nota subtract all tal_a\n"
+        f"group           tal_b type {tb}\n"
+        "group           tal_notb subtract all tal_b\n"
+        "compute         q_into_b  tal_nota heat/flux/virial/tally tal_a\n"
+        "compute         q_into_bs tal_b heat/flux/virial/tally tal_notb\n"
+        f"fix             iflux all ave/time 10 {n} {n * 10} c_q_into_b c_q_into_bs "
+        f"file {TALLY_FILE}\n")
 
 
 def profile_window(spec: NEMDSpec) -> int:
@@ -1232,6 +1274,7 @@ def build_input_deck(spec: NEMDSpec) -> str:
                        "z is NON-PERIODIC so heat cannot short-circuit around the box."),
         ttm_block=_ttm_block(spec, window),
         ttm_production=_ttm_production(spec, window, n_samples),
+        tally_block=_tally_block(spec),
     )
 
 
@@ -1289,8 +1332,12 @@ def validate_deck(deck: str) -> list[str]:
     """
     problems: list[str] = []
 
-    # Join backslash continuations so each command is one logical line.
-    joined = deck.replace("\\\n", " ")
+    # LAMMPS continues a line with '&', not a backslash: a trailing '\' reaches
+    # LAMMPS as an argument ("Unknown fix ave/time keyword \", KB 28).
+    for ln in deck.splitlines():
+        if ln.rstrip().endswith("\\"):
+            problems.append(f"backslash continuation (LAMMPS uses '&'): {ln.strip()[:60]}")
+    joined = deck.replace("&\n", " ")
     lines = [ln.split("#", 1)[0].strip() for ln in joined.splitlines()]
     lines = [ln for ln in lines if ln]
 

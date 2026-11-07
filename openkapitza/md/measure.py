@@ -52,6 +52,10 @@ class KapitzaMeasurement:
     per_frame_flux: list[float]         # W/m^2, each frame's own window
     flux: float                         # W/m^2
     drifts: dict = field(default_factory=dict)
+    # Direct interfacial heat flow (interface_flux.dat), when recorded:
+    # {"q_into_b", "q_into_bs"} W/m^2 with "_se" block errors, and the h_K each
+    # gives with the same jump ("h_into_b", "h_into_bs"). None otherwise.
+    tally: dict | None = None
 
     @property
     def relative_uncertainty(self) -> float:
@@ -111,6 +115,35 @@ RELAX_DZ_MAX_ANG = 0.5          # wall correction beyond this: the column had no
 # consistent across nine rungs) sit at +0.065 to +0.084 GPa, ~0.05 % strain and
 # negligible for h_K. 0.05 GPa (the first setting) flagged every settled cell.
 RELAX_PZZ_MAX_GPA = 0.2
+
+
+def parse_interface_tally(path: Path, area_m2: float, n_blocks: int = 8) -> dict | None:
+    """Mean direct interfacial heat flux (W/m^2) per column of interface_flux.dat,
+    with a block standard error over `n_blocks` consecutive blocks."""
+    from .nemd import EV_PER_PS_IN_W
+    if not path.is_file():
+        return None
+    rows = []
+    for ln in path.read_text(errors="replace").splitlines():
+        parts = ln.split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        try:
+            rows.append([float(x) for x in parts[1:3]])
+        except ValueError:
+            continue
+    if len(rows) < 2:
+        return None
+    a = np.asarray(rows) * EV_PER_PS_IN_W / area_m2
+    out = {}
+    for j, name in enumerate(("q_into_b", "q_into_bs")):
+        col = a[:, j]
+        out[name] = float(col.mean())
+        nb = min(n_blocks, len(col))
+        blocks = np.array([b.mean() for b in np.array_split(col, nb)])
+        out[name + "_se"] = float(blocks.std(ddof=1) / math.sqrt(nb)) if nb > 1 else None
+    out["rows"] = len(rows)
+    return out
 
 
 def check_relax_settle(log: Path, spec: NEMDSpec, flags: FlagSet) -> dict | None:
@@ -324,5 +357,9 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
             remedy="Write at least 4 profile frames and run long enough that each "
                    "frame's jump is well above its noise.",
         )
+    tally = parse_interface_tally(wd / "interface_flux.dat", area, spec.profile_frames)
+    if tally is not None and flux:
+        for name in ("q_into_b", "q_into_bs"):
+            tally["h_" + name[2:]] = h * tally[name] / flux
     return KapitzaMeasurement(extraction, h, uncertainty, fit_se, block_se,
-                              per_dT, per_q, flux, drifts)
+                              per_dT, per_q, flux, drifts, tally)

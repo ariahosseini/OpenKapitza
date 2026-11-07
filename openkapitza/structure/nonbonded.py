@@ -55,13 +55,15 @@ class NonbondedSpec:
     gas: str | None = None           # "Ar", "N2", "He", "Ne": a layer in the gap
     coverage: float = 1.0            # fraction of gas sites filled
     gas_spacing_ang: float | None = None   # grid pitch; default 2^(1/6) sigma_gas
+    gas_mass: float | None = None    # amu; overrides the gas's own (a mass test, KB 26)
     cutoff_ang: float = 12.0
     seed: int = 7
 
     @property
     def label(self) -> str:
         if self.gas:
-            return f"{self.gas}{self.coverage:g}"
+            m = f"_m{self.gas_mass:g}" if self.gas_mass else ""
+            return f"{self.gas}{self.coverage:g}{m}"
         return f"lj{self.lj_scale:g}"
 
 
@@ -144,7 +146,7 @@ def build_data(spec, nb: NonbondedSpec, headroom_ang: float = 5.0) -> tuple[str,
         gas_n = len(grid)
     zhi = total + lift + headroom_ang
     nt = 3 if nb.gas else 2
-    masses = [MASS[spec.element_a], MASS[spec.element_b]] + ([GAS_LJ[nb.gas]["mass"]] if nb.gas else [])
+    masses = [MASS[spec.element_a], MASS[spec.element_b]] + ([nb.gas_mass or GAS_LJ[nb.gas]["mass"]] if nb.gas else [])
     out = [f"OpenKapitza non-bonded {spec.element_a}/{spec.element_b} ({nb.label}); "
            f"plane gap {gap:.3f} A", "",
            f"{len(pos)} atoms", f"{nt} atom types", "",
@@ -162,7 +164,8 @@ def make_spec(base, nb: NonbondedSpec):
                 pair_block=pair_block(base, nb), types_a=(1,), types_b=(2,))
     s.extra = dict(base.extra, nonbonded={"lj_scale": nb.lj_scale, "gas": nb.gas,
                                           "coverage": nb.coverage,
-                                          "plane_gap_ang": nb.plane_gap_ang})
+                                          "plane_gap_ang": nb.plane_gap_ang,
+                                          "gas_mass": nb.gas_mass})
     return s
 
 
