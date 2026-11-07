@@ -223,7 +223,9 @@ def dmm_conductance(
         x_cut=x_cut,
     )
 
-    quantum_check(material_a, material_b, temperature, flags)
+    # DMM is already quantum (Bose-Einstein); here the flag only forecasts what
+    # an MD run would face, so it stays at the stricter half-Debye screen.
+    quantum_check(material_a, material_b, temperature, flags, ratio_threshold=0.5)
 
     h_K = Quantity(
         si=h_si,
@@ -250,7 +252,7 @@ def quantum_check(
     temperature: Quantity,
     flags: FlagSet,
     *,
-    ratio_threshold: float = 0.5,
+    ratio_threshold: float = 1.0,
     h_K_si: float | None = None,
 ) -> None:
     """Warn when T is low enough that classical MD would misrepresent C_V.
@@ -259,7 +261,8 @@ def quantum_check(
     heat-capacity band (md/quantum.py, KB 31) as factors on a classical h_K,
     and, when the h_K in use came from MD (`h_K_si`), the bracketed values.
 
-    Below roughly half the Debye temperature a classical simulation populates
+    Below the Debye temperature (CAUTION; WARNING under half of it, CRITICAL
+    under a quarter) a classical simulation populates
     high-frequency modes that are in reality frozen out, overestimating the
     heat capacity and therefore, generally, the conductance.
 
@@ -284,7 +287,10 @@ def quantum_check(
     if ratio >= ratio_threshold:
         return
 
-    severity = Severity.WARNING if ratio > 0.25 else Severity.CRITICAL
+    # Below theta_D the instruction asks for a warning (section 9); the error
+    # grows as T falls, so the severity does too.
+    severity = (Severity.CAUTION if ratio >= 0.5 else
+                Severity.WARNING if ratio > 0.25 else Severity.CRITICAL)
     band, extra = None, ""
     if material_a.theta_debye is not None and material_b.theta_debye is not None:
         from .quantum import quantum_band

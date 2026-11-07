@@ -3679,6 +3679,13 @@ MW/m²K. At 100 K: ×0.23–0.54. Note that the published MD values we compare
 against (266–450) are classical too: compare classical with classical, and
 quote the band only against experiment.
 
+**Threshold (aligned with the agent instruction, §9 "below the Debye
+temperature, warn").** For an MD value the flag now fires below θ_D
+(CAUTION), below ½θ_D (WARNING) and below ¼θ_D (CRITICAL); Si/Ge at 400 K
+gets a CAUTION with ×0.88–0.96. The DMM placeholder path, which is already
+quantum and only forecasts what MD would face, keeps the ½θ_D screen so the
+continuum answer is not cluttered.
+
 ## 32. Stage checkpoints before production (H-3, 7 Nov 2026)
 
 **Why.** Production restart files (§18) protect only production; on sial_pp
