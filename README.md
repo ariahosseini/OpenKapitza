@@ -1,5 +1,8 @@
 # OpenKapitza — multiscale thermal contact resistance
 
+[![tests](https://github.com/ariahosseini/OpenKapitza/actions/workflows/tests.yml/badge.svg)](https://github.com/ariahosseini/OpenKapitza/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Total thermal resistance between two solids in contact, for PCB, package and
 die-level joints. Three scales, combined on a consistent area basis:
 
