@@ -15,8 +15,12 @@
 # commit is the one OpenKapitza was validated against, and builds with the
 # packages the decks use: MANYBODY (Tersoff, SW), MEAM, EXTRA-FIX (ttm/thermal),
 # EXTRA-COMPUTE, RIGID (fix ehex) and TALLY (compute heat/flux/virial/tally; KB 20),
-# plus OPENMP when Apple's compiler accepts Homebrew's libomp
-# (MPI runs do not need it; the build continues without it if that step fails).
+# the CPU machine-learned potentials ML-SNAP, ML-IAP (SNAP/linear; no Python) and
+# ML-PACE (ACE; cmake downloads its library from GitHub, and the build continues
+# without it if that fails), plus OPENMP when Apple's compiler accepts Homebrew's
+# libomp (MPI runs do not need it; the build continues without it if that fails).
+# Not here, by design: MACE, NequIP/Allegro and DeePMD need libtorch/TensorFlow
+# and, to be practical, a CUDA GPU; build those on the cluster (cluster-runbook.md).
 #
 # Prints, at the end, the two paths the benchmark and the agent need:
 #   LMP=<install>/build/lmp   POTENTIALS=<install>/potentials
@@ -80,7 +84,7 @@ common=(
   -D CMAKE_BUILD_TYPE=Release
   -D BUILD_MPI=yes
   -D PKG_MANYBODY=yes -D PKG_MEAM=yes -D PKG_EXTRA-FIX=yes -D PKG_EXTRA-COMPUTE=yes
-  -D PKG_RIGID=yes -D PKG_TALLY=yes
+  -D PKG_RIGID=yes -D PKG_TALLY=yes -D PKG_ML-SNAP=yes -D PKG_ML-IAP=yes
   -D CMAKE_PREFIX_PATH="$MPI_PREFIX"
   -D CMAKE_C_COMPILER=clang -D CMAKE_CXX_COMPILER=clang++
 )
@@ -92,16 +96,23 @@ omp=(
   -D OpenMP_omp_LIBRARY="$OMP/lib/libomp.dylib"
 )
 
-say "Configuring (with OpenMP)"
-rm -rf "$DEST/build"
-WITH_OMP=yes
-if ! cmake "${common[@]}" "${omp[@]}" > "$DEST/cmake-config.log" 2>&1; then
-  say "OpenMP configuration failed (see $DEST/cmake-config.log); building with MPI only"
+# Try the richest configuration first, then drop the optional parts one at a time.
+WITH_OMP=no; WITH_PACE=no
+for attempt in "omp pace" "omp" "pace" ""; do
+  extra=()
+  [[ "$attempt" == *omp* ]] && extra+=("${omp[@]}") || extra+=(-D BUILD_OMP=no)
+  [[ "$attempt" == *pace* ]] && extra+=(-D PKG_ML-PACE=yes)
+  say "Configuring (${attempt:-MPI only, no ML-PACE})"
   rm -rf "$DEST/build"
-  cmake "${common[@]}" -D BUILD_OMP=no > "$DEST/cmake-config.log" 2>&1 \
-    || die "cmake failed; see $DEST/cmake-config.log"
-  WITH_OMP=no
-fi
+  if cmake "${common[@]}" "${extra[@]}" > "$DEST/cmake-config.log" 2>&1; then
+    [[ "$attempt" == *omp* ]] && WITH_OMP=yes
+    [[ "$attempt" == *pace* ]] && WITH_PACE=yes
+    break
+  fi
+  cp "$DEST/cmake-config.log" "$DEST/cmake-config.failed-${attempt// /-}.log"
+  [[ -z "$attempt" ]] && die "cmake failed; see $DEST/cmake-config.log"
+done
+[[ $WITH_PACE == yes ]] || say "ML-PACE skipped (its download or configure failed; see $DEST/cmake-config.failed-*.log)"
 
 say "Building with $JOBS parallel jobs (several minutes)"
 cmake --build "$DEST/build" -j "$JOBS" > "$DEST/build.log" 2>&1 \
@@ -110,14 +121,14 @@ cmake --build "$DEST/build" -j "$JOBS" > "$DEST/build.log" 2>&1 \
 LMP="$DEST/build/lmp"
 say "Checking the build"
 "$LMP" -h | grep -A6 "Installed packages" || true
-for pkg in MANYBODY MEAM EXTRA-FIX EXTRA-COMPUTE RIGID TALLY; do
+for pkg in MANYBODY MEAM EXTRA-FIX EXTRA-COMPUTE RIGID TALLY ML-SNAP ML-IAP; do
   "$LMP" -h | grep -q "$pkg" || die "package $pkg missing from the build"
 done
 mpirun --version | head -1
 
 cat <<EOF
 
-Done. LAMMPS $TAG ($COMMIT), tools from $MODE, OpenMP: $WITH_OMP
+Done. LAMMPS $TAG ($COMMIT), tools from $MODE, OpenMP: $WITH_OMP, ML-PACE: $WITH_PACE
 
   LMP=$LMP
   POTENTIALS=$DEST/potentials

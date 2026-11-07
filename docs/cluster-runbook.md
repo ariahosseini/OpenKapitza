@@ -16,16 +16,38 @@ Packages: `MANYBODY` (Tersoff, SW, EAM), `EXTRA-FIX` (`fix wall/reflect/stochast
 ```bash
 cmake ../cmake -D BUILD_MPI=yes -D PKG_MANYBODY=yes -D PKG_EXTRA-FIX=yes \
       -D PKG_EXTRA-COMPUTE=yes -D PKG_MEAM=yes -D PKG_RIGID=yes -D PKG_TALLY=yes \
+      -D PKG_ML-SNAP=yes -D PKG_ML-IAP=yes -D PKG_ML-PACE=yes \
       -D CMAKE_BUILD_TYPE=Release      # RIGID: fix ehex; TALLY: interface heat flow (KB 20)
 make -j 16
 ```
 
-Check the build: `lmp -h | grep -A3 "Installed packages"` must list all four.
+Check the build: `lmp -h | grep -A3 "Installed packages"` must list every package named in the command.
 
 The 30 Sep 2026 stable release needs C++17 and CMake ≥ 3.20 (KOKKOS: C++20).
-For P1-14 (TTM) `EXTRA-FIX` already provides `fix ttm/thermal`. For Tier-2 MACE
-later: `PKG_ML-IAP`, `MLIAP_ENABLE_PYTHON`, `PKG_PYTHON`, KOKKOS with CUDA — GPU
-nodes only (knowledge base §8.4).
+For P1-14 (TTM) `EXTRA-FIX` already provides `fix ttm/thermal`. Add the CPU
+machine-learned packages too, as on the Mac (`scripts/mac_setup_lammps.sh`):
+`PKG_ML-SNAP`, `PKG_ML-IAP`, `PKG_ML-PACE` (ACE; cmake downloads its library).
+
+## 0b. A second, GPU build for Tier-2 MLIPs (GPU nodes only)
+
+Keep the CPU build above for the classical decks; build this one separately.
+The Mac (Apple GPU) cannot run any of these on its GPU: LAMMPS's GPU paths are
+CUDA, HIP or SYCL through KOKKOS, and libtorch/TensorFlow inside LAMMPS do not
+use Apple's Metal (MPS). On the Mac, MLIPs run on the CPU only, for small tests.
+
+| potential | how LAMMPS loads it | build |
+|---|---|---|
+| MACE | `pair_style mliap unified model-mliap_lammps.pt 0` | `PKG_ML-IAP`, `MLIAP_ENABLE_PYTHON`, `PKG_ML-SNAP`, `PKG_PYTHON`, `BUILD_SHARED_LIBS`, KOKKOS-CUDA (preset `cmake/presets/kokkos-cuda.cmake`, set the GPU arch), then `make install-python`; convert the model on the same GPU type with `mace_create_lammps_model model --format=mliap` |
+| DeePMD | `pair_style deepmd` | DeePMD-kit's LAMMPS plugin (or its conda package, which ships a LAMMPS); CUDA for GPU |
+| NequIP / Allegro | `pair_style nequip` / `allegro` | the `pair_nequip_allegro` patch with libtorch; CUDA for GPU |
+| ACE (PACE) | `pair_style pace` | `PKG_ML-PACE`; runs well on CPU, KOKKOS for GPU |
+
+MACE's guide marks the ML-IAP route as needing a recent LAMMPS (it named the
+`develop` branch when checked, Nov 2026) and as GPU-only in practice (CPU is
+allowed with `MACE_ALLOW_CPU=true`, but not recommended). Check each project's
+current instructions at build time; they change faster than LAMMPS releases.
+Record the exact LAMMPS commit and package versions next to every MLIP result
+(knowledge base §8.4: warn when the training data likely missed the interface).
 
 ## 1. Test suite and audits on the cluster (minutes)
 
