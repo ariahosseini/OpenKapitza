@@ -258,7 +258,8 @@ heat/flux/virial/tally`):
 Q_{A\to B} = \frac{1}{2}\sum_{i\in B}\sum_{j\in A}\mathbf F_{ij}\cdot\left(\mathbf v_i+\mathbf v_j\right)
 ```
 
-an independent flux, but a noisy one: about ±50 % over 1 ns in these cells.
+an independent flux: ±4 % over 2 ns of steady state in these cells, and within 2 % of the
+Langevin reservoirs' flux in the first test.
 
 **Strain-free cells.** Scaling one element's Tersoff lengths by $s$ (cut-offs
 $R, S \to sR, sS$; $\lambda_{1,2,3} \to \lambda/s$; energies unchanged)

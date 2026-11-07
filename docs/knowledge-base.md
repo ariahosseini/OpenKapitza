@@ -3539,7 +3539,8 @@ on outdated Command Line Tools; the build did not need it.
 **What the tally can and cannot do.** Short smoke runs (4 ps production, LJ
 ×1 and He at 1 GPa, imposed 1.0 and 1.4 GW/m²) gave a row-to-row spread of
 34–40 GW/m² on 0.1 ps averages, about 35× the signal, with lag-1
-autocorrelation 0.2–0.4. Projected standard error over 1 ns is ≈ 0.4–0.6
+autocorrelation 0.2–0.4. *(Withdrawn by §38: measured over 2 ns of steady state the
+error is ±4 %.)* Projected standard error over 1 ns is ≈ 0.4–0.6
 GW/m², i.e. **±40–60 % of the flux**. So at this cell size the tally is a
 sign-and-magnitude check on the drives, not the 10 % arbiter H-4 hoped for.
 The arbitration rests instead on the drive comparison itself (Langevin 0.1
@@ -3875,4 +3876,28 @@ neutron-derived DOS, within 10 %. About 15 s per crystal, serial.
   crystal moved the peaks by at most 0.3 THz (Ge optical 8.9–9.2, Si optical
   15.3–15.4; TA unchanged), well inside the tolerances and far from the 33 %
   Ge TA error. For a model gate, still use several seeds.
+
+## 38. Weekend set, first result: Langevin 0.1 ps, and the tally measured (7 Nov 2026)
+
+**arb_langevin_d0.1** (LJ ×1, 1 GPa, Langevin 0.1 ps, 2 ns production):
+**h = 65.9 ± 3.4 MW/m²K**, bit-for-bit the earlier `lj1_p1_langevin` run
+(same deck apart from the tally, same seed, same machine: a deterministic
+replay, not an independent sample). Same flags: hot and cold reservoir
+fluxes 2.29 and 2.52 GW/m² (9.6 % apart), per-frame jumps 33.5–39.2 K
+without a significant trend.
+
+**The interface tally works, and better than §28 predicted.** Over 2 ns
+in steady state it gives q = **2.45 ± 0.10 GW/m²** (block error over 8
+frames) on both faces, against the reservoirs' mean 2.40: agreement within
+2 %, ±4 % precision. §28's "±40–60 % over 1 ns" was extrapolated from a
+4 ps smoke run that had not reached steady state, and is withdrawn. So:
+- the Langevin flux is right (the 9.6 % hot/cold mismatch averages out);
+- the 1.6× Langevin/HEX difference at this cell is therefore in the
+  **temperature jump** each drive produces, not in a mis-measured flux;
+- the tally is a usable arbiter of q for pairwise-coupled interfaces after
+  all. The eHEX and HEX runs carry it too.
+
+**Operational lesson.** The queue only advances when the agent polls
+(`jobs` or `watch`); after `submit` nothing was polling, and the Mac sat
+idle from 13:25. Run `watch` after a multi-job `submit`.
 
