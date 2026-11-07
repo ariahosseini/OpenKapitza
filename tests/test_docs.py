@@ -35,6 +35,13 @@ class Docs(unittest.TestCase):
             self.assertIn(word, HELP, f"{word!r} missing from Session HELP")
             self.assertIn(f"`{word}", text, f"{word!r} missing from the guide")
 
+    def test_readme_math_uses_only_macros_github_renders(self):
+        # GitHub's math renderer rejects some macros ("The following macros are
+        # not allowed: operatorname"); the whole block then shows as an error.
+        text = (Path(__file__).resolve().parent.parent / "README.md").read_text()
+        for macro in ("\\operatorname", "\\DeclareMathOperator", "\\newcommand"):
+            self.assertNotIn(macro, text)
+
     def test_relative_links_resolve(self):
         files = [ROOT / "README.md"] + sorted((ROOT / "docs").glob("*.md"))
         broken = []

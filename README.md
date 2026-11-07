@@ -269,8 +269,8 @@ CMY's diffusive value by
 ```math
 F = \left[\sum_i \frac{f_i}{1+\frac{8}{3\pi}\,\Lambda_i/a}\right]^{-1},\qquad
 \Lambda = \frac{3k}{C\,\bar v},\qquad
-a = \frac{\sigma}{m}\sqrt{\frac{8}{\pi}}\;e^{x^2/2}\,\operatorname{erfc}\!\left(\frac{x}{\sqrt2}\right),\quad
-x = \sqrt2\,\operatorname{erfc}^{-1}\!\left(\frac{2P}{H_c}\right)
+a = \frac{\sigma}{m}\sqrt{\frac{8}{\pi}}\;e^{x^2/2}\,\mathrm{erfc}\!\left(\frac{x}{\sqrt2}\right),\quad
+x = \sqrt2\,\mathrm{erfc}^{-1}\!\left(\frac{2P}{H_c}\right)
 ```
 
 with $f_i$ the share of $k$ carried at path $\Lambda_i$ (a gray path gives the
