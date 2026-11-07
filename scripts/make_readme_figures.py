@@ -423,6 +423,67 @@ def fig_cell(t, mode):
     save(f, "nemd_cell", mode)
 
 
+# ---- 6. the weekend set: drives, strain, damping, the He tests (KB 28) ----------
+WEEKEND_PANELS = [
+    ("Which drive? (LJ ×1, 1 GPa)",
+     [("arb_langevin_d0.1", "Langevin\n0.1 ps"), ("arb_langevin_d0.5", "Langevin\n0.5 ps"),
+      ("arb_ehex", "eHEX"), ("arb_hex", "HEX")]),
+    ("Strain (bonded Si/Ge, 16 nm)",
+     [("r00", "Ge strained\n−4 %"), ("sige_ge_rescaled", "Ge rescaled\nto a_Si")]),
+    ("Langevin damping (bonded)",
+     [("r00", "0.1 ps"), ("sige_damp0.5", "0.5 ps"), ("sige_damp1.0", "1.0 ps")]),
+    ("The He anomaly (gas layer, 1 GPa)",
+     [("ar_ehex", "Ar"), ("he_ehex", "He"), ("he_mass40", "He,\nAr's mass"),
+      ("he_nodirect", "He, no\nSi–Ge LJ"), ("ar_nodirect", "Ar, no\nSi–Ge LJ")]),
+]
+
+
+def fig_weekend(t, mode, path=None):
+    """One panel per question; cases not yet run are marked 'pending'."""
+    path = path or OUT / "data" / "weekend.json"
+    if not Path(path).is_file():
+        return False
+    res = json.loads(Path(path).read_text())["results"]
+    sweep = json.loads((OUT / "data" / "nonbonded_sweep.json").read_text())
+    f = fig_new(t, 11.0, 3.6)
+    axs = f.subplots(1, 4, gridspec_kw={"width_ratios": [4, 2.4, 3, 5]})
+    refs = [[(sweep["lj1_p1"], "HEX sweep"), (sweep["lj1_p1_langevin"], "Langevin sweep")],
+            [], [], [(sweep["lj1_p1"], "bare contact")]]
+    for ax, (title, cases), ref in zip(axs, WEEKEND_PANELS, refs):
+        style(ax, t)
+        for (r, lab), c in zip(ref, (t["grid"], t["band"])):
+            ax.axhspan(r["h"] - r["err"], r["h"] + r["err"], color=c, alpha=0.8, lw=0)
+            ax.text(len(cases) - 0.45, r["h"], lab, fontsize=7, color=t["ink2"], ha="right",
+                    va="bottom")
+        ys = []
+        for i, (key, _) in enumerate(cases):
+            r = res.get(key)
+            if r is None:
+                ax.text(i, 0.5, "pending", rotation=90, ha="center", va="center",
+                        fontsize=8, color=t["ink2"], transform=ax.get_xaxis_transform())
+                continue
+            ok = not [w for w in r.get("warn", []) if w not in ("NEMD_RELAX_UNSETTLED",)]
+            ax.errorbar(i, r["h"], yerr=r["err"], fmt="o", ms=7, color=t["series"][0],
+                        mfc=t["series"][0] if ok else t["surface"], mew=1.5, capsize=0)
+            ys += [r["h"] - r["err"], r["h"] + r["err"]]
+        for r, _ in ref:
+            ys += [r["h"] - r["err"], r["h"] + r["err"]]
+        if ys:
+            lo, hi = min(ys), max(ys)
+            pad = 0.25 * (hi - lo) + 1
+            ax.set_ylim(max(0, lo - pad), hi + pad)
+        ax.set_xticks(range(len(cases)), [lab for _, lab in cases], fontsize=8)
+        ax.set_xlim(-0.6, len(cases) - 0.4)
+        ax.set_title(title, fontsize=9, loc="left", color=t["ink"])
+    axs[0].set_ylabel("h_K (MW/m²K)")
+    f.text(0.01, -0.03, "Hollow: the run carries a warning (see KB 28). Bands: the earlier "
+           "20-case sweep at the same cell. Data: docs/figures/data/weekend.json "
+           "(scripts/analyze_weekend.py).", fontsize=8, color=t["ink2"])
+    f.tight_layout()
+    save(f, "weekend", mode)
+    return True
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     P, curves = joint_curves()
@@ -433,6 +494,7 @@ def main() -> int:
         fig_interfaces(t, mode)
         fig_atoms(t, mode)
         fig_cell(t, mode)
+        fig_weekend(t, mode)
     for label, h in curves.items():
         print(f"{label:12} h_joint {h[0]:.0f} -> {h[-1]:.0f} W/m^2K over {P[0]:g}-{P[-1]:g} MPa")
     return 0
