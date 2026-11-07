@@ -3742,3 +3742,26 @@ for the extrapolation is their mean, the mean plane of the step.
 **Jobs** (`scripts/prepare_disorder.py`): step4_p2 (0.54 nm high, 1.09 nm
 terraces) and step8_p1 (1.09 nm high, 2.17 nm terraces) on the r00 cell.
 
+## 34. Incoherent Si/Ge cell for the cluster (P1-16, 7 Nov 2026)
+
+**Why.** The third P1-16 cell: neither side strained, the misfit carried by
+the interface itself, as in a relaxed real heterojunction. Together with
+the rescaled-Ge cell (§28) it separates the strain effect from the misfit
+reconstruction.
+
+**Built** with the existing heterostructure path (`NEMDSpec.supercell`): 25
+Si cells (135.78 Å) against 24 Ge cells (135.79 Å), each side on its own
+lattice, ±0.006 % in-plane. 13.6 nm wide, 16 nm per side, ~330,000 atoms,
+steady stage 400 ps: `sige_incoherent` in `scripts/prepare_cluster.py`.
+Too big for the laptop (~16 h on the M3 Pro by the measured rate).
+
+**Smoke test** (same cross-section, 2 nm per side, 69,756 atoms, 400 relax
+steps, serial): runs to `OPENKAPITZA_DONE`, no lost atoms. The interface
+reconstructs at once: the last Si plane and first Ge plane each spread over
+~0.5 Å and close to 0.5 Å apart; closest Si–Ge pair 2.03 Å, 159 pairs under
+2.3 Å (bond length ~2.4 Å). So bonds form across the misfit, as they
+should, but 0.4 ps is far too short to say whether a misfit network
+forms. **Before trusting its h_K:** check the relaxed interface's
+coordination (`structure/analysis.py`) and, if it is still a disordered
+seam, add an anneal (e.g. 600–800 K) before equilibration.
+

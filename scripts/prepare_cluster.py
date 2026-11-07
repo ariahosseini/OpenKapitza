@@ -5,6 +5,7 @@ setting up. This writes, under <root>:
 
   campaign/        P1-3 Si/Ge convergence campaign (plan_campaign preset)
   sige_spot_*/     P1-9/P1-10 Si/Ge at 2 GPa spot pressure, stress and strain modes
+  sige_incoherent/ P1-16 strain-free incoherent Si/Ge (25:24 supercell, 13.6 nm)
   sige_emd/        P1-8 equilibrium cross-check (short slabs, >= 500 tau)
   sial_pp/, sial_ttm/   P1-6/P1-14 Si/Al phonon-only and two-temperature pair
   sicu_pp/         P1-6 Si/Cu phonon-only
@@ -65,6 +66,14 @@ def jobs() -> list[tuple[str, NEMDSpec, str]]:
         s = copy.deepcopy(sige)
         s.spot_pressure_GPa, s.spot_pressure_mode = 2.0, mode
         out.append((f"sige_spot_{mode}", s, "nemd"))
+    # P1-16 third cell: incoherent Si/Ge, each side on its own lattice. 25 Si
+    # cells span 135.78 A and 24 Ge cells 135.79 A (0.01 % apart), so neither
+    # side is strained and the misfit sits at the interface (KB 34).
+    inc = copy.deepcopy(sige)
+    inc.geometry = _geometry(13.58, 16.0, 16.0)
+    inc.supercell = (25, 24)
+    inc.steady_steps = 400_000
+    out.append(("sige_incoherent", inc, "nemd"))
     emd = copy.deepcopy(sige)
     emd.geometry = _geometry(4.3, 2.0, 2.0, reservoir_nm=0.5)
     out.append(("sige_emd", emd, "emd"))
