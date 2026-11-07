@@ -3622,3 +3622,32 @@ specimen property (Y ∝ σ) must be checked within specimens before it is
 read as physics. The Jensen argument was correct mathematics applied to an
 effect the data did not show.
 
+## 30. Intermixed Si/Ge interface (S-9, 7 Nov 2026)
+
+**Why.** Grown Si/Ge interfaces are graded over a few atomic layers, not
+sharp. Green's-function studies disagree with the intuition that disorder
+lowers conductance: Tian, Esfarjani & Chen (PRB 86, 235304, 2012; DFT force
+constants) find atomic mixing can **raise** phonon transmission; Song & Chen
+(AGF, Stillinger–Weber, 4 and 8 mixed layers) find little net change in the
+transmission function, with the maximum conductance at 4 mixed layers,
+because added diffuse transmission is offset by added diffuse reflection.
+Neither is an MD number for our cell; the jobs below measure it.
+
+**Built.** `NEMDSpec.intermix_layers = n` (even; built single-lattice cells
+only). The n (100) layers nearest the plane, n/2 per side, get a linear Ge
+fraction c_j = (j + ½)/n, bottom up: side-A layers have that fraction of Si
+turned to Ge, side-B layers 1 − c_j of Ge turned to Si (`set region ...
+type/ratio`, exact counts per layer; layer bands are centred on the
+diamond (100) planes at k·a/4). The groups that locate the relaxed plane
+(`gside_a/b`) are fixed **geometrically** before the swap; with type-based
+groups a swapped Si atom deep in B would be taken as "top of A".
+Checked in LAMMPS (small cell, n = 4): relaxed layer compositions 0.125,
+0.375, 0.625, 0.875 Ge, 32 atoms each, pure beyond; the relaxed-position
+print finds the plane between the 0.375 and 0.625 layers.
+
+**Jobs** (`scripts/prepare_intermix.py`): mix2, mix4, mix8 on the r00 cell
+(16 nm per side, 4.3 nm, Langevin 0.1 ps, 35,060 atoms, 0.75 Mstep, ~1.4 h
+each on the M3 Pro). Compare with r00 (483 ± 20). They share r00's −4 %
+Ge strain; if the weekend shows strain matters, repeat on the rescaled-Ge
+potential.
+

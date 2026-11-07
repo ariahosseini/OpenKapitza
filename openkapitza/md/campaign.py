@@ -213,7 +213,7 @@ def _spec_record(spec: NEMDSpec) -> dict:
             "structure_mode", "data_file", "lattice_style_a", "lattice_style_b",
             "coeff_args", "relax_z", "piston_damp_ps", "spot_pressure_mode",
             "load_steps", "couple_xy", "pair_block", "checkpoint_frames", "flux_mode", "imposed_flux",
-            "presplit_K", "interface_tally")},
+            "presplit_K", "interface_tally", "intermix_layers", "intermix_seed")},
         "types_a": list(spec.types_a), "types_b": list(spec.types_b),
         "ttm": (None if spec.ttm is None else
                 {k: (list(v) if isinstance(v, tuple) else v)

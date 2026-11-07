@@ -194,3 +194,31 @@ class Analysis(unittest.TestCase):
                        if c["a"] == "arb_hex")
         self.assertAlmostEqual(hex_row["ratio"], 1.1)
         self.assertIn("higher", hex_row["verdict"])
+
+
+class Intermix(unittest.TestCase):
+    def spec(self, n):
+        from plan_campaign import PRESETS, base_spec
+        s = base_spec(PRESETS["sige"])
+        s.intermix_layers = n
+        return s
+
+    def test_plan_is_linear_and_straddles_the_plane(self):
+        from openkapitza.md.nemd import intermix_layers_plan
+        s = self.spec(4)
+        plan = intermix_layers_plan(s)
+        z_if = s.geometry.interface_z * 1e10
+        self.assertEqual([p[1] for p in plan], [2, 2, 1, 1])
+        self.assertEqual([round(p[2], 3) for p in plan], [0.125, 0.375, 0.375, 0.125])
+        self.assertTrue(plan[1][0] < z_if < plan[2][0])
+        with self.assertRaises(ValueError):
+            intermix_layers_plan(self.spec(3))
+
+    def test_deck_swaps_types_after_fixing_the_side_groups(self):
+        d = build_input_deck(self.spec(2))
+        self.assertEqual(validate_deck(d), [])
+        self.assertLess(d.index("group           geo_a region side_a"),
+                        d.index("set             region mix0 type/ratio"))
+        self.assertIn("group           gside_a union geo_a", d)
+        self.assertNotIn("group           gside_a type 1", d)
+        self.assertNotIn("type/ratio", build_input_deck(self.spec(0)))

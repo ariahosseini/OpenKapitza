@@ -410,6 +410,13 @@ class NEMDSpec:
     # style (structure/nonbonded.py). Meaningless across a many-body (Tersoff)
     # bond, so it is refused for the bonded cell. Writes interface_flux.dat.
     interface_tally: bool = False
+    # Intermixed interface (open issue S-9, KB 30): the n (100) atomic layers
+    # nearest the plane, n/2 on each side, get a linear Ge fraction from
+    # (0.5/n) to (1 - 0.5/n) by swapping atom types in place (`set type/ratio`,
+    # exact counts). The side groups that locate the relaxed plane are fixed
+    # geometrically before the swap. Built cells only; 0 = sharp.
+    intermix_layers: int = 0
+    intermix_seed: int = 4242
     # Equilibrate side A at T + presplit/2 and side B at T - presplit/2 instead
     # of both at T. For a resistive interface nearly all of the drive drops at
     # the plane, so this starts the run close to its steady state and skips a
@@ -1055,6 +1062,46 @@ def _equil_blocks(spec: NEMDSpec) -> tuple[str, str]:
             "unfix           equil\nunfix           equil_b")
 
 
+def intermix_layers_plan(spec: NEMDSpec) -> list[tuple[float, int, float]]:
+    """(layer z in A, type converted TO, fraction) for each mixed layer, bottom up."""
+    n = spec.intermix_layers
+    if n <= 0:
+        return []
+    if n % 2:
+        raise ValueError("intermix_layers must be even (half on each side of the plane)")
+    d = spec.lattice_used * M_TO_ANG / 4.0           # (100) layer spacing, diamond
+    z_if = spec.geometry.interface_z * M_TO_ANG
+    k_top_a = math.floor(z_if / d - 1e-6)
+    if abs(k_top_a * d - z_if) < 1e-6:               # a layer exactly on the plane is B's
+        k_top_a -= 1
+    layers = [k_top_a - n // 2 + 1 + j for j in range(n)]
+    out = []
+    for j, k in enumerate(layers):
+        c_ge = (j + 0.5) / n
+        out.append((k * d, 2, c_ge) if j < n // 2 else (k * d, 1, 1.0 - c_ge))
+    return out
+
+
+def _intermix_block(spec: NEMDSpec) -> str:
+    plan = intermix_layers_plan(spec)
+    if not plan:
+        return ""
+    if spec.heterostructure:
+        raise ValueError("intermix_layers is implemented for the single-lattice build only")
+    d = spec.lattice_used * M_TO_ANG / 4.0
+    lines = [f"# Intermixed interface: {len(plan)} (100) layers, linear Ge fraction across",
+             "# them (KB 30). Side groups are fixed geometrically BEFORE the swap, so",
+             "# the relaxed plane is still located by where the atoms started.",
+             "group           geo_a region side_a",
+             "group           geo_b region side_b"]
+    for i, (z, to, frac) in enumerate(plan):
+        lines.append(f"region          mix{i} block INF INF INF INF {z - d / 2:.4f} {z + d / 2:.4f} "
+                     f"units box")
+        lines.append(f"set             region mix{i} type/ratio {to} {frac:.6f} "
+                     f"{spec.intermix_seed + i}")
+    return "\n".join(lines) + "\n"
+
+
 TALLY_FILE = "interface_flux.dat"
 
 
@@ -1098,7 +1145,7 @@ def checkpoint_every(spec: NEMDSpec) -> int:
     return profile_window(spec) * spec.checkpoint_frames
 
 
-def build_input_deck(spec: NEMDSpec) -> str:
+def _build_input_deck_raw(spec: NEMDSpec) -> str:
     """Render the LAMMPS input deck for this run."""
     g = spec.geometry
     a = M_TO_ANG
@@ -1178,6 +1225,7 @@ def build_input_deck(spec: NEMDSpec) -> str:
             mass_a=spec.mass_a, mass_b=spec.mass_b,
             strain_a=sa, strain_b=sb,
         )
+        structure_block += _intermix_block(spec)
     elif spec.structure_mode == "read_data":
         structure_block = READ_DATA_BLOCK.format(data_file=spec.data_file)
     else:
@@ -1276,6 +1324,18 @@ def build_input_deck(spec: NEMDSpec) -> str:
         ttm_production=_ttm_production(spec, window, n_samples),
         tally_block=_tally_block(spec),
     )
+
+
+def build_input_deck(spec: NEMDSpec) -> str:
+    """The LAMMPS input deck for one NEMD run."""
+    deck = _build_input_deck_raw(spec)
+    if spec.intermix_layers:
+        old = ("group           gside_a type 1\n"
+               "group           gside_b type 2\n")
+        if old in deck:
+            deck = deck.replace(old, "group           gside_a union geo_a\n"
+                                     "group           gside_b union geo_b\n")
+    return deck
 
 
 def ttm_box_z(spec: NEMDSpec) -> float:
