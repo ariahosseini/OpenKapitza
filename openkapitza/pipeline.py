@@ -211,6 +211,10 @@ def run_continuum(
     # -- interfacial term ---------------------------------------------------
     if kapitza is None:
         kapitza = dmm_conductance(a, b, inputs.temperature, flags)
+    elif kapitza.source == "md":
+        # classical MD below the Debye temperature: the bracket, on the value in use
+        from .md.dmm import quantum_check
+        quantum_check(a, b, inputs.temperature, flags, h_K_si=kapitza.h_K.si)
     # reference only: where the h_K in use sits against measured values for the pair
     from .md.measured import check_kapitza
     check_kapitza(a.key, b.key, inputs.temperature.si, kapitza.h_K.si, kapitza.source, flags)

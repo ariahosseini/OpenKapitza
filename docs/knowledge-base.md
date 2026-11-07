@@ -3651,3 +3651,31 @@ each on the M3 Pro). Compare with r00 (483 ± 20). They share r00's −4 %
 Ge strain; if the weekend shows strain matters, repeat on the rescaled-Ge
 potential.
 
+## 31. A quantum bracket for classical-MD h_K (S-11, 7 Nov 2026)
+
+**Rule kept** (§3, "Quantum correction"): the classical MD value stays the
+primary result; temperature-rescaling corrections are unreliable for
+transport and are not applied.
+
+**What is now offered.** `md/quantum.py`: weight the phonons that cross by
+their quantum heat capacity relative to k_B, assuming no strong spectral
+preference in transmission up to a cutoff θ_c. The factor is the Debye
+heat-capacity fraction, f(T, θ_c) = 3/x_c³ ∫₀^x_c x⁴eˣ/(eˣ − 1)² dx with
+x_c = θ_c/T. The cutoff is uncertain, so it is a band:
+- softer side's θ (elastic transmission ends there): the mild end;
+- stiffer side's θ (inelastic exchange, which classical MD allows freely):
+  the strong end.
+
+**Where it shows.** The `QUANTUM_EFFECTS` flag carries the band whenever
+both Debye temperatures are known; when the h_K in use came from MD
+(`source == "md"`, i.e. ingested), the pipeline now runs the check on that
+value and states the bracketed numbers. Before this, the check ran only on
+the DMM placeholder path, which is already quantum (Bose–Einstein), and an
+ingested MD value got no quantum flag at all. Measured (`user`) values are
+left alone.
+
+**Numbers.** Si/Ge at 300 K (θ 645 / 374 K): ×0.80–0.93, so 485 → 389–449
+MW/m²K. At 100 K: ×0.23–0.54. Note that the published MD values we compare
+against (266–450) are classical too: compare classical with classical, and
+quote the band only against experiment.
+

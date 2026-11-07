@@ -51,7 +51,7 @@ analysis exist, no converged number.
 | S-8 | Native oxide on metal | Al₂O₃ on Al, Cu₂O on Cu | metal–oxide potential (COMB, ReaxFF, or MLIP) | not started; measured target exists (Hopkins: oxide ≈ 1.7–1.9 × 10⁻⁹ m²K/W on Al/Si) | GPU |
 | S-9 | Disordered interface | intermixing, nanoscale roughness, dislocations | atomic disorder at the plane | **intermixing built 7 Nov** (`NEMDSpec.intermix_layers`, KB §30): n (100) layers swapped in place to a linear Ge fraction, exact counts checked in LAMMPS (0.125/0.375/0.625/0.875 for n = 4); jobs mix2/mix4/mix8 on the r00 cell (`scripts/prepare_intermix.py`), ~1.4 h each, queue after the weekend set. Not yet: rough steps, dislocations | laptop |
 | S-10 | Gas in the gaps between asperities | every joint not in vacuum | rarefied gas conduction, accommodation | **done at the continuum level** (gap model, accommodation bands; MD accommodation He/Ni, Ar/Ni); air on Cu/Al open (P5-4) | laptop |
-| S-11 | Operating temperature range | 300–400 K in service, cryogenic for some | anharmonicity; quantum statistics below θ_D | everything so far at 300 K; quantum correction warned, not applied | laptop |
+| S-11 | Operating temperature range | 300–400 K in service, cryogenic for some | anharmonicity; quantum statistics below θ_D | everything so far at 300 K. **Quantum bracket built 7 Nov** (`md/quantum.py`, KB §31): an MD h_K below θ_D carries a heat-capacity band (Si/Ge 300 K: ×0.80–0.93, i.e. 485 → 389–449), reported as a bracket, never applied. Open: runs at 400 K | laptop |
 
 Order of work: S-5/S-6 (sweep done; arbitration after H-4) → S-9 → S-2 (8 nm) → S-11 (400 K on Si/Ge) →
 S-7 (water) → S-3 on GPU → S-8. S-4 is an estimate, not a simulation.

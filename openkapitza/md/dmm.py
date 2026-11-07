@@ -251,8 +251,13 @@ def quantum_check(
     flags: FlagSet,
     *,
     ratio_threshold: float = 0.5,
+    h_K_si: float | None = None,
 ) -> None:
     """Warn when T is low enough that classical MD would misrepresent C_V.
+
+    With both Debye temperatures known, the flag also carries the quantum
+    heat-capacity band (md/quantum.py, KB 31) as factors on a classical h_K,
+    and, when the h_K in use came from MD (`h_K_si`), the bracketed values.
 
     Below roughly half the Debye temperature a classical simulation populates
     high-frequency modes that are in reality frozen out, overestimating the
@@ -280,12 +285,24 @@ def quantum_check(
         return
 
     severity = Severity.WARNING if ratio > 0.25 else Severity.CRITICAL
+    band, extra = None, ""
+    if material_a.theta_debye is not None and material_b.theta_debye is not None:
+        from .quantum import quantum_band
+        band = quantum_band(T, material_a.theta_debye.si, material_b.theta_debye.si)
+        extra = (f" Weighting the crossing phonons by their quantum heat capacity "
+                 f"(Debye, cutoff between the two sides) scales a classical MD h_K "
+                 f"by {band[0]:.2f}-{band[1]:.2f}")
+        if h_K_si is not None:
+            extra += (f": the MD value in use, {h_K_si / 1e6:.0f} MW/m^2K, would be "
+                      f"{band[0] * h_K_si / 1e6:.0f}-{band[1] * h_K_si / 1e6:.0f}")
+        extra += " (a bracket, not a correction)."
     flags.add(
         Code.QUANTUM_EFFECTS,
         severity,
         f"T = {T:.0f} K is {ratio:.2f} of the Debye temperature of "
         f"'{mat.key}' ({mat.theta_debye.to('K'):.0f} K). Classical MD will "
-        f"overpopulate high-frequency modes and overestimate the heat capacity.",
+        f"overpopulate high-frequency modes and overestimate the heat capacity."
+        + extra,
         remedy=(
             "Report the uncorrected value as the primary result. A quantum "
             "correction can be computed as a bracket, but the standard "
@@ -294,6 +311,7 @@ def quantum_check(
             "into the answer."
         ),
         T_over_theta=ratio,
+        quantum_band=band,
     )
 
 
