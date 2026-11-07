@@ -23,3 +23,6 @@ scratch/
 
 # test fixtures keep their LAMMPS logs (measure_kapitza reads the relaxed box from them)
 !tests/data/**/log.lammps
+
+# LAMMPS stage checkpoints (md/checkpoint.py)
+stage.*.bin

@@ -205,11 +205,11 @@ class JobLoop(unittest.TestCase):
             self.assertIn("-in resume.in -log none", _resume_script(s).read_text())
 
 
-LMP = os.environ.get("OPENKAPITZA_TEST_LMP")
-POT = os.environ.get("OPENKAPITZA_TEST_POTENTIALS")
+LMP = os.environ.get("OPENKAPITZA_TEST_LMP") or os.environ.get("OPENKAPITZA_LMP")
+POT = os.environ.get("OPENKAPITZA_TEST_POTENTIALS") or os.environ.get("OPENKAPITZA_POTENTIALS")
 
 
-@unittest.skipUnless(LMP and POT, "set OPENKAPITZA_TEST_LMP and OPENKAPITZA_TEST_POTENTIALS")
+@unittest.skipUnless(LMP and POT, "set OPENKAPITZA_LMP and OPENKAPITZA_POTENTIALS")
 class EndToEnd(unittest.TestCase):
     """Real LAMMPS: kill a Si/Ge run after its mid-production checkpoint, resume, measure.
     About two minutes on one core."""

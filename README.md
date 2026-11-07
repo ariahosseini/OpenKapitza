@@ -21,9 +21,12 @@ and every caveat a stable flag code.
 ## Quick start
 
 ```bash
-pip install -e .                          # Python >= 3.9; needs pyyaml, numpy
+pip install -e .                          # Python >= 3.10; needs pyyaml, numpy
 python -m openkapitza.agent               # guided: asks for the joint, explains the answer
 ```
+
+Full setup, including a virtual environment and LAMMPS for the MD side
+(macOS script, Linux, cluster): [`docs/install.md`](docs/install.md).
 
 Or describe the joint to Claude (or any MCP client) in your own words; the
 model fills in the inputs and OpenKapitza does every calculation and check:
@@ -341,6 +344,7 @@ measures finished runs into the joint automatically.
 
 | file | what it is |
 |---|---|
+| [`docs/install.md`](docs/install.md) | installing the package and LAMMPS (macOS, Linux, cluster); troubleshooting |
 | [`docs/agent-guide.md`](docs/agent-guide.md) | using the agent: conversation, files, sweeps, the MD loop, `lookup`, reading the answer |
 | [`docs/open-issues.md`](docs/open-issues.md) | every open item, what closes it, the cluster run list |
 | [`docs/knowledge-base.md`](docs/knowledge-base.md) | every defect hit, in Symptom / Cause / Fix / Verify form; literature surveys (§7–§12) |

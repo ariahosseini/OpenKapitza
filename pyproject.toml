@@ -10,7 +10,7 @@ readme = "README.md"
 # 3.9 is the verified floor: the full suite passes on CPython 3.9.6
 # (macOS/arm64). Every module uses `from __future__ import annotations`, so
 # PEP 604 unions in annotations are strings and never evaluated.
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }   # full text: LICENSE
 authors = [{ name = "Aria Hosseini" }]
 keywords = [
@@ -35,6 +35,11 @@ dependencies = ["pyyaml>=6.0", "numpy>=1.24"]
 dev = ["pytest>=8.0"]
 # the LLM front end (python -m openkapitza.agent.mcp_server)
 mcp = ["mcp>=2.0"]
+# sweep plots and the README figures
+plots = ["matplotlib>=3.7"]
+# importing measured interface data from .xlsx (md/measured.py)
+xlsx = ["openpyxl>=3.1"]
+all = ["mcp>=2.0", "matplotlib>=3.7", "openpyxl>=3.1"]
 
 [tool.setuptools.packages.find]
 include = ["openkapitza*"]
