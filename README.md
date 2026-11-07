@@ -345,6 +345,7 @@ measures finished runs into the joint automatically.
 
 | file | what it is |
 |---|---|
+| [`CHANGELOG.md`](CHANGELOG.md) | notable changes, newest first |
 | [`docs/install.md`](docs/install.md) | installing the package and LAMMPS (macOS, Linux, cluster); troubleshooting |
 | [`docs/tutorial.md`](docs/tutorial.md) | five steps from a first joint to running MD, with real outputs |
 | [`docs/agent-guide.md`](docs/agent-guide.md) | using the agent: conversation, files, sweeps, the MD loop, `lookup`, reading the answer |
