@@ -33,7 +33,6 @@ and `git log`.
 - **Builds:** the macOS LAMMPS script adds RIGID, TALLY, ML-SNAP, ML-IAP and
   ML-PACE; the runbook has a KOKKOS-CUDA build for MACE, DeePMD and
   NequIP/Allegro. Local jobs keep the Mac awake.
-
 - **Potential gate:** phonon (VDOS) check and `scripts/gate_potential.py`
   running elastic + phonon (+ bulk k) for Tier-1 sets and Tier-2 models;
   Tier-2 MLIP plumbing (`md/mlip.py`, `scripts/prepare_mlip.py`) (KB §36, §37, §40).
