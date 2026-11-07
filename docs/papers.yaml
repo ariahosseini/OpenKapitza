@@ -750,3 +750,59 @@
     presumably a misprint.
   kb: ["29"]
 
+- key: mahammed2010
+  cite: M. A. Mahammed, K. M. S. Abdullah & M. A. Mohammed, "Thermal joint resistance of solid material as a function of pressure and roughness", 7th Int. Conf. Heat Transfer, Fluid Mechanics and Thermodynamics (HEFAT), 2010
+  url: https://repository.up.ac.za/handle/2263/49911
+  status: needed
+  topics: [aluminium, brass, air, nonconforming, flatness, validation data]
+  needed_for: P0-2 (Al joints in air with characterised surfaces)
+  findings: >
+    Abstract only: aluminium and brass, nonconforming rough surfaces, air at
+    1 atm; roughness, slope, out-of-flatness and hardness measured; data
+    said to be tabulated. No full text reachable from here (the repository
+    page has no file link). Worth obtaining: it is the only lead found so far
+    with Al in air AND characterised surfaces.
+
+- key: merrill2011
+  cite: C. T. Merrill & S. V. Garimella, "Measurements and Prediction of Thermal Contact Resistance Across Coated Joints", Purdue CTRC, 2011
+  url: https://core.ac.uk/download/77947104.pdf
+  status: partial
+  topics: [copper, aluminium, coatings, validation data]
+  findings: >
+    Al, Cu and brass substrates with 1-5 um Ag/Ni/Sn coatings, 0.5-5 MPa;
+    roughness, slope and microhardness tabulated (their Tables 3, 6), but the
+    measured resistances appear only in plots and the test atmosphere is not
+    stated. Not usable for P0-2 as it stands.
+
+- key: fuller2001
+  cite: J. J. Fuller & E. E. Marotta, "Thermal Contact Conductance of Metal/Polymer Joints: An Analytical and Experimental Investigation", J. Thermophys. Heat Transfer 15(2), 2001
+  status: needed
+  topics: [polymer, elastic contact, Mikic elastic model, validation data]
+  needed_for: P0-4 (a measured check of the elastic branch)
+  findings: >
+    Polymers against metal deform elastically at the asperities, so this is
+    the natural test of the Mikic elastic branch, which no benchmark specimen
+    reaches (8 of 9 are plastic). Not read; obtain and check whether
+    specimen sigma, m, E and h(P) are tabulated.
+
+- key: bahrami2006polymer
+  cite: M. Bahrami, M. M. Yovanovich & E. E. Marotta, "Thermal Joint Resistance of Polymer-Metal Rough Interfaces", J. Electron. Packag. 128, 2006
+  status: needed
+  topics: [polymer, elastic contact, validation data, compilation]
+  needed_for: P0-4
+  findings: >
+    Located, not read (the hosting link is not reachable from here). A
+    compilation of polymer-metal data against an elastic contact model;
+    the likeliest single source of elastic-regime points.
+
+- key: mckinzie1971
+  cite: D. J. McKinzie, "Effect of Plastic Set on Thermal Conductance at Light Loading", NASA TM X-2385, 1971
+  url: https://ntrs.nasa.gov/api/citations/19710026885/downloads/19710026885.pdf
+  status: partial
+  topics: [elastic contact, light load, plastic set, Armco iron, vacuum]
+  findings: >
+    Polished Armco iron (0.01-0.1 um) in vacuum, 0.45-3.4 MPa: the first
+    loading follows the elastic trend, later loadings fall below it because
+    the surfaces take a plastic set. Plots only. Lesson for P0-4: an elastic
+    check needs FIRST-loading data, or the unloading model (P0-10) enters.
+
