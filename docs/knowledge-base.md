@@ -3765,3 +3765,27 @@ forms. **Before trusting its h_K:** check the relaxed interface's
 coordination (`structure/analysis.py`) and, if it is still a disordered
 seam, add an anneal (e.g. 600–800 K) before equilibration.
 
+## 35. Gas-layer mobility diagnostic (the He question, 7 Nov 2026)
+
+**Why.** Candidate 1 for the He anomaly (§26) is a light, mobile layer: a
+2-D fluid rather than an adsorbed solid. The mass-swap run tests it
+indirectly; this measures the mobility directly.
+
+**What.** When a cell has a gas layer (`NEMDSpec.gas_type`, set to 3 by
+`structure/nonbonded.py`), production records the layer's mean-square
+displacement (`compute msd com yes`, unwrapped, centre-of-mass drift
+removed) every profile interval to `gas_msd.dat`. `measure_kapitza`
+reports `gas`: the in-plane diffusion coefficient D_xy from the slope of
+the late half (MSD_xy = 4 D t) and the normal rms amplitude z_rms. A liquid
+is ~10⁻⁹ m²/s; an adsorbed solid has a flat in-plane MSD.
+
+**Plumbing check** (He and Ar layers, 1 GPa, 5 ps production, serial):
+in-plane MSD after 5 ps 3.6 Å² for He and 2.3 Å² for Ar; z_rms 0.65 and
+0.39 Å. Five picoseconds only shows cage rattling, not diffusion; the
+slopes it gives (1.4 and 0.5 × 10⁻⁹ m²/s) are not diffusion coefficients.
+The 1 ns runs will tell.
+
+**Weekend set.** The five gas-layer jobs had not started, so the same four
+lines were added to their `nemd.in` on the Mac (originals kept as
+`nemd.in.before-gasmsd`); nothing else in those decks changed.
+

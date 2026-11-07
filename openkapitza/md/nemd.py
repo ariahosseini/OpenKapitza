@@ -410,6 +410,11 @@ class NEMDSpec:
     # style (structure/nonbonded.py). Meaningless across a many-body (Tersoff)
     # bond, so it is refused for the bonded cell. Writes interface_flux.dat.
     interface_tally: bool = False
+    # Atom type of a physisorbed gas layer (structure/nonbonded.py sets 3).
+    # Production then records the layer's mean-square displacement to
+    # gas_msd.dat: in-plane diffusion tells a mobile 2-D fluid from an
+    # adsorbed solid (the He question, KB 26, 35).
+    gas_type: int | None = None
     # Intermixed interface (open issue S-9, KB 30): the n (100) atomic layers
     # nearest the plane, n/2 on each side, get a linear Ge fraction from
     # (0.5/n) to (1 - 0.5/n) by swapping atom types in place (`set type/ratio`,
@@ -598,7 +603,7 @@ compute         layers gmobile chunk/atom bin/1d z lower {bin_width:.4f} units b
 fix             profile gmobile ave/chunk {profile_every} {n_profile_samples} \
 {profile_window} layers temp file temperature_profile.dat
 {ttm_production}
-{tally_block}{reservoir_vars}
+{tally_block}{gas_block}{reservoir_vars}
 variable        tnow  equal time
 fix             energy all print {profile_every} "${{tnow}} ${{ehot}} ${{ecold}}" \
 file reservoir_energy.dat screen no title "# time[ps] E_hot[eV] E_cold[eV]"
@@ -1186,6 +1191,22 @@ def _tally_block(spec: NEMDSpec) -> str:
         f"file {TALLY_FILE}\n")
 
 
+GAS_MSD_FILE = "gas_msd.dat"
+
+
+def _gas_block(spec: NEMDSpec) -> str:
+    """Production lines recording the gas layer's mean-square displacement."""
+    if not spec.gas_type:
+        return ""
+    return (
+        "# Gas-layer mobility: mean-square displacement from the start of\n"
+        "# production (unwrapped; centre-of-mass drift removed), in A^2.\n"
+        f"group           ggas type {spec.gas_type}\n"
+        "compute         gmsd ggas msd com yes\n"
+        f"fix             gasmsd all ave/time {spec.profile_every} 1 {spec.profile_every} "
+        f"c_gmsd[1] c_gmsd[2] c_gmsd[3] file {GAS_MSD_FILE}\n")
+
+
 def profile_window(spec: NEMDSpec) -> int:
     """Steps per temperature-profile frame (Nfreq of the production ave/chunk)."""
     return max(spec.profile_every,
@@ -1379,6 +1400,7 @@ def _build_input_deck_raw(spec: NEMDSpec) -> str:
         ttm_block=_ttm_block(spec, window),
         ttm_production=_ttm_production(spec, window, n_samples),
         tally_block=_tally_block(spec),
+        gas_block=_gas_block(spec),
     )
 
 

@@ -248,3 +248,29 @@ class Steps(unittest.TestCase):
         s.intermix_layers = 2
         with self.assertRaises(ValueError):
             build_input_deck(s)
+
+
+class GasMobility(unittest.TestCase):
+    def test_deck_records_the_gas_msd(self):
+        d = build_input_deck(nb_spec(flux_mode="ehex", imposed_flux=1e9))
+        self.assertIn("compute         gmsd ggas msd com yes", d)
+        self.assertIn("file gas_msd.dat", d)
+        self.assertEqual(validate_deck(d), [])
+        from openkapitza.structure.nonbonded import NonbondedSpec, make_spec
+        from prepare_weekend import nb_base
+        b = nb_base()
+        b.flux_mode, b.imposed_flux = "ehex", 1e9
+        bare = make_spec(b, NonbondedSpec())
+        self.assertNotIn("gmsd", build_input_deck(bare))
+
+    def test_parse_gives_the_2d_diffusion_coefficient(self):
+        from openkapitza.md.measure import parse_gas_msd
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "gas_msd.dat"
+            # MSD_x = MSD_y = 2 D t with D = 1e-9 m^2/s = 0.1 A^2/ps; dt = 1 fs
+            rows = "".join(f"{s} {0.2 * s / 1000} {0.2 * s / 1000} 0.25\n"
+                           for s in range(100, 10001, 100))
+            p.write_text("# t\n# c\n" + rows)
+            g = parse_gas_msd(p, 1.0)
+        self.assertAlmostEqual(g["D_xy_m2_s"], 1e-9, delta=1e-12)
+        self.assertAlmostEqual(g["z_rms_A"], 0.5)

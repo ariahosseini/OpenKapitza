@@ -56,6 +56,10 @@ class KapitzaMeasurement:
     # {"q_into_b", "q_into_bs"} W/m^2 with "_se" block errors, and the h_K each
     # gives with the same jump ("h_into_b", "h_into_bs"). None otherwise.
     tally: dict | None = None
+    # Gas-layer mobility (gas_msd.dat), when recorded: in-plane diffusion
+    # coefficient D_xy (m^2/s) from the late-time slope, and the normal
+    # rms displacement z_rms (A). None otherwise.
+    gas: dict | None = None
 
     @property
     def relative_uncertainty(self) -> float:
@@ -144,6 +148,31 @@ def parse_interface_tally(path: Path, area_m2: float, n_blocks: int = 8) -> dict
         out[name + "_se"] = float(blocks.std(ddof=1) / math.sqrt(nb)) if nb > 1 else None
     out["rows"] = len(rows)
     return out
+
+
+def parse_gas_msd(path: Path, timestep_fs: float) -> dict | None:
+    """In-plane diffusion and normal amplitude of a gas layer from gas_msd.dat."""
+    if not path.is_file():
+        return None
+    rows = []
+    for ln in path.read_text(errors="replace").splitlines():
+        p = ln.split()
+        if not p or p[0].startswith("#"):
+            continue
+        try:
+            rows.append([float(x) for x in p[:4]])
+        except ValueError:
+            continue
+    if len(rows) < 4:
+        return None
+    a = np.asarray(rows)
+    t_ps = a[:, 0] * timestep_fs * 1e-3
+    xy = a[:, 1] + a[:, 2]
+    late = t_ps >= t_ps[len(t_ps) // 2]                 # skip the ballistic start
+    slope = float(np.polyfit(t_ps[late], xy[late], 1)[0])        # A^2/ps
+    return {"D_xy_m2_s": max(slope, 0.0) / 4.0 * 1e-8,           # A^2/ps -> m^2/s
+            "z_rms_A": float(math.sqrt(max(a[late, 3].mean(), 0.0))),
+            "msd_xy_end_A2": float(xy[-1]), "t_ps": float(t_ps[-1])}
 
 
 def check_relax_settle(log: Path, spec: NEMDSpec, flags: FlagSet) -> dict | None:
@@ -361,5 +390,6 @@ def measure_kapitza(run_dir: Path | str, spec: NEMDSpec, flags: FlagSet, *,
     if tally is not None and flux:
         for name in ("q_into_b", "q_into_bs"):
             tally["h_" + name[2:]] = h * tally[name] / flux
+    gas = parse_gas_msd(wd / "gas_msd.dat", spec.timestep_fs)
     return KapitzaMeasurement(extraction, h, uncertainty, fit_se, block_se,
-                              per_dT, per_q, flux, drifts, tally)
+                              per_dT, per_q, flux, drifts, tally, gas)

@@ -384,9 +384,9 @@ def prepare_resume(wd: Path | str, spec, deck_name: str = "nemd.in") -> int | st
     prof = wd / "temperature_profile.dat"
     if prof.is_file():
         truncate_profile(prof, step)
-    tally = wd / "interface_flux.dat"          # rows are keyed by timestep
-    if tally.is_file():
-        truncate_energy(tally, step, 1.0)
+    for name in ("interface_flux.dat", "gas_msd.dat"):     # rows keyed by timestep
+        if (wd / name).is_file():
+            truncate_energy(wd / name, step, 1.0)
     for f in ("job.done",):
         (wd / f).unlink(missing_ok=True)
     (wd / RESUME_DECK).write_text(deck)

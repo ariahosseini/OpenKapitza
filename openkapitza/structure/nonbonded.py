@@ -161,7 +161,8 @@ def build_data(spec, nb: NonbondedSpec, headroom_ang: float = 5.0) -> tuple[str,
 def make_spec(base, nb: NonbondedSpec):
     """The NEMD spec for this cell: read_data, hybrid pair section."""
     s = replace(base, structure_mode="read_data", data_file="interface.data",
-                pair_block=pair_block(base, nb), types_a=(1,), types_b=(2,))
+                pair_block=pair_block(base, nb), types_a=(1,), types_b=(2,),
+                gas_type=3 if nb.gas else None)
     s.extra = dict(base.extra, nonbonded={"lj_scale": nb.lj_scale, "gas": nb.gas,
                                           "coverage": nb.coverage,
                                           "plane_gap_ang": nb.plane_gap_ang,

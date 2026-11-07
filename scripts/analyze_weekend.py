@@ -74,6 +74,8 @@ def measure(wd: Path) -> dict:
         out["tally"] = {k: (v / 1e9 if k.startswith("q_") and v is not None else v)
                         for k, v in t.items() if k != "rows"}
         out["tally"].update({k: t[k] / 1e6 for k in ("h_into_b", "h_into_bs") if k in t})
+    if m.gas:
+        out["gas"] = m.gas
     return out
 
 
@@ -136,6 +138,11 @@ def render(d: dict) -> str:
             out.append(f"{'':20}   tally: q_A-face {t['q_into_b']:.2f} +/- "
                        f"{t['q_into_b_se'] or 0:.2f} GW/m2 (h {t.get('h_into_b', 0):.0f}), "
                        f"q_B-face {t['q_into_bs']:.2f} +/- {t['q_into_bs_se'] or 0:.2f}")
+        if "gas" in r:
+            g = r["gas"]
+            out.append(f"{'':20}   gas layer: D_xy {g['D_xy_m2_s']:.2e} m2/s, z_rms "
+                       f"{g['z_rms_A']:.2f} A, in-plane MSD {g['msd_xy_end_A2']:.1f} A2 "
+                       f"after {g['t_ps']:.0f} ps")
     for name, why in d["missing"].items():
         out.append(f"{name:20} -- {why}")
     for group, rows in d["comparisons"].items():
