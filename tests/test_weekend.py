@@ -222,3 +222,29 @@ class Intermix(unittest.TestCase):
         self.assertIn("group           gside_a union geo_a", d)
         self.assertNotIn("group           gside_a type 1", d)
         self.assertNotIn("type/ratio", build_input_deck(self.spec(0)))
+
+
+class Steps(unittest.TestCase):
+    def spec(self, steps):
+        from plan_campaign import PRESETS, base_spec
+        s = base_spec(PRESETS["sige"])
+        s.interface_steps = steps
+        return s
+
+    def test_regions_cover_both_terraces_and_wrap(self):
+        d = build_input_deck(self.spec((4, 2)))
+        self.assertEqual(validate_deck(d), [])
+        self.assertIn("region          side_a union 5 sa0l sa0h sa1l sa1h sa1w", d)
+        self.assertIn("region          sa1w block INF 0.6789", d)
+        z_if = self.spec((4, 2)).geometry.interface_z * 1e10
+        self.assertIn(f"INF INF INF {z_if + 4 * 5.431 / 4:.4f} units box", d)
+        flat = build_input_deck(self.spec(None))
+        self.assertIn("region          side_a block INF INF INF INF INF", flat)
+
+    def test_periods_must_tile_the_width(self):
+        with self.assertRaises(ValueError):
+            build_input_deck(self.spec((4, 3)))           # 8 cells, 3 periods
+        s = self.spec((4, 2))
+        s.intermix_layers = 2
+        with self.assertRaises(ValueError):
+            build_input_deck(s)

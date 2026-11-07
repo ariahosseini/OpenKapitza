@@ -3645,7 +3645,7 @@ Checked in LAMMPS (small cell, n = 4): relaxed layer compositions 0.125,
 0.375, 0.625, 0.875 Ge, 32 atoms each, pure beyond; the relaxed-position
 print finds the plane between the 0.375 and 0.625 layers.
 
-**Jobs** (`scripts/prepare_intermix.py`): mix2, mix4, mix8 on the r00 cell
+**Jobs** (`scripts/prepare_disorder.py`, renamed with §33): mix2, mix4, mix8 on the r00 cell
 (16 nm per side, 4.3 nm, Langevin 0.1 ps, 35,060 atoms, 0.75 Mstep, ~1.4 h
 each on the M3 Pro). Compare with r00 (483 ± 20). They share r00's −4 %
 Ge strain; if the weekend shows strain matters, repeat on the rescaled-Ge
@@ -3707,4 +3707,31 @@ kill; resumed from `stage.steady.bin` and, separately, from
 `stage.equilibrated.bin`; both finished with `OPENKAPITZA_DONE`, wrote all
 profile frames, and the log still parses (relaxed positions and box from
 the first run, production from the resume). Cost: two restart files per job.
+
+## 33. Stepped Si/Ge interface (S-9, 7 Nov 2026)
+
+**What.** `NEMDSpec.interface_steps = (height_layers, periods)`: the plane is
+a square wave along x. In half of each period side A ends `height` (100)
+layers higher (`height × a/4`). Built single-lattice cells only, and not
+combined with intermixing. h_K stays **per projected area** (the cell's
+cross-section), so a rougher plane can read higher simply because the real
+interface area is larger; that is the quantity the contact model needs.
+
+**Construction.** Each side is a union of block regions, two per period.
+The x boundaries sit a/8 off the atom columns (diamond columns are a/4
+apart): block regions are inclusive, and a boundary on a column would put
+those atoms in both sides. The last high terrace wraps across x = 0. The
+period count must divide the width into whole-cell terraces (8 cells: 1, 2
+or 4 periods).
+
+**Checked in LAMMPS** (small cell, 4 cells wide, height 4 layers, 2
+periods): 1,728 Si + 1,600 Ge, the same total as the flat cell; after
+relaxation the Si top is at 67.1 Å on the low terraces and 72.6 Å on the
+high ones, alternating every 5.4 Å as built; closest pair near the
+interface 2.21 Å (no overlaps). The relaxed-position print then reports
+top_a on the high terrace and bottom_b on the low one, so the plane used
+for the extrapolation is their mean, the mean plane of the step.
+
+**Jobs** (`scripts/prepare_disorder.py`): step4_p2 (0.54 nm high, 1.09 nm
+terraces) and step8_p1 (1.09 nm high, 2.17 nm terraces) on the r00 cell.
 

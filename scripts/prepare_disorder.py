@@ -1,14 +1,16 @@
-"""Write the intermixed Si/Ge interface jobs (open issue S-9, KB 30).
+"""Write the disordered Si/Ge interface jobs (open issue S-9, KB 30, 33).
 
-    python3 scripts/prepare_intermix.py ~/ok_jobs --potentials ~/lammps-openkapitza/potentials
+    python3 scripts/prepare_disorder.py ~/ok_jobs --potentials ~/lammps-openkapitza/potentials
 
 The campaign's base cell (16 nm per side, 4.3 nm, Tersoff, Langevin 0.1 ps;
 r00 = 483 +/- 20 MW/m^2K for the sharp interface) with the n (100) layers
 nearest the plane intermixed, a linear Ge fraction across them. Real Si/Ge
 interfaces are graded over a few layers; Green's-function work (Tian,
 Esfarjani & Chen 2012; Song & Chen) finds mixing can RAISE transmission,
-with a maximum near 4 mixed layers. Writes ROOT/intermix/mix<n>/ and adds
-them to ROOT/manifest.json; in the agent: 'jobs ROOT', 'submit intermix local'.
+with a maximum near 4 mixed layers. Also two STEPPED interfaces (a square
+wave in x: terraces of 4 or 8 (100) layers' height, 1 or 2 periods across
+the 4.3 nm cell). Writes ROOT/disorder/<case>/ and adds them to
+ROOT/manifest.json; in the agent: 'jobs ROOT', 'submit disorder local'.
 """
 
 from __future__ import annotations
@@ -25,13 +27,17 @@ sys.path[:0] = [str(REPO), str(REPO / "scripts")]
 from openkapitza.md.campaign import write_spec                 # noqa: E402
 from openkapitza.md.nemd import build_input_deck, relax_steps   # noqa: E402
 
-LAYERS = (2, 4, 8)
+CASES = {"mix2": dict(intermix_layers=2), "mix4": dict(intermix_layers=4),
+         "mix8": dict(intermix_layers=8),
+         "step4_p2": dict(interface_steps=(4, 2)),      # 0.54 nm high, 1.09 nm terraces
+         "step8_p1": dict(interface_steps=(8, 1))}      # 1.09 nm high, 2.17 nm terraces
 
 
-def spec_for(n: int):
+def spec_for(case: str):
     from plan_campaign import PRESETS, base_spec
     s = base_spec(PRESETS["sige"])
-    s.intermix_layers = n
+    for k, v in CASES[case].items():
+        setattr(s, k, v)
     return s
 
 
@@ -40,30 +46,32 @@ def main(argv=None) -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", type=Path)
     ap.add_argument("--potentials", type=Path, required=True)
-    ap.add_argument("--layers", type=int, nargs="*", default=list(LAYERS))
+    ap.add_argument("--only", nargs="*", help="case names (default: all)")
     a = ap.parse_args(argv)
     root = a.root.expanduser()
     jobs = []
-    for n in a.layers:
-        s = spec_for(n)
-        wd = root / "intermix" / f"mix{n}"
+    for name in CASES:
+        if a.only and name not in a.only:
+            continue
+        s = spec_for(name)
+        wd = root / "disorder" / name
         if wd.exists():
             shutil.rmtree(wd)
         wd.mkdir(parents=True)
         (wd / "nemd.in").write_text(build_input_deck(s))
-        write_spec(wd, s, "nemd", note=f"Si/Ge, {n} intermixed (100) layers")
+        write_spec(wd, s, "nemd", note=f"Si/Ge disordered interface: {CASES[name]}")
         shutil.copy(a.potentials.expanduser() / s.pair_file, wd)
         steps = relax_steps(s) + s.equilibrate_steps + s.steady_steps + s.production_steps
         atoms = s.geometry.estimate_atoms(4.99e28, 4.99e28)
-        jobs.append({"name": f"intermix/mix{n}", "atoms": int(atoms), "steps": steps})
-        print(f"mix{n:<3} {int(atoms):7,} atoms  {steps / 1e6:.2f} Msteps")
+        jobs.append({"name": f"disorder/{name}", "atoms": int(atoms), "steps": steps})
+        print(f"{name:9} {int(atoms):7,} atoms  {steps / 1e6:.2f} Msteps")
     man = root / "manifest.json"
     data = json.loads(man.read_text()) if man.is_file() else {"jobs": []}
     names = {j["name"] for j in jobs}
     data["jobs"] = [j for j in data.get("jobs", []) if j["name"] not in names] + jobs
     man.write_text(json.dumps(data, indent=2))
-    print(f"\n{len(jobs)} jobs under {root / 'intermix'}; in the agent: jobs {root}, "
-          f"then submit intermix local")
+    print(f"\n{len(jobs)} jobs under {root / 'disorder'}; in the agent: jobs {root}, "
+          f"then submit disorder local")
     return 0
 
 

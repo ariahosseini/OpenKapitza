@@ -417,6 +417,11 @@ class NEMDSpec:
     # geometrically before the swap. Built cells only; 0 = sharp.
     intermix_layers: int = 0
     intermix_seed: int = 4242
+    # Stepped interface (S-9, KB 33): (height in (100) layers, periods across
+    # x). The plane is a square wave in x: in half of each period side A ends
+    # `height` layers higher. Built cells only; h_K stays per projected area,
+    # and the relaxed plane is found at the mean of the two terraces.
+    interface_steps: tuple[int, int] | None = None
     # Equilibrate side A at T + presplit/2 and side B at T - presplit/2 instead
     # of both at T. For a resistive interface nearly all of the drive drops at
     # the plane, so this starts the run close to its steady state and skips a
@@ -640,12 +645,15 @@ lattice         diamond {lattice_ang:.6f}
 region          simbox block 0.0 {cross_ang:.4f} 0.0 {cross_ang:.4f} \
                 0.0 {box_z_ang:.4f} units box
 create_box      2 simbox
-region          side_a block INF INF INF INF INF {interface_ang:.4f} units box
-region          side_b block INF INF INF INF {interface_ang:.4f} {nz_ang:.4f} units box
-create_atoms    1 region side_a
+{side_regions}create_atoms    1 region side_a
 create_atoms    2 region side_b
 mass            1 {mass_a:.4f}
 mass            2 {mass_b:.4f}
+"""
+
+SIDE_REGIONS_FLAT = """\
+region          side_a block INF INF INF INF INF {interface_ang:.4f} units box
+region          side_b block INF INF INF INF {interface_ang:.4f} {nz_ang:.4f} units box
 """
 
 # Heterostructure: each side on its own lattice. Laterally each is scaled to
@@ -1086,6 +1094,49 @@ def intermix_layers_plan(spec: NEMDSpec) -> list[tuple[float, int, float]]:
     return out
 
 
+def _side_regions(spec: NEMDSpec) -> str:
+    """Region definitions of the two sides: flat, or a square-wave step."""
+    g = spec.geometry
+    z_if = g.interface_z * M_TO_ANG
+    nz = g.total_length * M_TO_ANG
+    if not spec.interface_steps:
+        return SIDE_REGIONS_FLAT.format(interface_ang=z_if, nz_ang=nz)
+    if spec.intermix_layers:
+        raise ValueError("interface_steps and intermix_layers are not combined")
+    h_layers, periods = spec.interface_steps
+    d = spec.lattice_used * M_TO_ANG / 4.0
+    h = h_layers * d
+    W = spec.snapped_cross_section * M_TO_ANG
+    cells = round(W / (spec.lattice_used * M_TO_ANG))
+    if periods < 1 or cells % (2 * periods):
+        raise ValueError(f"{periods} step periods do not divide the {cells}-cell width "
+                         f"into whole-cell terraces")
+    P = W / periods
+    # Boundaries sit an eighth of a cell off the atom columns (diamond columns
+    # are a/4 apart along x): a block region is inclusive, so a boundary ON a
+    # column would put those atoms in both sides. The last high terrace wraps
+    # across x = 0.
+    off = spec.lattice_used * M_TO_ANG / 8.0
+    a_parts, b_parts = [], []
+    lines = [f"# Stepped interface: {periods} period(s) of {P:.3f} A along x; side A is",
+             f"# {h_layers} (100) layers ({h:.3f} A) higher on half of each period (KB 33)."]
+    for k in range(periods):
+        x0, xm = k * P + off, k * P + P / 2 + off
+        x1 = "INF" if k == periods - 1 else f"{(k + 1) * P + off:.4f}"
+        segs = [("l", f"{x0:.4f}", f"{xm:.4f}", z_if), ("h", f"{xm:.4f}", x1, z_if + h)]
+        if k == periods - 1:
+            segs.append(("w", "INF", f"{off:.4f}", z_if + h))
+        for tag, lo, hi, z in segs:
+            lines += [f"region          sa{k}{tag} block {lo} {hi} INF INF INF {z:.4f} units box",
+                      f"region          sb{k}{tag} block {lo} {hi} INF INF {z:.4f} {nz:.4f} "
+                      f"units box"]
+            a_parts.append(f"sa{k}{tag}")
+            b_parts.append(f"sb{k}{tag}")
+    lines += [f"region          side_a union {len(a_parts)} {' '.join(a_parts)}",
+              f"region          side_b union {len(b_parts)} {' '.join(b_parts)}"]
+    return "\n".join(lines) + "\n"
+
+
 def _intermix_block(spec: NEMDSpec) -> str:
     plan = intermix_layers_plan(spec)
     if not plan:
@@ -1220,6 +1271,7 @@ def _build_input_deck_raw(spec: NEMDSpec) -> str:
         a_ang = spec.lattice_used * M_TO_ANG
         sa, sb = spec.lattice_strain
         structure_block = BUILD_BLOCK.format(
+            side_regions=_side_regions(spec),
             lattice_ang=a_ang,
             cross_ang=spec.snapped_cross_section * M_TO_ANG,
             nz_ang=g.total_length * M_TO_ANG,
