@@ -3930,3 +3930,27 @@ poll would race the temporary folder's cleanup). Jobs submitted before this
 change keep their old wrappers; the running weekend queue still needs
 `watch`.
 
+## 40. The potential gate in one command (7 Nov 2026)
+
+**What.** `scripts/gate_potential.py`: elastic constants (§3 gate,
+`md/elastic.py`), phonons (§37) and, with `--with-k`, bulk k (hours; reported,
+not passed or failed, since classical k below θ_D has no clean pass line),
+for a Tier-1 set (`--set sicge`) or a Tier-2 model YAML per element
+(`--model`, `md/mlip.cubic_spec_for`). `--write` sets the model's `gate:`
+block (pass only if every element passes) and keeps the numbers in
+`gate_detail:`; `md/mlip.check_model` then reads it before a run.
+
+**SiCGe.tersoff fails on both sides** (30 s for both crystals):
+- Si(D): elastic FAIL (C11 −14.0 %, C12 +18.0 %, C44 −13.3 %); phonons pass.
+- Ge: elastic pass (C11 +7.8 %, C12 −8.1 %); phonons FAIL (TA +33 %).
+The agent's Si/Ge route caveat now says this (planner `MD_ROUTES`).
+
+**The shipped Ge SNAP (Zuo et al. 2020) through the Tier-2 path** (`--quick`,
+216 atoms, 7 min serial): a0 +2.0 %, C11 −21 %, C12 −16 %, C44 −19 %; optical
+peak 6.5 THz (−28 %), TA 1.83 THz (−24 %): **fails**, and the verdicts were
+written into the model file as designed. The direction (too soft, lattice
+too large) is that of its PBE training data, but −28 % on the optical peak
+is more than PBE softening usually gives, so a full-length phonon run should
+confirm it before the potential is blamed; the quick run is a plumbing
+check.
+

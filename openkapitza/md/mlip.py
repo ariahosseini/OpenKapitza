@@ -158,3 +158,28 @@ def check_model(model: MLIPModel, el_a: str, el_b: str, flags: FlagSet, *,
                   f"in practice that needs a CUDA GPU, and an Apple GPU cannot run it.",
                   remedy="Submit to a GPU cluster (docs/cluster-runbook.md section 0b), or "
                          "use a CPU model (SNAP, ACE) for small tests.")
+
+
+# Crystals the gate builds for each element (lattice, a0 guess in A, mass).
+GATE_CRYSTALS = {"Si": ("diamond", 5.431, 28.0855), "Ge": ("diamond", 5.658, 72.63),
+                 "Al": ("fcc", 4.0495, 26.9815), "Cu": ("fcc", 3.6149, 63.546)}
+
+
+def cubic_spec_for(model: MLIPModel, element: str):
+    """The single-element crystal the gate runs this model on (md/elastic.CubicSpec)."""
+    from .elastic import CubicSpec
+    if element not in GATE_CRYSTALS:
+        raise ValueError(f"no gate crystal for {element!r}; one of {sorted(GATE_CRYSTALS)}")
+    lattice, a0, mass = GATE_CRYSTALS[element]
+    f = model.files
+    style, args = {
+        "snap": ("snap", f"{f[0]} {f[-1]} {element}"),
+        "pace": ("pace", f"{f[0]} {element}"),
+        "mace": (f"mliap unified {f[0]} 0", element),
+        "deepmd": (f"deepmd {f[0]}", element),
+        "nequip": ("nequip", f"{f[0]} {element}"),
+        "allegro": ("allegro", f"{f[0]} {element}"),
+    }[model.kind]
+    return CubicSpec(f"{element}({model.kind})", lattice, a0, mass, style, f[0], element,
+                     element, extra_files=tuple(f[1:]), coeff_args=args)
+

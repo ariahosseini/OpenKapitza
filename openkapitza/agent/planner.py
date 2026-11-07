@@ -24,8 +24,10 @@ MD_RECOMMENDED = 0.10
 MD_ROUTES: dict[frozenset, tuple[str, str, str, tuple[str, ...]]] = {
     frozenset({"Si", "Ge"}): (
         "caveat", "Tier 1: SiCGe.tersoff",
-        "fails the elastic gate and inverts the Si/Ge biaxial-stiffness ordering (P1-5); "
-        "results are reported with that stated. A gated Tier-2 MLIP fixes it (Phase 4).",
+        "fails the potential gate on both sides: Si's elastic constants (C11 -14 %, "
+        "C12 +18 %, inverting the Si/Ge biaxial-stiffness ordering, P1-5) and Ge's "
+        "phonons (TA peak +33 %, KB 37). Both, and the cell's -4 % Ge strain, push h_K "
+        "up; results are reported with that stated. A gated Tier-2 MLIP fixes it (Phase 4).",
         ("campaign", "sige_spot_stress", "sige_spot_strain", "sige_emd")),
     frozenset({"Si", "Al"}): (
         "ready", "Tier 1: AlSiMgCuFe.meam (MEAM, Jelinek)",

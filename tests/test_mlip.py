@@ -118,3 +118,42 @@ class Cost(unittest.TestCase):
             e = estimate_cost(35000, 750000, style, cores=5)
             self.assertEqual(e.potential, "mlip")
             self.assertGreater(e.wall_hours, 50 * t.wall_hours)
+
+
+class Gate(unittest.TestCase):
+    def test_cubic_spec_for_each_kind(self):
+        from openkapitza.md.mlip import cubic_spec_for
+        c = cubic_spec_for(MLIPModel("snap", ("g.snapcoeff", "g.snapparam"), ("Ge",)), "Ge")
+        self.assertEqual(c.pair_coeff(), "pair_coeff      * * g.snapcoeff g.snapparam Ge")
+        self.assertEqual(c.files, ("g.snapcoeff", "g.snapparam"))
+        m = cubic_spec_for(MLIPModel("mace", ("m.pt",), ("Si", "Ge")), "Si")
+        self.assertEqual((m.pair_style, m.pair_coeff()),
+                         ("mliap unified m.pt 0", "pair_coeff      * * Si"))
+        with self.assertRaises(ValueError):
+            cubic_spec_for(MLIPModel("pace", ("m.yace",), ("Xx",)), "Xx")
+
+    def test_write_sets_pass_only_if_every_element_passes(self):
+        import importlib.util
+        import yaml
+        p = REPO / "scripts" / "gate_potential.py"
+        sp = importlib.util.spec_from_file_location("gate_potential", p)
+        mod = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(mod)
+
+        def fake(lmp, crystal, potdir, ref, quick, with_k):
+            ok = ref == "Si"
+            return {"crystal": crystal.name,
+                    "elastic": {"pass": True, "a0_A": 5.4, "err_a0": 0.0, "err_c11": 0.01,
+                                "err_c12": 0.0, "err_c44": 0.0},
+                    "phonon_dos": {"pass": ok, "optical": 15.5, "ta": 4.5, "f_max": 16,
+                                   "err_optical": 0.0, "err_ta": 0.0}}
+        mod.gate_crystal = fake
+        with tempfile.TemporaryDirectory() as d:
+            m = Path(d) / "m.yaml"
+            m.write_text((REPO / "examples/mlip/sige_model_template.yaml").read_text())
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                mod.main(["--lmp", "lmp", "--model", str(m), "--model-dir", d,
+                          "--elements", "Si", "Ge", "--write"])
+            g = yaml.safe_load(m.read_text())["gate"]
+        self.assertEqual((g["elastic"], g["phonon_dos"]), ("pass", "fail"))
+        self.assertIn("phonons FAIL", out.getvalue())

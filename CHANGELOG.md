@@ -34,6 +34,13 @@ and `git log`.
   ML-PACE; the runbook has a KOKKOS-CUDA build for MACE, DeePMD and
   NequIP/Allegro. Local jobs keep the Mac awake.
 
+- **Potential gate:** phonon (VDOS) check and `scripts/gate_potential.py`
+  running elastic + phonon (+ bulk k) for Tier-1 sets and Tier-2 models;
+  Tier-2 MLIP plumbing (`md/mlip.py`, `scripts/prepare_mlip.py`) (KB §36, §37, §40).
+- **Self-advancing local queue:** a finishing job starts the next queued one;
+  events from unattended polls are kept until reported (KB §39).
+- Gas-layer mobility (MSD) recorded in production (KB §35).
+
 ### Changed
 - The gas-gap model is **no longer described as biased low near 1 atm**:
   the trend was a specimen confound (KB §29). The default is unchanged.
