@@ -3897,6 +3897,13 @@ frames) on both faces, against the reservoirs' mean 2.40: agreement within
 - the tally is a usable arbiter of q for pairwise-coupled interfaces after
   all. The eHEX and HEX runs carry it too.
 
+**arb_langevin_d0.5** (same cell, damping 0.5 ps): **h = 65.4 ± 2.4**,
+ratio to 0.1 ps 0.99 ± 0.06. Tally 2.36 ± 0.07 GW/m² against the
+reservoirs' 2.39 (agree within 1 %). **The Langevin damping time does not
+move h_K at this cell** (P1-17 for the non-bonded cell: answered), so the
+1.6× gap to HEX is not a short-damping artefact. Left: eHEX and HEX on the
+same cell, both with the tally (running next).
+
 **Operational lesson.** The queue only advances when the agent polls
 (`jobs` or `watch`); after `submit` nothing was polling, and the Mac sat
 idle from 13:25. Run `watch` after a multi-job `submit`.

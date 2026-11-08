@@ -1,0 +1,141 @@
+{
+ "results": {
+  "r00": {
+   "h": 483.27,
+   "err": 20.13,
+   "flux_mode": "langevin",
+   "damping_ps": 0.1,
+   "warn": [],
+   "note": "campaign r00"
+  },
+  "arb_langevin_d0.1": {
+   "h": 65.89940014327868,
+   "err": 3.4371784094121636,
+   "q_GW": 2.4012445819463415,
+   "flux_mode": "langevin",
+   "damping_ps": 0.1,
+   "warn": [
+    "NEMD_FLUX_INCONSISTENT"
+   ],
+   "T_start": 300.85393,
+   "T_end": 300.85393,
+   "tally": {
+    "q_into_b": 2.45250230553861,
+    "q_into_b_se": 0.09567403484474991,
+    "q_into_bs": 2.45250230553861,
+    "q_into_bs_se": 0.09567403484474991,
+    "h_into_b": 67.30610950676325,
+    "h_into_bs": 67.30610950676325
+   }
+  },
+  "arb_langevin_d0.5": {
+   "h": 65.42497508854987,
+   "err": 2.3911036641576016,
+   "q_GW": 2.3880520745544547,
+   "flux_mode": "langevin",
+   "damping_ps": 0.5,
+   "warn": [
+    "NEMD_FLUX_INCONSISTENT"
+   ],
+   "T_start": 299.63308,
+   "T_end": 299.63308,
+   "tally": {
+    "q_into_b": 2.3602416683800587,
+    "q_into_b_se": 0.07427528819441716,
+    "q_into_bs": 2.3602416683800587,
+    "q_into_bs_se": 0.07427528819441716,
+    "h_into_b": 64.66305906898327,
+    "h_into_bs": 64.66305906898327
+   }
+  }
+ },
+ "missing": {},
+ "comparisons": {
+  "A. drives (LJ x1, 1 GPa)": [
+   {
+    "label": "Langevin 0.5 ps / 0.1 ps",
+    "a": "arb_langevin_d0.5",
+    "b": "arb_langevin_d0.1",
+    "ratio": 0.9928007682361704,
+    "err": 0.06322944833195533,
+    "verdict": "same within 2 sigma (-0.1)"
+   },
+   {
+    "label": "eHEX / Langevin 0.1 ps",
+    "a": "arb_ehex",
+    "b": "arb_langevin_d0.1",
+    "ratio": null,
+    "verdict": "waiting for arb_ehex"
+   },
+   {
+    "label": "eHEX / Langevin 0.5 ps",
+    "a": "arb_ehex",
+    "b": "arb_langevin_d0.5",
+    "ratio": null,
+    "verdict": "waiting for arb_ehex"
+   },
+   {
+    "label": "HEX / eHEX",
+    "a": "arb_hex",
+    "b": "arb_ehex",
+    "ratio": null,
+    "verdict": "waiting for arb_hex, arb_ehex"
+   }
+  ],
+  "B. strain (bonded Si/Ge, 16 nm)": [
+   {
+    "label": "Ge rescaled to a_Si / strained (r00)",
+    "a": "sige_ge_rescaled",
+    "b": "r00",
+    "ratio": null,
+    "verdict": "waiting for sige_ge_rescaled"
+   }
+  ],
+  "C. damping (bonded Si/Ge, 16 nm)": [
+   {
+    "label": "0.5 ps / 0.1 ps (r00)",
+    "a": "sige_damp0.5",
+    "b": "r00",
+    "ratio": null,
+    "verdict": "waiting for sige_damp0.5"
+   },
+   {
+    "label": "1.0 ps / 0.1 ps (r00)",
+    "a": "sige_damp1.0",
+    "b": "r00",
+    "ratio": null,
+    "verdict": "waiting for sige_damp1.0"
+   }
+  ],
+  "D. He anomaly (gas layer, 1 GPa, eHEX)": [
+   {
+    "label": "He layer / Ar layer",
+    "a": "he_ehex",
+    "b": "ar_ehex",
+    "ratio": null,
+    "verdict": "waiting for he_ehex, ar_ehex"
+   },
+   {
+    "label": "He with Ar's mass / He",
+    "a": "he_mass40",
+    "b": "he_ehex",
+    "ratio": null,
+    "verdict": "waiting for he_mass40, he_ehex"
+   },
+   {
+    "label": "He, no Si-Ge LJ / He",
+    "a": "he_nodirect",
+    "b": "he_ehex",
+    "ratio": null,
+    "verdict": "waiting for he_nodirect, he_ehex"
+   },
+   {
+    "label": "Ar, no Si-Ge LJ / Ar",
+    "a": "ar_nodirect",
+    "b": "ar_ehex",
+    "ratio": null,
+    "verdict": "waiting for ar_nodirect, ar_ehex"
+   }
+  ]
+ }
+}
