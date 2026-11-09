@@ -30,6 +30,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
+# measure_kapitza's physics rejections, expected on a run this short
+SHORT_RUN_REJECTIONS = ("non-physical", "not steady", "too few")
 LOOP = re.compile(r"Loop time of ([\d.eE+-]+) on (\d+) procs for (\d+) steps with (\d+) atoms")
 
 
@@ -76,6 +78,11 @@ def check(wd: Path, spec_kind: str = "nemd") -> list[str]:
         from openkapitza.schema.flags import FlagSet
         spec, _, _ = read_spec(wd)
         measure_kapitza(wd, spec, FlagSet())
+    except ValueError as exc:
+        # a few hundred steps are not a steady state: the measurement reading the
+        # files and rejecting the physics (e.g. a jump of the wrong sign) is fine
+        if not any(w in str(exc) for w in SHORT_RUN_REJECTIONS):
+            problems.append(f"measurement does not read the output: {exc}")
     except Exception as exc:                        # report, never hide
         problems.append(f"measurement does not read the output: {exc}")
     return problems

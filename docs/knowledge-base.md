@@ -4069,7 +4069,16 @@ measured speed (`--core-rate`).
 **Smoke test here** (full CPU package set, serial; every stage cut to a few
 hundred steps; `scripts/run_smoke.py` checks exit 0, OPENKAPITZA_DONE, no
 ERROR, no lost atoms, finite temperatures, both stage checkpoints, and that
-`measure_kapitza` reads the output): the nine light decks (followup, disorder) pass, about 75 s each; the five heavy ones (r07, Si/Al ×2, Si/Cu, incoherent) are running at the time of writing and are recorded below when done.
+`measure_kapitza` reads the output): **14/14 pass.** Light decks ~75 s each; r07 377 s, Si/Al 857 and 854 s,
+Si/Cu 1,219 s, incoherent Si/Ge 581 s (serial). A fifth would-be failure was
+the checker itself: on 10 of the 14, `measure_kapitza` read the files and
+then rejected a temperature jump of the wrong sign, as it should after 400
+steps that are nowhere near a steady state. The first version counted that as a
+failure, which would have stopped `cloud_setup.sh` on the rented machine with
+10 false FAILs. Physics rejections are now accepted in a smoke run; a
+measurement that cannot read the files still fails. Serial speed here was
+1.48× the cost model's per-core rates; the figure that matters is the one
+measured on the machine.
 
 **GPU (Colab).** `notebooks/colab_mlip_gpu.ipynb`: KOKKOS-CUDA + ML-IAP +
 PYTHON build cached on Drive; MACE-MP-0 small converted with

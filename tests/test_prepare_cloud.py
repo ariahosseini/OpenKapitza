@@ -113,6 +113,10 @@ class SmokeChecks(unittest.TestCase):
             self.assertTrue(any(p.startswith("ERROR") for p in probs))
             self.assertIn("no thermo output", probs)
 
+    def test_short_run_physics_rejection_is_not_a_failure(self):
+        m = self.load()
+        self.assertIn("non-physical", m.SHORT_RUN_REJECTIONS)
+
     def test_speed_reads_the_longest_loop(self):
         m = self.load()
         with tempfile.TemporaryDirectory() as d:
