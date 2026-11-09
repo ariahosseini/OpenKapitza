@@ -8,6 +8,68 @@
    "warn": [],
    "note": "campaign r00"
   },
+  "ar_ehex": {
+   "h": 28.54154763191567,
+   "err": 2.1880141526975287,
+   "q_GW": 0.6037479603566612,
+   "flux_mode": "ehex",
+   "damping_ps": 0.1,
+   "warn": [
+    "NEMD_UNEQUILIBRATED"
+   ],
+   "T_start": 310.6641,
+   "T_end": 310.6641,
+   "tally": {
+    "q_into_b": 0.7611173936180247,
+    "q_into_b_se": 0.1045932308281197,
+    "q_into_bs": 0.7657080632122423,
+    "q_into_bs_se": 0.1089298636927371,
+    "h_into_b": 35.98102150207733,
+    "h_into_bs": 36.19804056216384
+   },
+   "gas": {
+    "D_xy_m2_s": 2.7704409588126366e-12,
+    "z_rms_A": 0.3459462976125538,
+    "msd_xy_end_A2": 1.3448760000000002,
+    "t_ps": 1000.0
+   }
+  },
+  "arb_ehex": {
+   "h": 37.9846653723069,
+   "err": 0.9272125271485986,
+   "q_GW": 0.943891319472756,
+   "flux_mode": "ehex",
+   "damping_ps": 0.1,
+   "warn": [],
+   "T_start": 301.2146,
+   "T_end": 301.2146,
+   "tally": {
+    "q_into_b": 0.8769160040919248,
+    "q_into_b_se": 0.09411480751336597,
+    "q_into_bs": 0.8769160040919248,
+    "q_into_bs_se": 0.09411480751336597,
+    "h_into_b": 35.28940280291845,
+    "h_into_bs": 35.28940280291845
+   }
+  },
+  "arb_hex": {
+   "h": 40.747300307150034,
+   "err": 1.7919977757712569,
+   "q_GW": 0.943891319472756,
+   "flux_mode": "heat",
+   "damping_ps": 0.1,
+   "warn": [],
+   "T_start": 301.26687,
+   "T_end": 301.26687,
+   "tally": {
+    "q_into_b": 0.9522793373448055,
+    "q_into_b_se": 0.051102798769765014,
+    "q_into_bs": 0.9522793373448055,
+    "q_into_bs_se": 0.051102798769765014,
+    "h_into_b": 41.10940670241285,
+    "h_into_bs": 41.10940670241285
+   }
+  },
   "arb_langevin_d0.1": {
    "h": 65.89940014327868,
    "err": 3.4371784094121636,
@@ -47,6 +109,84 @@
     "h_into_b": 64.66305906898327,
     "h_into_bs": 64.66305906898327
    }
+  },
+  "he_ehex": {
+   "h": 89.85444449734732,
+   "err": 7.174638033071119,
+   "q_GW": 1.2827550133299823,
+   "flux_mode": "ehex",
+   "damping_ps": 0.1,
+   "warn": [],
+   "T_start": 309.73661,
+   "T_end": 309.73661,
+   "tally": {
+    "q_into_b": 1.4017985637295047,
+    "q_into_b_se": 0.08644998567916487,
+    "q_into_bs": 1.4019431270264875,
+    "q_into_bs_se": 0.08215735702429597,
+    "h_into_b": 98.19320909462854,
+    "h_into_bs": 98.2033354668587
+   },
+   "gas": {
+    "D_xy_m2_s": 4.555395405732129e-09,
+    "z_rms_A": 0.968984892996495,
+    "msd_xy_end_A2": 1445.591,
+    "t_ps": 1000.0
+   }
+  },
+  "he_mass40": {
+   "h": 32.019363787405815,
+   "err": 1.527057018384755,
+   "q_GW": 0.7545766917852579,
+   "flux_mode": "ehex",
+   "damping_ps": 0.1,
+   "warn": [],
+   "T_start": 308.56726,
+   "T_end": 308.56726,
+   "tally": {
+    "q_into_b": 0.9137779732624405,
+    "q_into_b_se": 0.0742113216793855,
+    "q_into_bs": 0.9119713082528256,
+    "q_into_bs_se": 0.07506559885372789,
+    "h_into_b": 38.774838482733124,
+    "h_into_bs": 38.69817528227304
+   },
+   "gas": {
+    "D_xy_m2_s": 1.023592664479979e-09,
+    "z_rms_A": 0.9175138925658781,
+    "msd_xy_end_A2": 331.796,
+    "t_ps": 1000.0
+   }
+  },
+  "sige_damp0.5": {
+   "h": 511.9667920619295,
+   "err": 22.62944044615282,
+   "q_GW": 11.367102357798583,
+   "flux_mode": "langevin",
+   "damping_ps": 0.5,
+   "warn": [],
+   "T_start": 302.47491,
+   "T_end": 302.86933
+  },
+  "sige_damp1.0": {
+   "h": 386.49114537311715,
+   "err": 17.008062992492377,
+   "q_GW": 9.07810528765403,
+   "flux_mode": "langevin",
+   "damping_ps": 1.0,
+   "warn": [],
+   "T_start": 299.40697,
+   "T_end": 303.08264
+  },
+  "sige_ge_rescaled": {
+   "h": 525.7250425753222,
+   "err": 33.84596961335741,
+   "q_GW": 12.510852246452467,
+   "flux_mode": "langevin",
+   "damping_ps": 0.1,
+   "warn": [],
+   "T_start": 302.01514,
+   "T_end": 302.9746
   }
  },
  "missing": {},
@@ -64,22 +204,25 @@
     "label": "eHEX / Langevin 0.1 ps",
     "a": "arb_ehex",
     "b": "arb_langevin_d0.1",
-    "ratio": null,
-    "verdict": "waiting for arb_ehex"
+    "ratio": 0.5764038108043551,
+    "err": 0.03319360312420336,
+    "verdict": "lower (-12.8 sigma)"
    },
    {
     "label": "eHEX / Langevin 0.5 ps",
     "a": "arb_ehex",
     "b": "arb_langevin_d0.5",
-    "ratio": null,
-    "verdict": "waiting for arb_ehex"
+    "ratio": 0.5805835664575538,
+    "err": 0.025516361819613097,
+    "verdict": "lower (-16.4 sigma)"
    },
    {
     "label": "HEX / eHEX",
     "a": "arb_hex",
     "b": "arb_ehex",
-    "ratio": null,
-    "verdict": "waiting for arb_hex, arb_ehex"
+    "ratio": 1.0727302691168963,
+    "err": 0.05395683378424503,
+    "verdict": "same within 2 sigma (+1.3)"
    }
   ],
   "B. strain (bonded Si/Ge, 16 nm)": [
@@ -87,8 +230,9 @@
     "label": "Ge rescaled to a_Si / strained (r00)",
     "a": "sige_ge_rescaled",
     "b": "r00",
-    "ratio": null,
-    "verdict": "waiting for sige_ge_rescaled"
+    "ratio": 1.087849530439138,
+    "err": 0.083415907982816,
+    "verdict": "same within 2 sigma (+1.1)"
    }
   ],
   "C. damping (bonded Si/Ge, 16 nm)": [
@@ -96,15 +240,17 @@
     "label": "0.5 ps / 0.1 ps (r00)",
     "a": "sige_damp0.5",
     "b": "r00",
-    "ratio": null,
-    "verdict": "waiting for sige_damp0.5"
+    "ratio": 1.0593804541186698,
+    "err": 0.06434165575177798,
+    "verdict": "same within 2 sigma (+0.9)"
    },
    {
     "label": "1.0 ps / 0.1 ps (r00)",
     "a": "sige_damp1.0",
     "b": "r00",
-    "ratio": null,
-    "verdict": "waiting for sige_damp1.0"
+    "ratio": 0.7997416462290586,
+    "err": 0.04845927597011975,
+    "verdict": "lower (-4.1 sigma)"
    }
   ],
   "D. He anomaly (gas layer, 1 GPa, eHEX)": [
@@ -112,29 +258,31 @@
     "label": "He layer / Ar layer",
     "a": "he_ehex",
     "b": "ar_ehex",
-    "ratio": null,
-    "verdict": "waiting for he_ehex, ar_ehex"
+    "ratio": 3.1481980464461734,
+    "err": 0.34847659083516735,
+    "verdict": "higher (+6.2 sigma)"
    },
    {
     "label": "He with Ar's mass / He",
     "a": "he_mass40",
     "b": "he_ehex",
-    "ratio": null,
-    "verdict": "waiting for he_mass40, he_ehex"
+    "ratio": 0.35634702286041164,
+    "err": 0.033142366569169496,
+    "verdict": "lower (-19.4 sigma)"
    },
    {
     "label": "He, no Si-Ge LJ / He",
     "a": "he_nodirect",
     "b": "he_ehex",
     "ratio": null,
-    "verdict": "waiting for he_nodirect, he_ehex"
+    "verdict": "waiting for he_nodirect"
    },
    {
     "label": "Ar, no Si-Ge LJ / Ar",
     "a": "ar_nodirect",
     "b": "ar_ehex",
     "ratio": null,
-    "verdict": "waiting for ar_nodirect, ar_ehex"
+    "verdict": "waiting for ar_nodirect"
    }
   ]
  }

@@ -3961,3 +3961,66 @@ is more than PBE softening usually gives, so a full-length phonon run should
 confirm it before the potential is blamed; the quick run is a plumbing
 check.
 
+## 41. Weekend set: 10 of 12 results (9 Nov 2026)
+
+Table: `python3 scripts/analyze_weekend.py` (data `docs/figures/data/weekend.json`,
+figure `weekend-*.png`). Errors 1σ; a difference is called beyond 2σ.
+
+**A. Which drive (LJ ×1, 1 GPa).**
+
+| run | h_K | q (GW/m²) | tally q | jump ΔT |
+|---|---|---|---|---|
+| Langevin 0.1 ps | 65.9 ± 3.4 | 2.40 | 2.45 ± 0.10 | 36.4 K |
+| Langevin 0.5 ps | 65.4 ± 2.4 | 2.39 | 2.36 ± 0.07 | 36.5 K |
+| eHEX | 38.0 ± 0.9 | 0.94 | 0.88 ± 0.09 | 24.8 K |
+| HEX | 40.7 ± 1.8 | 0.94 | 0.95 ± 0.05 | 23.2 K |
+
+- eHEX = HEX (1.07 ± 0.05): HEX's drift is not the issue.
+- Damping does not matter (§38).
+- Every flux is confirmed by the tally, so all four runs measure h_K
+  correctly *for their own drive*. Langevin/imposed = 0.58 ± 0.03.
+- **But the drives were not matched:** the Langevin runs carried 2.5× the
+  flux and a 36 K jump against ~24 K. For a weak, anharmonic (van der Waals)
+  contact, h_K can rise with the jump: the hot face runs hotter and couples
+  more strongly. So this may be a **drive-amplitude** effect, not a method
+  difference. *Decisive next run:* imposed flux at 2.4 GW/m² (or Langevin
+  with a 15 K drive) on the same cell. If h follows q, report h_K(ΔT) for
+  weak contacts and use small drives; if not, the method itself differs.
+
+**B. Strain (bonded, 16 nm).** Ge rescaled to a_Si: **525.7 ± 33.8**, against
+r00 (−4 % strain) 483 ± 20: ratio 1.09 ± 0.08, no significant change.
+**Removing the misfit strain does not lower h_K**, so strain is not why our
+Si/Ge value sits above the literature range (§22's leading hypothesis is
+not supported). Caveat: rescaling raises Ge's frequencies by ~4 %, which
+could offset a strain-removal decrease; the incoherent cell (§34, cluster)
+is the clean test. The remaining suspects are the potential's Ge phonons
+(TA +33 %, §37) and Si elastic constants (§40).
+
+**C. Langevin damping (bonded).** 0.1 ps 483 ± 20; 0.5 ps 512 ± 23 (same);
+**1.0 ps 387 ± 17 (−20 %, 4.1σ)**, with the reservoirs carrying 20 % less
+flux at the same 23.5 K jump. One run each; with a weak thermostat the
+2 nm reservoirs no longer hold their set temperatures, so 1 ps is past
+where this geometry is reliable. 0.1–0.5 ps is a plateau; keep 0.1 ps.
+A replicate at 1.0 ps (other seed) before generalising.
+
+**D. The He anomaly: solved, it is the mass.** eHEX, full monolayer, 1 GPa:
+
+| run | h_K | D_xy (m²/s) | in-plane MSD in 1 ns |
+|---|---|---|---|
+| Ar layer | 28.5 ± 2.2 | 2.8 × 10⁻¹² | 1.3 Å² (an adsorbed solid) |
+| He layer | **89.9 ± 7.2** | 4.6 × 10⁻⁹ | 1,446 Å² (a 2-D fluid) |
+| He's LJ, Ar's mass | 32.0 ± 1.5 | 1.0 × 10⁻⁹ | 332 Å² (still fluid) |
+
+- He/Ar = 3.15 ± 0.35; He(mass 40)/He = 0.36 ± 0.03. Giving He argon's mass
+  brings h_K down to argon's level **while the layer stays fluid**, so it is
+  the atom's lightness, not the layer's mobility, that carries the heat.
+- The ratios follow √(m_Ar/m_He) = 3.16 and its inverse: the energy a
+  light atom shuttles between the faces scales with its thermal speed
+  (∝ m^-½), as in gas-kinetic conduction.
+- So the He result is physical within classical MD. Classical treatment of
+  He at 300 K is adequate (thermal wavelength 0.2σ, §26). Real He layers at
+  contacts are rarely this dense, but the trend (light gas conducts better
+  per atom) is the same one that makes He the best gap gas in the continuum
+  model. Candidate 2 (direct Si–Ge tail) is being tested by the two
+  no-direct runs, still running.
+
