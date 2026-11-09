@@ -39,6 +39,14 @@ and `git log`.
 - **Self-advancing local queue:** a finishing job starts the next queued one;
   events from unattended polls are kept until reported (KB §39).
 - Gas-layer mobility (MSD) recorded in production (KB §35).
+- **Rented-machine runs** (KB §42): `scripts/prepare_cloud.py` (the 14
+  remaining CPU jobs in one costed folder, longest first; `--smoke` copies),
+  `scripts/run_smoke.py` (runs and checks every smoke deck, measures speed),
+  `scripts/cloud_setup.sh` (Ubuntu: packages, LAMMPS, venv, tests, job set,
+  smoke run), `docs/cloud-runbook.md`; `submit … slots=K` runs K local jobs
+  side by side; a Colab notebook for a first MACE-on-GPU test
+  (`notebooks/colab_mlip_gpu.ipynb`, `examples/mlip/mace_mp0_small.yaml`,
+  `prepare_mlip.py --smoke`).
 
 ### Changed
 - The gas-gap model is **no longer described as biased low near 1 atm**:
@@ -49,5 +57,11 @@ and `git log`.
 - Python ≥ 3.10 (what CI tests).
 
 ### Fixed
+- Local jobs: a process id recorded before the machine restarted is no
+  longer taken as a running job (it is diagnosed as a restart and resumed);
+  side-by-side MPI runs are not pinned onto the same cores; `resubmit all`
+  restarts only jobs that died.
+- Setup scripts: the package check no longer depends on `grep -q` under
+  `pipefail`.
 - `validate_deck` rejects backslash line continuations (LAMMPS uses `&`).
 - `papers.yaml` entries with `: ` in the citation are quoted.

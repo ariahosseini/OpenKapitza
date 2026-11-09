@@ -1,0 +1,16 @@
+# MACE-MP-0 "small" (Batatia et al., a foundation model trained on the
+# Materials Project trajectories), used as shipped. For the Colab GPU test
+# (notebooks/colab_mlip_gpu.ipynb): plumbing and timing, not a quotable h_K.
+# Its training set has no Si/Ge interface, and it is ungated here, so
+# check_model flags both; production needs a fine-tuned, gated model.
+kind: mace
+files: [mace_mp0_small.model-mliap_lammps.pt]   # mace_create_lammps_model --format=mliap
+elements: [Si, Ge]
+trained_on:
+  - Materials Project relaxation trajectories (MPtrj), 89 elements, bulk crystals
+foundation: true
+source: "Batatia et al., A foundation model for atomistic materials chemistry (MACE-MP-0), arXiv:2401.00096"
+gate:
+  phonon_dos: ""
+  elastic: ""
+  bulk_k: ""

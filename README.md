@@ -336,7 +336,8 @@ Si/Ge is converged on every axis but length (above); none is validated
 against experiment yet. Long runs checkpoint and resume after a crash. `scripts/prepare_cluster.py`
 writes every job, validated and costed (22 jobs, ~70 node-hours);
 [`docs/cluster-runbook.md`](docs/cluster-runbook.md) says what to run in what
-order; `scripts/benchmark_local.py` times your own machine on the same decks
+order, and [`docs/cloud-runbook.md`](docs/cloud-runbook.md) does the same on one
+rented machine; `scripts/benchmark_local.py` times your own machine on the same decks
 and says which jobs fit it. The agent submits them (`submit plan`, on SLURM or locally), polls,
 retries what the cluster broke (timeouts, node failures), diagnoses input and
 physics failures with knowledge-base citations without "fixing" them, and
@@ -355,6 +356,7 @@ measures finished runs into the joint automatically.
 | [`docs/technical-notes.md`](docs/technical-notes.md) | what Phase 0 corrected in the original spec, design rules, verification history, Phase 1–2 development notes |
 | [`docs/agent-instruction-v2.md`](docs/agent-instruction-v2.md) | the specification; read it before changing any correlation, threshold or default |
 | [`docs/cluster-runbook.md`](docs/cluster-runbook.md) | cluster procedure |
+| [`docs/cloud-runbook.md`](docs/cloud-runbook.md) | the CPU job set on one rented cloud machine (setup script, smoke test, costs) |
 | [`docs/lammps-rag.md`](docs/lammps-rag.md) | official LAMMPS reference for the physics paths used (generated) |
 | [`docs/papers.yaml`](docs/papers.yaml) | our notes on each paper: what it is used for, findings, what is still needed |
 | [`tests/benchmarks/SOURCES.md`](tests/benchmarks/SOURCES.md) | provenance of every benchmark number |

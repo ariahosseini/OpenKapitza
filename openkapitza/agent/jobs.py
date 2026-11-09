@@ -233,17 +233,34 @@ class JobBook:
     # ---- submission ------------------------------------------------------------
     @_locked
     def submit(self, names: list[str], backend: str | None = None, lmp: str | None = None,
-               launcher: str = "", resubmit: bool = False, fresh: bool = False) -> list[Event]:
+               launcher: str = "", resubmit: bool = False, fresh: bool = False,
+               slots: int | None = None) -> list[Event]:
         """`resubmit` of a job that died of an infrastructure cause resumes from its
-        last checkpoint when there is one; `fresh` starts it over regardless."""
+        last checkpoint when there is one; `fresh` starts it over regardless.
+        `slots`: how many local jobs run side by side from now on (a big machine
+        split into several np-rank runs); kept in the book's config."""
         backend = backend or self.config.get("backend") or _default_backend()
         if lmp:
             self.config["lmp"] = lmp
         if launcher:
             self.config["launcher"] = launcher
+        if slots is not None:
+            self.config["local_slots"] = int(slots)
+        lw = self.config.get("launcher", "")
+        if self.local_slots > 1 and lw.startswith("mpirun") and "bind-to" not in lw:
+            # side-by-side mpiruns each pin their ranks from core 0 by default, so
+            # they would share the same cores; let the OS spread them instead
+            self.config["launcher"] = lw + " --bind-to none"
         self.config["backend"] = backend
         events = []
+        exact = set(names)
         for e in self.select(names):
+            if resubmit and e.name not in exact and e.status in (
+                    "submitted", "running", "queued", "completed", "ingested"):
+                # 'resubmit all' / a prefix (e.g. after the machine stopped) only
+                # restarts what died; a running or finished job is re-run only by name
+                events.append(Event(e.name, "skipped", f"already {e.status}"))
+                continue
             if e.status in ("submitted", "running", "queued") and not resubmit:
                 events.append(Event(e.name, "skipped", f"already {e.status}"))
                 continue
@@ -523,6 +540,13 @@ def diagnose(wd: Path, state: JobState, handle: JobHandle | None = None) -> Diag
             rc = int((wd / "job.done").read_text().strip())
         except ValueError:
             pass
+    if rc is None and handle is not None and handle.backend == "local":
+        from ..compute.runner import _same_boot
+        if not _same_boot(handle):
+            return Diagnosis("infrastructure", "The machine restarted while the job ran "
+                             "(e.g. a stopped cloud instance)", evidence="boot id changed",
+                             auto_resubmit=True, cause="node",
+                             fixes=["Resubmit (done automatically, from the last checkpoint)."])
     if rc in (137, 143) or "Killed" in err or "SIGKILL" in err or "signal 9" in err:
         return Diagnosis("infrastructure", "Killed by a signal (out of memory or the "
                          "scheduler)", evidence=f"exit status {rc}", auto_resubmit=True, cause="killed",

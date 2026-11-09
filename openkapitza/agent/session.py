@@ -23,13 +23,14 @@ Commands at any prompt:
     ingest <path>        measure finished MD (job folder, campaign, or prepared root)
                          and use its h_K in place of the DMM placeholder
     md                   list ingested MD results;  md clear  to drop them
-    submit <jobs|plan|all> [local|slurm] [lmp=PATH] [np=N]
+    submit <jobs|plan|all> [local|slurm] [lmp=PATH] [np=N] [slots=K]
                          submit prepared jobs ('plan' = the ones this joint needs)
     jobs [DIR]           poll once: status, diagnosis of failures, finished jobs
                          ingested automatically; DIR attaches an existing job folder
     watch [SECONDS]      poll until nothing is running (Ctrl-C stops watching only)
     resubmit <job> [fresh]  after you fixed what a diagnosis named; a job killed
                          by the machine resumes from its checkpoint unless 'fresh'
+                         ('resubmit all' or a prefix restarts only the jobs that died)
     cancel <job>
     save FILE / load FILE        the session (inputs, defaults, ingested MD)
     export FILE.json             the last result as JSON
@@ -417,7 +418,7 @@ class Session:
 
     def _submit(self, words: list[str]) -> str:
         from .jobs import JobError
-        backend, lmp, launcher, names = None, None, "", []
+        backend, lmp, launcher, names, slots = None, None, "", [], None
         for w in words:
             if w in ("local", "slurm"):
                 backend = w
@@ -425,6 +426,10 @@ class Session:
                 lmp = _path(w[4:])
             elif w.startswith("np="):
                 launcher = f"mpirun -np {int(w[3:])}"
+            elif w.startswith("slots="):
+                slots = int(w[6:])
+                if slots < 1:
+                    raise FieldError("slots= takes a whole number >= 1")
             else:
                 names.append(w)
         if not names:
@@ -437,7 +442,8 @@ class Session:
         book = self._book()
         lmp = lmp or self.lmp
         try:
-            events = book.submit(names, backend=backend, lmp=lmp, launcher=launcher)
+            events = book.submit(names, backend=backend, lmp=lmp, launcher=launcher,
+                                 slots=slots)
         except JobError as e:
             raise FieldError(str(e)) from e
         if lmp:

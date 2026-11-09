@@ -41,6 +41,20 @@ def spec_for(case: str):
     return s
 
 
+def write_case(wd: Path, name: str, pots: Path) -> dict:
+    """Write one case into `wd` (replacing it); its manifest fields, without the name."""
+    s = spec_for(name)
+    if wd.exists():
+        shutil.rmtree(wd)
+    wd.mkdir(parents=True)
+    (wd / "nemd.in").write_text(build_input_deck(s))
+    write_spec(wd, s, "nemd", note=f"Si/Ge disordered interface: {CASES[name]}")
+    shutil.copy(pots / s.pair_file, wd)
+    steps = relax_steps(s) + s.equilibrate_steps + s.steady_steps + s.production_steps
+    return {"atoms": int(s.geometry.estimate_atoms(4.99e28, 4.99e28)), "steps": steps,
+            "pair_style": s.pair_style}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -53,17 +67,9 @@ def main(argv=None) -> int:
     for name in CASES:
         if a.only and name not in a.only:
             continue
-        s = spec_for(name)
-        wd = root / "disorder" / name
-        if wd.exists():
-            shutil.rmtree(wd)
-        wd.mkdir(parents=True)
-        (wd / "nemd.in").write_text(build_input_deck(s))
-        write_spec(wd, s, "nemd", note=f"Si/Ge disordered interface: {CASES[name]}")
-        shutil.copy(a.potentials.expanduser() / s.pair_file, wd)
-        steps = relax_steps(s) + s.equilibrate_steps + s.steady_steps + s.production_steps
-        atoms = s.geometry.estimate_atoms(4.99e28, 4.99e28)
-        jobs.append({"name": f"disorder/{name}", "atoms": int(atoms), "steps": steps})
+        e = write_case(root / "disorder" / name, name, a.potentials.expanduser())
+        jobs.append({"name": f"disorder/{name}", **e})
+        atoms, steps = e["atoms"], e["steps"]
         print(f"{name:9} {int(atoms):7,} atoms  {steps / 1e6:.2f} Msteps")
     man = root / "manifest.json"
     data = json.loads(man.read_text()) if man.is_file() else {"jobs": []}

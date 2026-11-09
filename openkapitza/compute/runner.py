@@ -230,6 +230,7 @@ class LocalRunner:
             submitted_at=time.time(),
             state=JobState.RUNNING.value,
             native_id=str(proc.pid),
+            meta={"boot_id": _boot_id()},
         )
         handle.save()
         return handle
@@ -244,7 +245,7 @@ class LocalRunner:
             except ValueError:
                 rc = 1
             state = JobState.COMPLETED if rc == 0 else JobState.FAILED
-        elif handle.native_id and _pid_alive(int(handle.native_id)):
+        elif handle.native_id and _same_boot(handle) and _pid_alive(int(handle.native_id)):
             state = JobState.RUNNING
         else:
             # Process gone with no sentinel: killed, or the node went away.
@@ -297,6 +298,21 @@ def _reap(pid: int) -> None:
     for proc in list(_LAUNCHED):
         if proc.pid == pid and proc.poll() is not None:
             _LAUNCHED.remove(proc)
+
+
+def _boot_id() -> str | None:
+    """This boot's id (Linux), so a pid recorded before a restart is not trusted."""
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:
+        return None
+
+
+def _same_boot(handle: "JobHandle") -> bool:
+    """False when the machine restarted since launch (e.g. a stopped cloud
+    instance): the recorded pid may now belong to an unrelated process."""
+    then = (handle.meta or {}).get("boot_id")
+    return then is None or then == _boot_id()
 
 
 def _pid_alive(pid: int) -> bool:

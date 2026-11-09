@@ -131,6 +131,34 @@ class TestLocalLoop(JobLoopBase):
         for n in ("bad_input", "lost", "nan", "empty", "cut"):
             self.assertEqual(book.entries[n].attempts, 1, n)
 
+    def test_resubmit_all_restarts_only_what_died(self):
+        book = JobBook.open(self.root)
+        book.config["local_slots"] = 2
+        book.submit(["sial_pp", "bad_input"], backend="local", lmp=self.lmp)
+        book, _ = self.settle(book)
+        evs = {e.name: e.what for e in book.submit(["all"], backend="local", lmp=self.lmp,
+                                                     resubmit=True)}
+        self.assertEqual(evs["sial_pp"], "skipped")          # finished: only by name
+        self.assertNotEqual(evs["bad_input"], "skipped")     # died: restarted
+        book, _ = self.settle(book)
+
+    def test_job_running_when_the_machine_restarted_is_resumed(self):
+        book = JobBook.open(self.root)
+        book.submit(["sial_pp"], backend="local", lmp=self.lmp)
+        book, _ = self.settle(book)
+        # pretend it was still running when the machine stopped
+        e = book.entries["sial_pp"]
+        (self.root / "sial_pp" / "job.done").unlink()
+        e.status = "running"
+        e.handle["meta"] = {"boot_id": "an-earlier-boot"}
+        e.handle["native_id"] = str(os.getpid())          # pid reused by another process
+        book.save()
+        evs = JobBook.open(self.root).refresh()
+        ev = next(x for x in evs if x.name == "sial_pp")
+        self.assertEqual(ev.what, "resubmitted", ev.message)
+        self.assertIn("machine restarted", ev.message)
+        self.settle(JobBook.open(self.root))
+
     def test_input_error_cites_the_knowledge_base(self):
         book = JobBook.open(self.root)
         book.submit(["bad_input"], backend="local", lmp=self.lmp)
@@ -231,6 +259,20 @@ class TestSessionLoop(JobLoopBase):
         self.assertIn("see: docs/knowledge-base.md", out)
         self.assertEqual(len(s.md), 1)
         self.assertEqual(JobBook.open(self.root).entries["sial_pp"].status, "ingested")
+
+    def test_slots_runs_local_jobs_side_by_side(self):
+        s = Session(lmp=self.lmp)
+        s.handle(f"jobs {self.root}")
+        out = s.handle("submit sial_pp nan cut local slots=2")
+        self.assertIn("Submitted 2 job(s)", out)
+        self.assertIn("1 queued", out)
+        self.assertEqual(JobBook.open(self.root).config["local_slots"], 2)
+        s.handle("watch 0.1")
+        s.handle("submit lost local np=4")
+        self.assertEqual(JobBook.open(self.root).config["launcher"],
+                         "mpirun -np 4 --bind-to none")
+        s.handle("watch 0.1")
+        self.assertIn("slots= takes", s.handle("submit lost local slots=0"))
 
     def test_session_errors_are_friendly(self):
         s = Session()
@@ -438,3 +480,19 @@ class TestSelfAdvancingQueue(JobLoopBase):
         w = (self.root / "sial_pp" / "job_wrapper.sh").read_text()
         trap = next(ln for ln in w.splitlines() if ln.startswith("trap "))
         self.assertLess(trap.index("job.done"), trap.index("openkapitza.agent.jobs refresh"))
+
+
+class TestRestartedMachine(unittest.TestCase):
+    """A pid recorded before the machine restarted is not trusted (KB 42)."""
+
+    def test_pid_from_another_boot_counts_as_dead(self):
+        from openkapitza.compute import runner
+        with tempfile.TemporaryDirectory() as d:
+            h = runner.JobHandle(job_id="local-x", backend="local", name="x", workdir=d,
+                                 submitted_at=0.0, native_id=str(os.getpid()),
+                                 meta={"boot_id": "an-earlier-boot"})
+            self.assertEqual(runner.LocalRunner().poll(h), runner.JobState.FAILED)
+            h.meta = {"boot_id": runner._boot_id()}
+            self.assertEqual(runner.LocalRunner().poll(h), runner.JobState.RUNNING)
+            h.meta = {}                                    # handles from before this change
+            self.assertEqual(runner.LocalRunner().poll(h), runner.JobState.RUNNING)

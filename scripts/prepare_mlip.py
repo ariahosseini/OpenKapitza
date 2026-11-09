@@ -1,10 +1,11 @@
 """Write a Si/Ge NEMD job that uses a Tier-2 machine-learned potential (P4-1, KB 36).
 
     python3 scripts/prepare_mlip.py ~/ok_jobs --model my_model.yaml --model-dir DIR \
-        [--name NAME] [--backend local|slurm] [--gpu]
+        [--name NAME] [--backend local|slurm] [--gpu] [--smoke]
 
 The cell is the campaign's base Si/Ge cell (r00), so the result is directly
-comparable with the Tersoff value. The model description (YAML; see
+comparable with the Tersoff value. --smoke cuts every stage to a few hundred
+steps: a check that the model runs in the deck, and a timing (Colab test). The model description (YAML; see
 examples/mlip/) says what the model is, what it was trained on and how far
 it has been gated. Before anything is written the model is checked against
 the instruction's Tier-2 rules (md/mlip.check_model) and every flag is
@@ -38,10 +39,14 @@ def main(argv=None) -> int:
     ap.add_argument("--name", default=None)
     ap.add_argument("--backend", default="local", choices=("local", "slurm"))
     ap.add_argument("--gpu", action="store_true", help="the target machine has a CUDA GPU")
+    ap.add_argument("--smoke", action="store_true", help="a few hundred steps per stage")
     a = ap.parse_args(argv)
     from plan_campaign import PRESETS, base_spec
     model = load_model(a.model)
     spec = base_spec(PRESETS["sige"])
+    if a.smoke:
+        from prepare_cloud import _shorten
+        _shorten(spec)
     flags = FlagSet()
     check_model(model, spec.element_a, spec.element_b, flags, backend=a.backend,
                 has_gpu=a.gpu)

@@ -202,10 +202,10 @@ from the code.
 | `prepare jobs DIR` | write the cluster jobs the plan names (start with `--potentials`) |
 | `ingest PATH` | measure finished MD and use it |
 | `md`, `md clear` | list or drop the ingested MD |
-| `submit JOBS [local\|slurm] [lmp=PATH] [np=N]` | submit prepared jobs: names, `plan` or `all` ([below](#running-the-jobs)) |
+| `submit JOBS [local\|slurm] [lmp=PATH] [np=N] [slots=K]` | submit prepared jobs: names, `plan` or `all` ([below](#running-the-jobs)); `slots=K` runs K local jobs side by side |
 | `jobs [DIR]` | poll once: status, diagnoses, finished jobs ingested; `DIR` attaches a folder |
 | `watch [SECONDS]` | poll until nothing is running |
-| `resubmit JOB [fresh]`, `cancel JOB` | after fixing what a diagnosis named (resumes from a checkpoint unless `fresh`); stop a job |
+| `resubmit JOB [fresh]`, `cancel JOB` | after fixing what a diagnosis named (resumes from a checkpoint unless `fresh`); stop a job. `resubmit all` (or a prefix) restarts only jobs that died |
 | `save FILE`, `load FILE` | the session: inputs, which were defaults, ingested MD |
 | `export FILE.json` | the last result as JSON |
 | `lookup QUESTION` | search our docs, paper notes and the LAMMPS manual; cited passages ([below](#looking-things-up)) |
@@ -318,6 +318,13 @@ wrapper polls the folder and starts the next one (log: `DIR/queue.log`), so
 no session needs to stay open. What happened meanwhile, finished runs and
 failures with their diagnosis, is kept and shown at your next `jobs` or
 `watch`, and finished runs are measured then.
+
+**On a big rented machine** (e.g. 192 cores), run several jobs side by side:
+`submit all local np=48 slots=4` runs four 48-rank jobs at once (the MPI
+runs are then not pinned to cores, so they do not pile onto the same ones).
+A machine that restarts mid-run (a stopped spot instance) is recognised:
+the jobs it killed resume from their checkpoints at the next `jobs`. The
+whole procedure: [`cloud-runbook.md`](cloud-runbook.md).
 
 Nothing waits on a job: each poll checks once and returns, and the state is
 kept in `DIR/jobs.json`. A new session picks the jobs up with `jobs DIR`, and

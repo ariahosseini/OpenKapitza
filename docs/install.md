@@ -100,6 +100,11 @@ cluster's modules, job scripts written by the agent (`submit ... slurm`),
 and §0b for the separate KOKKOS-CUDA build that MACE, DeePMD and
 NequIP/Allegro need. Apple-silicon GPUs cannot run these inside LAMMPS.
 
+On a rented Linux machine, `bash scripts/cloud_setup.sh` does all of it (system
+packages, LAMMPS, Python, tests, the job set and a smoke run):
+[`cloud-runbook.md`](cloud-runbook.md). For a first GPU test with MACE on a
+free Colab T4: [`notebooks/colab_mlip_gpu.ipynb`](../notebooks/colab_mlip_gpu.ipynb).
+
 ### Check LAMMPS with OpenKapitza
 
 ```bash

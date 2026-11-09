@@ -122,7 +122,7 @@ LMP="$DEST/build/lmp"
 say "Checking the build"
 "$LMP" -h | grep -A6 "Installed packages" || true
 for pkg in MANYBODY MEAM EXTRA-FIX EXTRA-COMPUTE RIGID TALLY ML-SNAP ML-IAP; do
-  "$LMP" -h | grep -q "$pkg" || die "package $pkg missing from the build"
+  grep -q -- "$pkg" <<< "$("$LMP" -h 2>/dev/null || true)" || die "package $pkg missing from the build"
 done
 mpirun --version | head -1
 

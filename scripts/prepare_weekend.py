@@ -106,6 +106,37 @@ def total_steps(spec) -> int:
     return relax_steps(spec) + spec.equilibrate_steps + spec.steady_steps + spec.production_steps
 
 
+def write_case(wd: Path, name: str, case: tuple, pots: Path) -> dict:
+    """Write one case into `wd` (replacing it); its manifest fields, without the name.
+
+    `case` is a cases() value. Also used by prepare_cloud.py for follow-ups."""
+    factory, nb, modify, h_guess, note = case
+    spec = copy.deepcopy(factory())
+    if nb is not None:
+        spec.spot_pressure_GPa = 1.0
+    if modify:
+        modify(spec)
+    if wd.exists():
+        shutil.rmtree(wd)
+    wd.mkdir(parents=True)
+    if nb is None:
+        if name.endswith("ge_rescaled"):
+            s = spec.lattice_a / spec.lattice_b
+            write_rescaled(pots / spec.pair_file, wd / RESCALED, "Si(D)", "Ge", "Ge", s)
+            spec.pair_file = RESCALED
+            spec.lattice_b = spec.lattice_a
+        else:
+            shutil.copy(pots / spec.pair_file, wd)
+        (wd / "nemd.in").write_text(build_input_deck(spec))
+        write_spec(wd, spec, "nemd", h_guess_MW=h_guess, note=note)
+        atoms = spec.geometry.estimate_atoms(4.99e28, 4.99e28)
+    else:
+        atoms = write_job(wd, spec, nb, pots)["atoms"]
+    return {"atoms": int(atoms), "steps": total_steps(spec), "flux_mode": spec.flux_mode,
+            "imposed_flux_W_m2": spec.imposed_flux, "interface_tally": spec.interface_tally,
+            "note": note, "pair_style": spec.pair_style}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -117,35 +148,12 @@ def main(argv=None) -> int:
     pots = a.potentials.expanduser()
     out = root / "weekend"
     jobs = []
-    for name, (factory, nb, modify, h_guess, note) in cases().items():
+    for name, case in cases().items():
         if a.only and name not in a.only:
             continue
-        spec = copy.deepcopy(factory())
-        if nb is not None:
-            spec.spot_pressure_GPa = 1.0
-        if modify:
-            modify(spec)
-        wd = out / name
-        if wd.exists():
-            shutil.rmtree(wd)
-        wd.mkdir(parents=True)
-        if nb is None:
-            if name == "sige_ge_rescaled":
-                s = spec.lattice_a / spec.lattice_b
-                write_rescaled(pots / spec.pair_file, wd / RESCALED, "Si(D)", "Ge", "Ge", s)
-                spec.pair_file = RESCALED
-                spec.lattice_b = spec.lattice_a
-            else:
-                shutil.copy(pots / spec.pair_file, wd)
-            (wd / "nemd.in").write_text(build_input_deck(spec))
-            write_spec(wd, spec, "nemd", h_guess_MW=h_guess, note=note)
-            atoms = spec.geometry.estimate_atoms(4.99e28, 4.99e28)
-        else:
-            atoms = write_job(wd, spec, nb, pots)["atoms"]
-        jobs.append({"name": f"weekend/{name}", "atoms": int(atoms), "steps": total_steps(spec),
-                     "flux_mode": spec.flux_mode, "imposed_flux_W_m2": spec.imposed_flux,
-                     "interface_tally": spec.interface_tally, "note": note})
-        print(f"{name:18} {int(atoms):7,} atoms  {total_steps(spec) / 1e6:4.2f} Msteps  {note}")
+        e = write_case(out / name, name, case, pots)
+        jobs.append({"name": f"weekend/{name}", **e})
+        print(f"{name:18} {e['atoms']:7,} atoms  {e['steps'] / 1e6:4.2f} Msteps  {e['note']}")
     man = root / "manifest.json"
     data = json.loads(man.read_text()) if man.is_file() else {"jobs": []}
     names = {j["name"] for j in jobs}

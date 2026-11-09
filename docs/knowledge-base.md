@@ -4024,3 +4024,59 @@ A replicate at 1.0 ps (other seed) before generalising.
   model. Candidate 2 (direct Si–Ge tail) is being tested by the two
   no-direct runs, still running.
 
+
+## 42. The rented-machine set: one folder, smoke-run before paying (9 Nov 2026)
+
+**Context.** No university cluster: the CPU jobs still needed run on one
+rented machine (AWS c7a.48xlarge, 192 Zen 4 cores, spot ≈ $2.8/h), and the
+GPU work starts on a free Colab T4. A failure discovered on the rented
+machine costs money and a day, so every deck is run to the end beforehand.
+
+**The set** (`scripts/prepare_cloud.py`, 14 jobs, written with the current
+code: stage checkpoints, the tally where the cell has one):
+
+| group | jobs | question |
+|---|---|---|
+| heavy | sial_pp, sial_ttm, sicu_pp (MEAM); sige_incoherent (25:24, ~330k atoms); r07_rerun (64 nm per side, steady 400 ps) | P1-6/P1-14 die pairs; P1-16 the clean strain test; P1-3 the length axis (§24: 100 ps steady was too short) |
+| followup | arb_hex_q2.4, arb_ehex_q2.4 (imposed 2.4 GW/m²), arb_langevin_dT27 (27 K drive) | §41 A: does h_K follow the drive amplitude? The imposed runs now carry the Langevin flux; the Langevin run gets the imposed runs' jump |
+| followup | sige_damp1.0_s2 | §41 C: the 1.0 ps damping drop, other seed |
+| disorder | mix2, mix4, mix8, step4_p2, step8_p1 | S-9 intermixed and stepped Si/Ge (§30, §33) |
+
+Estimated 10.5 h on 4 slots × 48 ranks (Si/Cu sets it), ≈ 2,000 core-hours
+at the cost model's rates; the smoke run on the machine replaces this with a
+measured speed (`--core-rate`).
+
+**Four things that would have gone wrong on the day, fixed before it:**
+1. *Side-by-side MPI runs on the same cores.* Each `mpirun` binds its ranks
+   starting from core 0, so four 48-rank jobs would share 48 cores and run
+   4× slower. With `slots > 1` the launcher gets `--bind-to none`
+   (`run_smoke.py --parallel` too).
+2. *A spot stop leaves "running" jobs that never finish.* After a restart the
+   recorded pids are dead or, worse, reused by other processes, so a job
+   could show as running for ever. Launch now records the boot id; a pid
+   from another boot is dead, diagnosed "the machine restarted"
+   (infrastructure) and resumed from its checkpoint automatically.
+3. *`resubmit all` after a stop would have re-run finished jobs and
+   duplicated running ones* (resubmit bypassed both checks). A group
+   resubmit (`all`, a prefix) now restarts only jobs that died; a named job
+   still re-runs on request.
+4. *`set -o pipefail` with `lmp -h | grep -q`*: grep exits at the first
+   match, lmp gets SIGPIPE, the pipeline fails, so the setup script would
+   rebuild LAMMPS every time or report a missing package (seen in the
+   end-to-end test of `cloud_setup.sh` here). The help text is read whole.
+   The Mac script had the same pattern in its package check.
+
+**Smoke test here** (full CPU package set, serial; every stage cut to a few
+hundred steps; `scripts/run_smoke.py` checks exit 0, OPENKAPITZA_DONE, no
+ERROR, no lost atoms, finite temperatures, both stage checkpoints, and that
+`measure_kapitza` reads the output): the nine light decks (followup, disorder) pass, about 75 s each; the five heavy ones (r07, Si/Al ×2, Si/Cu, incoherent) are running at the time of writing and are recorded below when done.
+
+**GPU (Colab).** `notebooks/colab_mlip_gpu.ipynb`: KOKKOS-CUDA + ML-IAP +
+PYTHON build cached on Drive; MACE-MP-0 small converted with
+`mace_create_lammps_model --format=mliap` on the GPU (the MACE docs require
+the target architecture); a bulk-Si energy check; the r00 Si/Ge deck
+smoke-run with `-k on g 1 -sf kk -pk kokkos newton on neigh half`; Tersoff/kk
+on the same cell for comparison. Written without a GPU to test on: each
+cell checks its own result. MACE-MP-0 is a foundation model with no Si/Ge
+interface in its training set and is ungated (check_model flags both), so the
+run tests plumbing and speed only.
