@@ -3961,7 +3961,7 @@ is more than PBE softening usually gives, so a full-length phonon run should
 confirm it before the potential is blamed; the quick run is a plumbing
 check.
 
-## 41. Weekend set: 10 of 12 results (9 Nov 2026)
+## 41. Weekend set: all 12 results (9 Nov 2026)
 
 Table: `python3 scripts/analyze_weekend.py` (data `docs/figures/data/weekend.json`,
 figure `weekend-*.png`). Errors 1σ; a difference is called beyond 2σ.
@@ -4021,8 +4021,32 @@ A replicate at 1.0 ps (other seed) before generalising.
   He at 300 K is adequate (thermal wavelength 0.2σ, §26). Real He layers at
   contacts are rarely this dense, but the trend (light gas conducts better
   per atom) is the same one that makes He the best gap gas in the continuum
-  model. Candidate 2 (direct Si–Ge tail) is being tested by the two
-  no-direct runs, still running.
+  model.
+
+**D, completed (9 Nov, 13:40): the direct Si–Ge tail is the second part.**
+With the Si–Ge LJ switched off, so that heat must pass through the gas:
+
+| run | h_K | change | D_xy (m²/s) |
+|---|---|---|---|
+| He layer, no Si–Ge LJ | 54.8 ± 2.0 | 0.61 ± 0.05 of He (−7.3σ) | 1.5 × 10⁻⁸ |
+| Ar layer, no Si–Ge LJ | 21.0 ± 0.7 | 0.74 ± 0.06 of Ar (−4.3σ) | 2.6 × 10⁻¹² |
+
+- The direct solid–solid attraction across the layer carries a real share:
+  ≈ 35 ± 8 MW/m²K of He's 90, ≈ 7.5 ± 2.3 of Ar's 28.5 (differences; the
+  two paths are not strictly additive). He's share is larger because the He
+  layer is thinner, so the faces sit closer (candidate 2, partly confirmed).
+- Through the gas alone, **He/Ar = 2.61 ± 0.13**, still far above 1 and
+  below √(m_Ar/m_He) = 3.16. So the full 3.15 is mostly the mass, with He's
+  larger direct-tail share adding the rest. The mass result stands
+  (He with Ar's mass ≈ Ar).
+- Caveat: removing the LJ also changes the layer. The He layer becomes 3×
+  more mobile (D_xy 4.6 → 15 × 10⁻⁹) and the faces are no longer pulled
+  together, so "no direct" is not purely "minus one path".
+- **For the model:** a gas-layer h_K from MD is gas transport plus a direct
+  solid–solid term that falls with layer thickness. Both should be
+  reported. A He-filled package gains over Ar on both counts.
+
+All 12 weekend runs are measured; figure `weekend-*.png` is complete.
 
 
 ## 42. The rented-machine set: one folder, smoke-run before paying (9 Nov 2026)
