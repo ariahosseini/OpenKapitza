@@ -47,7 +47,7 @@ class CloudSet(unittest.TestCase):
             self._td.cleanup()
 
     def test_full_set_is_complete_valid_and_longest_first(self):
-        root, man = self.write()
+        root, man = self.write("--all")
         names = [j["name"] for j in man["jobs"]]
         self.assertEqual(len(names), 14)
         for want in ("heavy/sial_pp", "heavy/sial_ttm", "heavy/sicu_pp",
@@ -71,6 +71,12 @@ class CloudSet(unittest.TestCase):
         self.assertIn("54321", json.dumps(s2))
         r07 = (root / "heavy/r07_rerun/nemd.in").read_text()
         self.assertIn("run             400000", r07)
+
+    def test_default_is_the_heavy_jobs_only(self):
+        _, man = self.write()
+        self.assertEqual(sorted(j["name"] for j in man["jobs"]),
+                         ["heavy/r07_rerun", "heavy/sial_pp", "heavy/sial_ttm",
+                          "heavy/sicu_pp", "heavy/sige_incoherent"])
 
     def test_smoke_decks_are_short(self):
         root, man = self.write("--smoke", "--only", "heavy/sial_ttm", "followup/arb_ehex_q2.4",

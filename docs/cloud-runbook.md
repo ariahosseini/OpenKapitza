@@ -10,7 +10,7 @@ for GPU (machine-learned potentials) see section 7 below.
 |---|---|
 | machine | AWS **c7a.48xlarge**: 192 AMD EPYC (Zen 4) cores, no hyperthreading, 384 GB |
 | layout | 4 jobs × 48 MPI ranks (`slots=4 np=48`) |
-| job set | 14 jobs: Si/Al and Si/Cu (MEAM), incoherent Si/Ge, r07 re-run, 4 drive and damping follow-ups, 5 disordered interfaces |
+| job set | 5 jobs: Si/Al ×2 and Si/Cu (MEAM), incoherent Si/Ge, r07 re-run (the 9 lighter jobs ran on the Mac, KB §43; `prepare_cloud.py --all` brings them back) |
 | estimate | about 10–11 h wall (the longest job, Si/Cu, sets it); the smoke run in step 3 replaces this with a measured figure |
 | cost | spot about $2.8/h → **≈ $30–40** with setup; on-demand about $9.9/h → ≈ $110 |
 
@@ -67,8 +67,8 @@ step 4.
 ## 3. Read the smoke result
 
 The script prints one line per job, `PASS` or `FAIL`, then
-`14/14 passed` and the speed against the cost model. **Start the real runs
-only if all 14 passed.** A failure prints its reason (details in
+`5/5 passed` and the speed against the cost model. **Start the real runs
+only if all of them passed.** A failure prints its reason (details in
 `~/ok_smoke/smoke_report.json`); stop the machine (step 6) and send the report.
 The measured speed is fed back into the wall-time estimates, which the script
 prints last.

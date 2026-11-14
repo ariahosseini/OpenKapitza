@@ -4113,3 +4113,72 @@ on the same cell for comparison. Written without a GPU to test on: each
 cell checks its own result. MACE-MP-0 is a foundation model with no Si/Ge
 interface in its training set and is ungated (check_model flags both), so the
 run tests plumbing and speed only.
+
+## 43. The Mac light set: drive amplitude, damping replicate, disordered interfaces (13 Nov 2026)
+
+Nine jobs from the cloud set (§42) run on the M3 Pro instead (5 ranks, one at
+a time, 1.4–3.2 h each; the cost model's 4.6–9 h was ~3× pessimistic for
+this machine). All exited 0 and measured cleanly; data in
+`docs/figures/data/light_set.json` (measured with `analyze_weekend.measure`).
+
+**A. The Langevin/imposed-flux gap is not a drive-amplitude effect.** Same
+LJ ×1, 1 GPa cell as §41:
+
+| drive | q (GW/m²) | jump (K) | h_K | same drive at the §41 amplitude |
+|---|---|---|---|---|
+| eHEX | 2.27 | 62 | 36.7 ± 0.6 | 38.0 ± 0.9 at 0.94 (ratio 0.97 ± 0.03) |
+| HEX | 2.27 | 56 | 40.7 ± 0.5 | 40.7 ± 1.8 at 0.94 (1.00 ± 0.05) |
+| Langevin 0.1 ps, 27 K drive | 1.69 | 25 | 67.9 ± 5.6 | 65.9 ± 3.4 at 40 K (1.03 ± 0.10) |
+
+The imposed runs now carry more than the Langevin flux, and the Langevin run
+now has the imposed runs' original jump; each method gives the same h_K as
+before, and the tally confirms each run's own flux (2.27/2.25/1.70). The
+1.7× gap is a property of the methods on this cell, not of how hard they
+drive it. (The Langevin run again carries NEMD_FLUX_INCONSISTENT and, at the
+smaller drive, NEMD_UNEQUILIBRATED; neither changes the conclusion.)
+**Open (S-5):** which absolute level is right. Candidates: the two drives
+leave different non-equilibrium phonon populations next to the interface,
+so the "jump" they extrapolate differs. Arbitration needs a method that
+does not depend on a drive: equilibrium Green–Kubo on this cell, or both
+drives at two or three column lengths (the gap should shrink with length if
+it is a reservoir-proximity effect).
+
+**C. The 1.0 ps damping drop is replicated.** Second seed 423.1 ± 24.7
+(first 386.5 ± 17.0; the seeds agree, 1.2σ). Combined 398 ± 14, i.e.
+0.82 ± 0.05 of 0.1 ps (−3.9σ), with 0.5 ps (512 ± 23) on the 0.1 ps value.
+So the plateau ends between 0.5 and 1.0 ps on this 16 nm cell: the weakly
+coupled reservoirs no longer pin their temperatures (flux 9.1–9.5 against
+12 GW/m²). **Kept: 0.1 ps** (P1-17 closed).
+
+**S-9. Disorder raises Si/Ge h_K** (r00 cell, abrupt 483 ± 20; single seed
+each, and seed scatter on this cell is ~±5 %, about the quoted errors):
+
+| interface | thickness | h_K | ratio to abrupt |
+|---|---|---|---|
+| graded, 2 layers | 0.27 nm | 564.8 ± 34.7 | 1.17 ± 0.09 (1.9σ) |
+| graded, 4 layers | 0.54 nm | 599.9 ± 20.2 | **1.24 ± 0.07 (3.6σ)** |
+| graded, 8 layers | 1.09 nm | 522.9 ± 22.1 | 1.08 ± 0.06 (1.3σ) |
+| steps 0.54 nm high, 1.09 nm terraces | | 562.5 ± 23.4 | 1.16 ± 0.07 (2.4σ) |
+| steps 1.09 nm high, 2.17 nm terraces | | 592.4 ± 34.4 | 1.23 ± 0.09 (2.6σ) |
+
+- **Grading:** up then down, with the maximum at 4 mixed layers (mix8 below
+  mix4 by 2.6σ). That is the shape Song & Chen report from AGF (maximum
+  conductance at 4 mixed layers, §30) and the sign Tian, Esfarjani & Chen
+  report (mixing can raise transmission). Hahn et al. (AEMD, Tersoff) find
+  R almost unchanged at 0.5 nm and higher by 16 % at 1 nm; our 1 nm value is
+  still above abrupt. Their alloy layer is random, ours a linear grade; the
+  direction at 1 nm is a real difference, not explained here.
+- **Steps:** both raise h_K by about a fifth. Both square waves have the same
+  area factor, 1 + height/terrace = 1.5, so the gain is well below the
+  real-area increase: per real area the stepped interface conducts less
+  than the flat one. h_K is quoted per projected area (§33), which is what
+  the contact model uses.
+- **For the model:** an abrupt, perfect Si/Ge interface is the low end of the
+  MD range, not a typical one. A grown interface (graded over a few layers,
+  stepped) would be expected 10–25 % higher in classical Tersoff MD. Both
+  are on the −4 % strained cell; §41 showed strain does not move h_K, so no
+  repeat on the rescaled potential is needed.
+
+**Cloud set:** these nine are removed from `prepare_cloud.py`'s default
+(`--all` brings them back); the rented machine runs the five heavy jobs, and
+the wall-time estimate is unchanged (Si/Cu, ~10.5 h, sets it).

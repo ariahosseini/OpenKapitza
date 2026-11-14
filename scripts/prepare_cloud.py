@@ -1,7 +1,7 @@
 """Write the rented-machine job set into one folder, with a costed manifest (KB 42).
 
     python3 scripts/prepare_cloud.py ~/ok_cloud --potentials ~/lammps-openkapitza/potentials
-        [--np 48] [--slots 4] [--core-rate 1.0] [--only NAME ...] [--smoke]
+        [--np 48] [--slots 4] [--core-rate 1.0] [--only NAME ...] [--all] [--smoke]
 
 Everything still to run on CPU, regenerated with the current code (stage
 checkpoints, interface tally where it applies), in the order a 4-slot machine
@@ -16,6 +16,10 @@ should take them (longest first, so the short jobs fill in at the end):
                                                  so its jump matches the imposed runs' 24 K
   followup/sige_damp1.0_s2                       KB 41 damping 1.0 ps, second seed
   disorder/mix2, mix4, mix8, step4_p2, step8_p1  S-9 intermixed and stepped Si/Ge
+
+The followup and disorder jobs were run on the Mac instead (13 Nov, KB 43),
+so by default only the five heavy jobs are written; --all (or --only) brings
+the others back.
 
 Every deck passes validate_deck before it is written. Then, on the machine:
 
@@ -154,6 +158,8 @@ def main(argv=None) -> int:
                     help="speed of one rank relative to the cost model's core "
                          "(measure it with the smoke run; 1.0 = as estimated)")
     ap.add_argument("--only", nargs="*", help="job names (e.g. heavy/sial_pp)")
+    ap.add_argument("--all", action="store_true",
+                    help="also the followup and disorder jobs (already run, KB 43)")
     ap.add_argument("--smoke", action="store_true", help="a few hundred steps per stage")
     ap.add_argument("--force", action="store_true",
                     help="rewrite a folder whose jobs were already submitted (loses them)")
@@ -178,7 +184,9 @@ def main(argv=None) -> int:
               f"~{e['wall_hours']:5.1f} h  {e['note']}")
 
     def wanted(name):
-        return not a.only or name in a.only
+        if a.only:
+            return name in a.only
+        return a.all or name.startswith("heavy/")
 
     for name, spec, issue, note in _heavy():
         if wanted(f"heavy/{name}"):
