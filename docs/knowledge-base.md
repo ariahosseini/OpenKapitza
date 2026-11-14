@@ -4182,3 +4182,41 @@ each, and seed scatter on this cell is ~±5 %, about the quoted errors):
 **Cloud set:** these nine are removed from `prepare_cloud.py`'s default
 (`--all` brings them back); the rented machine runs the five heavy jobs, and
 the wall-time estimate is unchanged (Si/Cu, ~10.5 h, sets it).
+
+## 44. A drive-free check of the non-bonded contact (S-5, 13 Nov 2026)
+
+**Question.** On the LJ ×1, 1 GPa contact, Langevin reservoirs read h_K ≈ 66
+and imposed flux (HEX, eHEX) ≈ 37–41, whatever the drive amplitude (§41,
+§43). Which level is right?
+
+**Method.** The same cell with no drive: the equilibrium slab-energy
+fluctuation method (§11, §23; `md/emd_kapitza.py`). The deck is the NEMD deck
+up to the end of equilibration: same structure, LJ contact, 1 GPa piston
+relaxation, then the load removed and the walls frozen in place, so NVE
+conserves the slab energies' sum. Then 20 ns of NVE. Slabs of 2 and 4 nm per
+side (`scripts/prepare_drive_check.py`; 6,656 and 10,496 atoms; ~8 and ~13 h
+on the M3 Pro). Expected τ = C_r/(A h) ≈ 40–70 ps on the 2 nm cell, so the
+series spans ~300–500 τ (2 nm) and ~150–250 τ (4 nm). The interface
+dominates the decay by a wide margin: 1/h ≈ 2×10⁻⁸ m²K/W against a slab's
+L/k of ~10⁻¹⁰, unlike the bonded Si/Ge cell, where they were comparable and
+the decay split in two (§17).
+
+**What it can decide** (`scripts/analyze_drive_check.py`):
+- *Bound:* a correctly measured NEMD conductance is at least the
+  equilibrium one. If EMD reads near 60, the imposed-flux runs read low.
+- *Expectation, not a bound:* on a low-transmission contact the
+  non-equilibrium correction is small, so NEMD/EMD should be near 1. If EMD
+  reads near 40, the imposed-flux level is favoured; Langevin at 1.7× is
+  then allowed by the bound but disfavoured.
+- *Slab length:* an interface time scales with slab length, so h must agree
+  between 2 and 4 nm; if not, the check is inconclusive.
+
+**Fit choice, found on synthetic data.** A two-exponential fit to a clean
+single decay invents a fast component (85–98 % slow weight) and inflates the
+block error about 4× (±10 against ±2.5–4 MW/m²K at 600 τ). The analysis
+therefore uses one exponential unless the two-timescale rule of §17 holds
+(times ≥ 10× apart, each ≥ 15 % of the variance). On synthetic series with
+h = 40, the single fit recovers 39–43 (±6–10 %), enough to separate 40 from 66.
+
+**Smoke-tested here:** both decks run to OPENKAPITZA_EMD_DONE (full CPU
+package set) and `read_emd` reads the output.
