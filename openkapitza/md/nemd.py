@@ -427,6 +427,15 @@ class NEMDSpec:
     # `height` layers higher. Built cells only; h_K stays per projected area,
     # and the relaxed plane is found at the mean of the two terraces.
     interface_steps: tuple[int, int] | None = None
+    # Face anneal (KB 45). A van der Waals contact between bare (100) faces is
+    # built bulk-terminated; Tersoff faces then reconstruct (dimers) over
+    # several ns at 300 K, releasing ~5 eV/nm^2 of heat into the measurement.
+    # With anneal_K set, the relaxation stage first runs anneal_ps at anneal_K
+    # and cools over anneal_cool_ps, both under the same barostat and piston,
+    # so the box, the wall and everything after are set on the annealed faces.
+    anneal_K: float | None = None
+    anneal_ps: float = 300.0
+    anneal_cool_ps: float = 100.0
     # Equilibrate side A at T + presplit/2 and side B at T - presplit/2 instead
     # of both at T. For a resistive interface nearly all of the drive drops at
     # the plane, so this starts the run close to its steady state and skips a
@@ -948,9 +957,22 @@ def _relax_steps(spec: NEMDSpec) -> int:
     return max(20, -(-steps // 20) * 20)
 
 
+def anneal_steps(spec: NEMDSpec) -> tuple[int, int]:
+    """(hot, cool) steps of the face anneal, each a whole multiple of the
+    relaxation stage so the stage's averaging windows stay aligned (0, 0: none)."""
+    if not spec.anneal_K or not spec.relax_structure:
+        return 0, 0
+    r = _relax_steps(spec)
+
+    def whole(ps):
+        n = ps * 1000.0 / spec.timestep_fs
+        return max(1, int(-(-n // r))) * r
+    return whole(spec.anneal_ps), whole(spec.anneal_cool_ps)
+
+
 def relax_steps(spec: NEMDSpec) -> int:
     """The relaxation length the deck will actually run (0 without relaxation)."""
-    return _relax_steps(spec) if spec.relax_structure else 0
+    return (_relax_steps(spec) + sum(anneal_steps(spec))) if spec.relax_structure else 0
 
 
 GPA_TO_EV_A3 = 1.0 / 160.21766208
@@ -1404,9 +1426,33 @@ def _build_input_deck_raw(spec: NEMDSpec) -> str:
     )
 
 
+def _anneal_block(spec: NEMDSpec, deck: str) -> str:
+    """Insert the face anneal before the relaxation run (KB 45)."""
+    hot, cool = anneal_steps(spec)
+    if not hot:
+        return deck
+    m = re.search(r"^fix             relax gmobile npt temp (\S+) (\S+) (.*)$", deck, re.M)
+    run = f"run             {_relax_steps(spec)}\nunfix           relax\n"
+    if not m or run not in deck:
+        raise ValueError("anneal_K: no relaxation stage to anneal in")
+    T, rest, Th = m.group(1), m.group(3), f"{spec.anneal_K:.2f}"
+    block = (f"# ---- face anneal (KB 45): {hot} steps at {Th} K, cooled over {cool}, under the\n"
+             f"# same barostat and load, so the faces reconstruct before anything is set.\n"
+             f"unfix           relax\n"
+             f"fix             relax gmobile npt temp {Th} {Th} {rest}\n"
+             f"run             {hot}\n"
+             f"unfix           relax\n"
+             f"fix             relax gmobile npt temp {Th} {T} {rest}\n"
+             f"run             {cool}\n"
+             f"unfix           relax\n"
+             f"{m.group(0)}\n"
+             f"print           \"OPENKAPITZA_ANNEALED {Th} K\"\n")
+    return deck.replace(run, block + run, 1)
+
+
 def build_input_deck(spec: NEMDSpec) -> str:
     """The LAMMPS input deck for one NEMD run."""
-    deck = _build_input_deck_raw(spec)
+    deck = _anneal_block(spec, _build_input_deck_raw(spec))
     if spec.intermix_layers:
         old = ("group           gside_a type 1\n"
                "group           gside_b type 2\n")

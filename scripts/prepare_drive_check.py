@@ -2,6 +2,14 @@
 
     python3 scripts/prepare_drive_check.py ~/ok_jobs/drive_check \
         --potentials ~/lammps-openkapitza/potentials [--ns 20] [--smoke]
+    ... --calibrate                 # face-anneal test: 500 K and 700 K, 1 ns NVE each
+    ... --anneal-K 700              # the set on annealed faces: EMD 2 nm + HEX + Langevin
+
+KB 45: the first runs (no anneal) heated by ~80 K in NVE because the contact
+faces, built bulk-terminated, reconstruct over several ns. --calibrate finds
+an anneal that completes it (dimerised fraction from relaxed.data, NVE
+temperature drift); --anneal-K then reruns the check, and the two NEMD drives,
+on annealed faces.
 
 Langevin reservoirs read h_K = 66-68 on this cell and imposed flux (HEX,
 eHEX) 37-41, whatever the drive amplitude (KB 41, 43). This runs the same
@@ -44,7 +52,7 @@ SLABS_NM = (2.0, 4.0)
 SMOKE = EMDSpec(settle_ps=0.2, production_ps=0.5, sample_fs=10.0)
 
 
-def spec_for(slab_nm: float, *, smoke: bool = False):
+def spec_for(slab_nm: float, *, smoke: bool = False, anneal_K: float | None = None):
     from prepare_nonbonded import base
     b = base()
     b.spot_pressure_GPa = 1.0
@@ -54,14 +62,16 @@ def spec_for(slab_nm: float, *, smoke: bool = False):
     b.geometry = NEMDGeometry(wall_thickness=g.wall_thickness, reservoir_thickness=0.5e-9,
                               bulk_a_length=slab_nm * 1e-9, bulk_b_length=slab_nm * 1e-9,
                               cross_section=g.cross_section, bin_width=g.bin_width)
+    b.anneal_K = anneal_K
     if smoke:
         from prepare_cloud import _shorten
         _shorten(b)
     return make_spec(b, NonbondedSpec(lj_scale=1.0))
 
 
-def write(wd: Path, slab_nm: float, emd: EMDSpec, pots: Path, smoke: bool) -> dict:
-    spec = spec_for(slab_nm, smoke=smoke)
+def write(wd: Path, slab_nm: float, emd: EMDSpec, pots: Path, smoke: bool,
+          anneal_K: float | None = None) -> dict:
+    spec = spec_for(slab_nm, smoke=smoke, anneal_K=anneal_K)
     deck = build_emd_deck(spec, emd)
     problems = validate_deck(deck)
     if problems:
@@ -77,7 +87,9 @@ def write(wd: Path, slab_nm: float, emd: EMDSpec, pots: Path, smoke: bool) -> di
                     "sample_fs": emd.sample_fs})
     shutil.copy(pots / spec.pair_file, wd / spec.pair_file)
     atoms = int(summary.get("atoms", 0)) if isinstance(summary, dict) else 0
-    steps = int((emd.settle_ps + emd.production_ps) * 1000 / spec.timestep_fs)
+    from openkapitza.md.nemd import anneal_steps
+    steps = int((emd.settle_ps + emd.production_ps) * 1000 / spec.timestep_fs) + \
+        sum(anneal_steps(spec))
     return {"atoms": atoms, "steps": steps, "slab_nm": slab_nm,
             "production_ns": emd.production_ps / 1000}
 
@@ -88,27 +100,61 @@ def main(argv=None) -> int:
     ap.add_argument("root", type=Path)
     ap.add_argument("--potentials", type=Path, required=True)
     ap.add_argument("--ns", type=float, default=20.0, help="production length, ns")
-    ap.add_argument("--rate", type=float, default=4.5e6,
-                    help="atom-steps/s of the target machine (M3 Pro, 5 ranks: 4.5e6, "
-                         "measured on this cell, KB 43)")
+    ap.add_argument("--rate", type=float, default=None,
+                    help="atom-steps/s of the target machine (default, M3 Pro at 5 ranks, "
+                         "measured: 4.5e6 on the 21k-atom NEMD cell, 2.0e6 on the 6.7k-atom "
+                         "EMD cell, KB 43/45)")
     ap.add_argument("--smoke", action="store_true", help="a few hundred steps")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="face-anneal test jobs (500 and 700 K, 1 ns NVE each)")
+    ap.add_argument("--anneal-K", type=float, help="anneal the faces at this temperature")
     a = ap.parse_args(argv)
     root, pots = a.root.expanduser(), a.potentials.expanduser()
     if (root / "jobs.json").is_file():
         raise SystemExit(f"{root}: jobs were already submitted from here")
     root.mkdir(parents=True, exist_ok=True)
-    emd = SMOKE if a.smoke else EMDSpec(settle_ps=20.0, production_ps=a.ns * 1000,
-                                        sample_fs=10.0)
     jobs = []
-    for slab in SLABS_NM:
-        name = f"emd_slab{slab:g}nm"
-        e = write(root / name, slab, emd, pots, a.smoke)
+
+    def add(name, e, note):
         relax = 50_000 + 100_000                       # relax + equilibrate, as the NEMD deck
-        hours = e["atoms"] * (e["steps"] + relax) / a.rate / 3600
-        jobs.append({"name": name, **e, "est_hours": round(hours, 1),
-                     "note": f"equilibrium fluctuation, {slab:g} nm per side"})
-        print(f"{name:16} {e['atoms']:6,} atoms  {e['production_ns']:5.1f} ns  ~{hours:4.1f} h")
-    (root / "manifest.json").write_text(json.dumps({"jobs": jobs, "smoke": a.smoke}, indent=2))
+        rate = a.rate or (4.5e6 if e["atoms"] > 15_000 else 2.0e6)
+        hours = e["atoms"] * (e["steps"] + relax) / rate / 3600
+        jobs.append({"name": name, **e, "est_hours": round(hours, 1), "note": note})
+        print(f"{name:20} {e['atoms']:6,} atoms  {e['steps'] / 1e6:5.2f} Msteps  ~{hours:4.1f} h  {note}")
+
+    if a.calibrate:
+        emd = SMOKE if a.smoke else EMDSpec(settle_ps=20.0, production_ps=1000.0, sample_fs=10.0)
+        for T in (500.0, 700.0):
+            name = f"calib_anneal{T:g}K"
+            add(name, write(root / name, 2.0, emd, pots, a.smoke, anneal_K=T),
+                f"anneal {T:g} K, then 1 ns NVE: does the cell still heat?")
+    else:
+        emd = SMOKE if a.smoke else EMDSpec(settle_ps=20.0, production_ps=a.ns * 1000,
+                                            sample_fs=10.0)
+        slabs = (2.0,) if a.anneal_K else SLABS_NM
+        for slab in slabs:
+            name = f"emd_slab{slab:g}nm"
+            add(name, write(root / name, slab, emd, pots, a.smoke, anneal_K=a.anneal_K),
+                f"equilibrium fluctuation, {slab:g} nm per side"
+                + (f", faces annealed at {a.anneal_K:g} K" if a.anneal_K else ""))
+        if a.anneal_K:
+            from prepare_cloud import _shorten_case
+            from prepare_weekend import cases, write_case
+            for name in ("arb_hex", "arb_langevin_d0.1"):
+                factory, nb, modify, h, note = cases()[name]
+
+                def mod(sp, modify=modify):
+                    if modify:
+                        modify(sp)
+                    sp.anneal_K = a.anneal_K
+                case = (factory, nb, mod, h, f"{note}, faces annealed at {a.anneal_K:g} K")
+                if a.smoke:
+                    case = _shorten_case(case)
+                e = write_case(root / f"nemd_{name}", f"nemd_{name}", case, pots)
+                add(f"nemd_{name}", e, e["note"])
+    (root / "manifest.json").write_text(json.dumps({"jobs": jobs, "smoke": a.smoke,
+                                                    "anneal_K": a.anneal_K,
+                                                    "calibrate": a.calibrate}, indent=2))
     print(f"\n{len(jobs)} jobs, ~{sum(j['est_hours'] for j in jobs):.0f} h in sequence. "
           f"Then: jobs {root}  /  submit all local lmp=<lmp> np=5")
     return 0

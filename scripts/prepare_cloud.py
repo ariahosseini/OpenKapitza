@@ -105,6 +105,8 @@ def _shorten(spec):
         if hasattr(spec, k):
             setattr(spec, k, v)
     spec.relax_scale_with_length = False
+    if getattr(spec, "anneal_K", None):
+        spec.anneal_ps = spec.anneal_cool_ps = 0.1      # one relax-stage length each
     spec.profile_every, spec.profile_frames = 10, 4
     return spec
 

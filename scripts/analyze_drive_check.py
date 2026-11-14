@@ -1,6 +1,12 @@
 """Analyse the drive-free check of the LJ x1, 1 GPa contact (S-5, KB 44).
 
     python3 scripts/analyze_drive_check.py ~/ok_jobs/drive_check [--json OUT]
+    python3 scripts/analyze_drive_check.py ~/ok_jobs/drive_calib --calibrate
+
+--calibrate (KB 45): for each face-anneal test, the dimerised fraction of the
+contact faces (relaxed.data) and the temperature drift during the NVE run.
+An anneal passes when both faces are >= 90 % dimerised and the NVE drift is
+under 2 K/ns (the unannealed cell: ~21 %, and +40 K/ns over the first 2 ns).
 
 For each finished equilibrium run: h from the slab-energy fluctuation decay
 (one exponential, and two with the slow one taken as the interface), its
@@ -92,13 +98,51 @@ def verdict(h: float, e: float) -> dict:
     return rows
 
 
+FACE_PASS = 0.90
+DRIFT_PASS_K_NS = 2.0
+
+
+def calibration(wd: Path) -> dict:
+    """Dimerised faces and NVE temperature drift of one anneal test."""
+    import numpy as np
+    sys.path.insert(0, str(REPO / "scripts"))
+    from check_faces import faces
+    out = {"faces": faces(wd / "relaxed.data")}
+    d = np.loadtxt(wd / "emd_temperatures.dat", comments="#", usecols=(0, 1, 2))
+    t_ns, T = d[:, 0] / 1000, 0.5 * (d[:, 1] + d[:, 2])
+    slope = float(np.polyfit(t_ns, T, 1)[0]) if t_ns[-1] - t_ns[0] > 0 else float("nan")
+    n = max(1, len(T) // 10)
+    out.update(T_first=float(T[:n].mean()), T_last=float(T[-n:].mean()),
+               drift_K_per_ns=slope, ns=float(t_ns[-1] - t_ns[0]))
+    out["pass"] = bool(min(out["faces"]["a_contact"], out["faces"]["b_contact"]) >= FACE_PASS
+                       and abs(slope) < DRIFT_PASS_K_NS)
+    return out
+
+
+def main_calibrate(root: Path) -> int:
+    for wd in sorted(p for p in root.iterdir() if p.is_dir() and p.name.startswith("calib_")):
+        if not (wd / "job.done").is_file():
+            print(f"{wd.name:20} not finished")
+            continue
+        c = calibration(wd)
+        f = c["faces"]
+        print(f"{wd.name:20} faces dimerised A {f['a_contact']:.0%} B {f['b_contact']:.0%} "
+              f"(wall side {f['a_wall_side']:.0%});  NVE {c['ns']:.2f} ns: "
+              f"{c['T_first']:.0f} -> {c['T_last']:.0f} K, drift {c['drift_K_per_ns']:+.1f} K/ns"
+              f"  {'PASS' if c['pass'] else 'FAIL'}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", type=Path)
     ap.add_argument("--json", type=Path)
+    ap.add_argument("--calibrate", action="store_true", help="read the face-anneal tests")
     a = ap.parse_args(argv)
     root = a.root.expanduser()
+    if a.calibrate:
+        return main_calibrate(root)
     res = {}
     for wd in sorted(p for p in root.iterdir() if p.is_dir() and p.name.startswith("emd_")):
         done = wd / "job.done"

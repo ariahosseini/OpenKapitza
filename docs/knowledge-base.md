@@ -4220,3 +4220,71 @@ h = 40, the single fit recovers 39–43 (±6–10 %), enough to separate 40 from
 
 **Smoke-tested here:** both decks run to OPENKAPITZA_EMD_DONE (full CPU
 package set) and `read_emd` reads the output.
+
+## 45. The non-bonded contact faces were still reconstructing (14 Nov 2026)
+
+**Found in the drive-free check (§44).** The 2 nm equilibrium run conserved
+the two slabs' total energy to ±0.5 eV over 20 ns, yet their temperature
+rose from 297 to ~380 K in the first 2 ns and then held. Energy stored in
+the structure turned into heat.
+
+**Cause: the contact faces reconstruct.** The van der Waals contact is
+built from bare, bulk-terminated (100) faces. In `relaxed.data` (after the
+50 ps relaxation) only **22 % (Si face) and 20 % (Ge face)** of the top-layer
+atoms have a neighbour closer than 2.8 Å (a dimer); the face against the
+frozen wall, the bulk-terminated reference, has 0 %
+(`scripts/check_faces.py`). The remaining ~80 % pair up over nanoseconds.
+Energy check: a +83 K rise in 4,480 mobile atoms is ~92 eV of potential
+energy released, ≈ 4.9 eV/nm² of contact, ≈ 0.9 eV per new dimer (about
+100 of them), the size of a (2×1) dimer bond in Tersoff. Unverified on the
+final structure (not dumped), but the start state and the energy agree.
+
+**It was in the driven runs too.** Mean temperature over the 1 ns production
+on the LJ ×1, 1 GPa cell, which no thermostat holds:
+
+| run | rise |
+|---|---|
+| HEX (0.94 and 2.27 GW/m²) | +13 and +7 K |
+| eHEX (0.94 and 2.27) | +6 and +1 K |
+| He layer, eHEX | +10 K |
+| Langevin runs | none (the reservoirs remove it) |
+| bonded Si/Ge (r00 family) | none (no free faces) |
+
+The equilibrium run implies ≈ 0.4 GW/m² released near the plane during its
+first 2 ns; arb_ehex's rise ≈ 0.27 GW/m², i.e. 10–30 % of the imposed flux,
+on an interface whose structure changes while it is measured.
+
+**What it does and does not explain.**
+- It probably does **not** explain the 1.7× Langevin/imposed gap: a heat
+  source of fixed size biases h by a fraction that falls as the flux
+  rises, and the imposed runs read the same at 0.94 and 2.27 GW/m² (§43).
+- It does mean every non-bonded value so far (the contact sweep §26, the
+  gas layers §35/§41, the drive comparison §41/§43) was measured on faces
+  20–100 % reconstructed and changing. Whether h moves once the faces
+  are settled is untested.
+- The 2 nm equilibrium run after the warm-up (4–20 ns) reads
+  **36.8 ± 4.9 MW/m²K** with one exponential, near the imposed-flux level,
+  but at ~380 K, with a decay that a two-exponential fit splits, and with
+  halves of 34.4 and 43.7: suggestive only.
+
+**The fix: a face anneal** (`NEMDSpec.anneal_K`, `anneal_ps`,
+`anneal_cool_ps`). Before the normal relaxation run, the cell runs at
+anneal_K for anneal_ps and cools to T over anneal_cool_ps, under the same
+barostat and 1 GPa piston, so the box, the wall position and everything
+after are set on settled faces. Steps are whole multiples of the relaxation
+stage, so its averaging windows stay aligned.
+
+**Plan.**
+1. Calibrate (`prepare_drive_check.py --calibrate`, ~3 h on the M3 Pro):
+   anneals of 300 ps at 500 K and at 700 K, each followed by 1 ns of NVE.
+   Pass: both faces ≥ 90 % dimerised and NVE drift < 2 K/ns
+   (`analyze_drive_check.py --calibrate`).
+2. On the anneal that passes (`--anneal-K T`, ~26 h): the 2 nm equilibrium
+   run at 300 K, plus HEX and Langevin on the same annealed cell. That
+   answers both whether the method gap survives and whether the non-bonded
+   h moves.
+3. If h moves, the non-bonded sweep and the gas-layer runs are re-run with
+   the anneal.
+
+The 4 nm equilibrium run (§44) was stopped: it went through the same
+warm-up.

@@ -57,6 +57,63 @@ class Prepare(unittest.TestCase):
                 self.assertEqual(spec["spec"]["spot_pressure_GPa"], 1.0)
 
 
+class FaceAnneal(unittest.TestCase):
+    def spec(self, anneal_K):
+        sys.path.insert(0, str(REPO))
+        from prepare_drive_check import spec_for
+        return spec_for(2.0, anneal_K=anneal_K)
+
+    def test_anneal_runs_under_the_load_before_the_relaxation(self):
+        from openkapitza.md.nemd import anneal_steps, build_input_deck, relax_steps
+        plain, hot = self.spec(None), self.spec(700.0)
+        self.assertEqual(anneal_steps(plain), (0, 0))
+        h, c = anneal_steps(hot)
+        self.assertEqual((h, c), (300_000, 100_000))       # whole multiples of 50 000
+        self.assertEqual(relax_steps(hot), relax_steps(plain) + h + c)
+        deck = build_input_deck(hot)
+        self.assertEqual(validate_deck(deck), [])
+        i_anneal = deck.index("npt temp 700.00 700.00")
+        self.assertLess(deck.index("fix             piston gwall_hi"), i_anneal)  # load on
+        self.assertLess(i_anneal, deck.index("npt temp 700.00 300.00"))
+        self.assertLess(deck.index("OPENKAPITZA_ANNEALED"), deck.index("change_box"))
+        self.assertNotIn("face anneal", build_input_deck(plain))
+
+    def test_job_sets(self):
+        with tempfile.TemporaryDirectory() as d:
+            pot = Path(d) / "pot"
+            pot.mkdir()
+            (pot / "SiCGe.tersoff").write_text(SIGE)
+            m = load("prepare_drive_check")
+            for args, names in ((["--calibrate"], ["calib_anneal500K", "calib_anneal700K"]),
+                                (["--anneal-K", "700"], ["emd_slab2nm", "nemd_arb_hex",
+                                                         "nemd_arb_langevin_d0.1"])):
+                root = Path(d) / args[0].strip("-")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    m.main([str(root), "--potentials", str(pot), *args])
+                man = json.loads((root / "manifest.json").read_text())
+                self.assertEqual([j["name"] for j in man["jobs"]], names)
+                for n in names:
+                    deck = (root / n / "nemd.in").read_text()
+                    self.assertIn("OPENKAPITZA_ANNEALED", deck)
+                    self.assertEqual(validate_deck(deck), [])
+
+    def test_face_check_counts_dimers(self):
+        cf = load("check_faces")
+        a = 5.43 / math.sqrt(2)
+        pts, types = [], []
+        for i in range(4):
+            for j in range(4):
+                x, y = i * a, j * a
+                pts.append((x + (0.75 if i % 2 == 0 else -0.75), y, 10.0))   # paired in x
+                types.append(1)
+                pts.append((x, y, 0.0))                                    # wall side, bulk
+                types.append(1)
+        f = cf.dimer_fraction(np.array(types), np.array(pts), 4 * a, 4 * a, 1, True)
+        self.assertEqual(f, 1.0)
+        self.assertEqual(cf.dimer_fraction(np.array(types), np.array(pts), 4 * a, 4 * a, 1,
+                                           False), 0.0)
+
+
 class Analyse(unittest.TestCase):
     def fake_run(self, wd: Path, h: float, n_tau: int = 600, seed: int = 1):
         """An Ornstein-Uhlenbeck slab-energy series with the tau a given h implies."""

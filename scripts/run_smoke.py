@@ -54,8 +54,13 @@ def check(wd: Path, spec_kind: str = "nemd") -> list[str]:
     if not log.is_file():
         return ["no log.lammps"]
     text = log.read_text(errors="replace")
-    if "OPENKAPITZA_DONE" not in text:
-        problems.append("did not reach OPENKAPITZA_DONE")
+    try:
+        emd = json.loads((wd / "spec.json").read_text()).get("kind") == "emd"
+    except (OSError, ValueError):
+        emd = False
+    marker = "OPENKAPITZA_EMD_DONE" if emd else "OPENKAPITZA_DONE"
+    if marker not in text:
+        problems.append(f"did not reach {marker}")
     for ln in text.splitlines():
         if ln.startswith("ERROR"):
             problems.append(ln.strip()[:200])
@@ -76,8 +81,12 @@ def check(wd: Path, spec_kind: str = "nemd") -> list[str]:
         from openkapitza.md.campaign import read_spec
         from openkapitza.md.measure import measure_kapitza
         from openkapitza.schema.flags import FlagSet
-        spec, _, _ = read_spec(wd)
-        measure_kapitza(wd, spec, FlagSet())
+        if emd:                                    # equilibrium run: the series must read
+            from openkapitza.md.emd_kapitza import read_emd
+            read_emd(wd)
+        else:
+            spec, _, _ = read_spec(wd)
+            measure_kapitza(wd, spec, FlagSet())
     except ValueError as exc:
         # a few hundred steps are not a steady state: the measurement reading the
         # files and rejecting the physics (e.g. a jump of the wrong sign) is fine
