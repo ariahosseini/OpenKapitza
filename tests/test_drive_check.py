@@ -85,8 +85,8 @@ class FaceAnneal(unittest.TestCase):
             (pot / "SiCGe.tersoff").write_text(SIGE)
             m = load("prepare_drive_check")
             for args, names in ((["--calibrate"], ["calib_anneal500K", "calib_anneal700K"]),
-                                (["--anneal-K", "700"], ["emd_slab2nm", "nemd_arb_hex",
-                                                         "nemd_arb_langevin_d0.1"])):
+                                (["--anneal-K", "700"], ["nemd_arb_hex", "nemd_arb_langevin_d0.1",
+                                                         "emd_slab2nm"])):
                 root = Path(d) / args[0].strip("-")
                 with contextlib.redirect_stdout(io.StringIO()):
                     m.main([str(root), "--potentials", str(pot), *args])

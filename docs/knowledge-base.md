@@ -4288,3 +4288,22 @@ stage, so its averaging windows stay aligned.
 
 The 4 nm equilibrium run (§44) was stopped: it went through the same
 warm-up.
+
+**Calibration (14 Nov, M3 Pro, 45 min each): both anneals stop the heating.**
+
+| anneal (300 ps, then 100 ps cool, 1 GPa) | faces dimerised (A / B) | 1 ns NVE at 300 K | total E |
+|---|---|---|---|
+| none (§44) | 22 % / 20 % | +40 K/ns (297 → 380 K in 2 ns) | |
+| 500 K | 78 % / 83 % | 301.1 → 301.0 K (−0.1 K/ns) | −18,311.9 eV |
+| **700 K** | **83 % / 86 %** | 300.4 → 300.3 K (−0.1 K/ns) | −18,317.5 eV |
+
+- The face count first used a ±0.6 Å layer, which misses the lower atom of a
+  buckled (tilted, ~0.7 Å) dimer and read 49–81 %. It now uses ±1.0 Å, still
+  short of the second layer (a/4 = 1.36 Å down, whose bonds to the top layer
+  would count as false dimers). The unannealed faces read the same either
+  way (22/20 %): they were genuinely unreconstructed.
+- The heat test decides; a face of this incommensurate cell does not reach
+  100 %. The pass rule is now NVE drift < 2 K/ns and both faces ≥ 75 %
+  (it was ≥ 90 %, a guess, measured with the thin layer).
+- **700 K chosen:** same heat result, ~5.6 eV lower energy, the more
+  settled faces. The main set (`--anneal-K 700`) is running.

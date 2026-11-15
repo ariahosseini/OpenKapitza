@@ -152,6 +152,7 @@ def main(argv=None) -> int:
                     case = _shorten_case(case)
                 e = write_case(root / f"nemd_{name}", f"nemd_{name}", case, pots)
                 add(f"nemd_{name}", e, e["note"])
+    jobs.sort(key=lambda j: j["name"].startswith("emd_"))   # short driven runs first
     (root / "manifest.json").write_text(json.dumps({"jobs": jobs, "smoke": a.smoke,
                                                     "anneal_K": a.anneal_K,
                                                     "calibrate": a.calibrate}, indent=2))

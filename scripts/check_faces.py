@@ -17,7 +17,8 @@ from pathlib import Path
 import numpy as np
 
 DIMER_CUT = 2.8      # A
-LAYER = 0.6          # A, half-thickness of the top layer
+LAYER = 1.0          # A, half-thickness of the top layer: wide enough for buckled dimers
+                     # (~0.7 A tilt), short of the second layer (a/4 = 1.36 A below)
 
 
 def read_data(path: Path):
